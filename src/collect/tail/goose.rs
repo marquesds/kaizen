@@ -45,16 +45,14 @@ fn goose_model_from_row(
     model_config_json: Option<String>,
     provider: Option<String>,
 ) -> Option<String> {
-    if let Some(ref s) = model_config_json {
-        if let Ok(v) = serde_json::from_str::<Value>(s) {
-            if let Some(m) = v
-                .get("model")
-                .or_else(|| v.get("id"))
-                .and_then(|x| x.as_str())
-            {
-                return Some(m.to_string());
-            }
-        }
+    if let Some(ref s) = model_config_json
+        && let Ok(v) = serde_json::from_str::<Value>(s)
+        && let Some(m) = v
+            .get("model")
+            .or_else(|| v.get("id"))
+            .and_then(|x| x.as_str())
+    {
+        return Some(m.to_string());
     }
     provider
 }
@@ -259,13 +257,12 @@ pub fn scan_goose_sqlite(
             repo_binding_source: None,
         };
 
-        if let (Some(ti), Some(to)) = (in_tok, out_tok) {
-            if ti > 0 || to > 0 {
-                if let Some(last) = events.last_mut() {
-                    last.tokens_in = Some(ti.max(0) as u32);
-                    last.tokens_out = Some(to.max(0) as u32);
-                }
-            }
+        if let (Some(ti), Some(to)) = (in_tok, out_tok)
+            && (ti > 0 || to > 0)
+            && let Some(last) = events.last_mut()
+        {
+            last.tokens_in = Some(ti.max(0) as u32);
+            last.tokens_out = Some(to.max(0) as u32);
         }
 
         sessions_out.push((record, events));
@@ -317,10 +314,9 @@ pub fn scan_goose_legacy_jsonl_dir(
                 .get("working_dir")
                 .or_else(|| v.get("workingDir"))
                 .and_then(|x| x.as_str())
+                && paths_equal(Path::new(wd), &ws_canon)
             {
-                if paths_equal(Path::new(wd), &ws_canon) {
-                    matches_ws = true;
-                }
+                matches_ws = true;
             }
             if model.is_none() {
                 model = model_from_json::from_value(&v);

@@ -194,12 +194,11 @@ pub async fn run_forward_inner(
 
 fn session_id_from(headers: &axum::http::HeaderMap) -> String {
     for (k, v) in headers.iter() {
-        if k.as_str().eq_ignore_ascii_case("x-kaizen-session") {
-            if let Ok(s) = v.to_str() {
-                if !s.is_empty() {
-                    return s.to_string();
-                }
-            }
+        if k.as_str().eq_ignore_ascii_case("x-kaizen-session")
+            && let Ok(s) = v.to_str()
+            && !s.is_empty()
+        {
+            return s.to_string();
         }
     }
     format!("proxy-{}", Uuid::now_v7())

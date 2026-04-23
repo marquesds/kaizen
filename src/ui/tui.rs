@@ -289,46 +289,46 @@ fn draw_events(f: &mut ratatui::Frame, app: &App, area: ratatui::layout::Rect) {
     };
     let title = format!("Events — {:.18} — {}", id, model);
     let now = now_ms();
-    if app.detail {
-        if let (true, Some(ev)) = (!app.events.is_empty(), app.selected_event()) {
-            let split = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([Constraint::Min(2), Constraint::Length(10)])
-                .split(area);
-            let items: Vec<ListItem> = app
-                .events
-                .iter()
-                .map(|e| {
-                    let row = event_row_text(now, e, &app.tool_lead_by_call);
-                    ListItem::new(row)
-                })
-                .collect();
-            let mut state = ListState::default();
-            state.select(Some(app.sel_event));
-            let list_block = Block::default()
-                .title(title.clone())
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(border_color));
-            f.render_stateful_widget(
-                List::new(items)
-                    .block(list_block)
-                    .highlight_style(Style::default().bg(Color::Blue).fg(Color::White)),
-                split[0],
-                &mut state,
-            );
-            let detail = event_detail_text(ev, &app.tool_lead_by_call);
-            let det_block = Block::default()
-                .title("Detail")
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(border_color));
-            f.render_widget(
-                Paragraph::new(detail)
-                    .block(det_block)
-                    .wrap(Wrap { trim: true }),
-                split[1],
-            );
-            return;
-        }
+    if app.detail
+        && let (true, Some(ev)) = (!app.events.is_empty(), app.selected_event())
+    {
+        let split = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(2), Constraint::Length(10)])
+            .split(area);
+        let items: Vec<ListItem> = app
+            .events
+            .iter()
+            .map(|e| {
+                let row = event_row_text(now, e, &app.tool_lead_by_call);
+                ListItem::new(row)
+            })
+            .collect();
+        let mut state = ListState::default();
+        state.select(Some(app.sel_event));
+        let list_block = Block::default()
+            .title(title.clone())
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(border_color));
+        f.render_stateful_widget(
+            List::new(items)
+                .block(list_block)
+                .highlight_style(Style::default().bg(Color::Blue).fg(Color::White)),
+            split[0],
+            &mut state,
+        );
+        let detail = event_detail_text(ev, &app.tool_lead_by_call);
+        let det_block = Block::default()
+            .title("Detail")
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(border_color));
+        f.render_widget(
+            Paragraph::new(detail)
+                .block(det_block)
+                .wrap(Wrap { trim: true }),
+            split[1],
+        );
+        return;
     }
     let block = Block::default()
         .title(title)

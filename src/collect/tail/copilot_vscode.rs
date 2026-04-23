@@ -111,33 +111,33 @@ fn parse_vscode_copilot_json(path: &Path, session_id: &str) -> Result<Vec<Event>
 
             if let Some(parts) = turn.get("response").and_then(|r| r.as_array()) {
                 for part in parts {
-                    if let Some(kind) = part.get("kind").and_then(|k| k.as_str()) {
-                        if kind == "toolInvocation" || kind == "toolCall" {
-                            let tool = part
-                                .get("name")
-                                .or_else(|| part.get("toolName"))
+                    if let Some(kind) = part.get("kind").and_then(|k| k.as_str())
+                        && (kind == "toolInvocation" || kind == "toolCall")
+                    {
+                        let tool = part
+                            .get("name")
+                            .or_else(|| part.get("toolName"))
+                            .and_then(|x| x.as_str())
+                            .unwrap_or("tool");
+                        events.push(Event {
+                            session_id: session_id.to_string(),
+                            seq,
+                            ts_ms,
+                            ts_exact: false,
+                            kind: EventKind::ToolCall,
+                            source: EventSource::Tail,
+                            tool: Some(tool.to_string()),
+                            tool_call_id: part
+                                .get("id")
                                 .and_then(|x| x.as_str())
-                                .unwrap_or("tool");
-                            events.push(Event {
-                                session_id: session_id.to_string(),
-                                seq,
-                                ts_ms,
-                                ts_exact: false,
-                                kind: EventKind::ToolCall,
-                                source: EventSource::Tail,
-                                tool: Some(tool.to_string()),
-                                tool_call_id: part
-                                    .get("id")
-                                    .and_then(|x| x.as_str())
-                                    .map(ToOwned::to_owned),
-                                tokens_in: None,
-                                tokens_out: None,
-                                reasoning_tokens: None,
-                                cost_usd_e6: None,
-                                payload: part.clone(),
-                            });
-                            seq += 1;
-                        }
+                                .map(ToOwned::to_owned),
+                            tokens_in: None,
+                            tokens_out: None,
+                            reasoning_tokens: None,
+                            cost_usd_e6: None,
+                            payload: part.clone(),
+                        });
+                        seq += 1;
                     }
                 }
             }
