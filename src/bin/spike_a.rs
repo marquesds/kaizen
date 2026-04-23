@@ -88,11 +88,11 @@ fn print_stats(stats: &[FileStat]) {
     let mut all_errors: std::collections::HashMap<String, usize> = Default::default();
 
     for s in stats {
-        let rate = if s.total > 0 {
-            100 * s.parsed / s.total
-        } else {
-            100
-        };
+        let rate = s
+            .parsed
+            .saturating_mul(100)
+            .checked_div(s.total)
+            .unwrap_or(100);
         println!(
             "{:3}%  {:>5}/{:<5}  {}",
             rate,
@@ -109,11 +109,10 @@ fn print_stats(stats: &[FileStat]) {
     }
 
     println!("\n--- aggregate ---");
-    let agg_rate = if total_lines > 0 {
-        100 * total_parsed / total_lines
-    } else {
-        100
-    };
+    let agg_rate = total_parsed
+        .saturating_mul(100)
+        .checked_div(total_lines)
+        .unwrap_or(100);
     println!(
         "files: {}  lines: {}  parsed: {}  blank: {}  parse_rate: {}%",
         stats.len(),
@@ -125,7 +124,7 @@ fn print_stats(stats: &[FileStat]) {
     if !all_errors.is_empty() {
         println!("\ntop errors:");
         let mut errs: Vec<_> = all_errors.into_iter().collect();
-        errs.sort_by(|a, b| b.1.cmp(&a.1));
+        errs.sort_by_key(|e| std::cmp::Reverse(e.1));
         for (msg, count) in errs.iter().take(5) {
             println!("  [{count:>4}x] {msg}");
         }

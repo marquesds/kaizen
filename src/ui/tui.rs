@@ -216,11 +216,13 @@ pub async fn run(workspace: &Path) -> Result<()> {
                         KeyCode::Char('?') => app.show_help = !app.show_help,
                         KeyCode::Tab => app.left_focus = !app.left_focus,
                         KeyCode::Char('r') => { let _ = app.refresh(); }
-                        KeyCode::Char('j') | KeyCode::Down => {
-                            if app.sel_session + 1 < app.sessions.len() { app.sel_session += 1; }
+                        KeyCode::Char('j') | KeyCode::Down
+                            if app.sel_session + 1 < app.sessions.len() =>
+                        {
+                            app.sel_session += 1;
                         }
-                        KeyCode::Char('k') | KeyCode::Up => {
-                            if app.sel_session > 0 { app.sel_session -= 1; }
+                        KeyCode::Char('k') | KeyCode::Up if app.sel_session > 0 => {
+                            app.sel_session -= 1;
                         }
                         KeyCode::Char('g') => app.sel_session = 0,
                         KeyCode::Char('G') => app.sel_session = app.sessions.len().saturating_sub(1),
