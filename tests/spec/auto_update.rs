@@ -140,6 +140,7 @@ impl Driver for AutoDriver {
 
 #[quint_run(
     spec = "specs/auto-update.qnt",
+    main = "auto_update",
     max_samples = 16,
     max_steps = 18,
     seed = "0x1"
