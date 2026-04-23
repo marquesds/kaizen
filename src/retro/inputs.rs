@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Build [`Inputs`](crate::retro::types::Inputs) from SQLite + workspace filesystem.
+//! Build [`Inputs`] from SQLite + workspace filesystem.
 
 use crate::core::event::SessionRecord;
 use crate::retro::types::{Inputs, RetroAggregates, SkillFileOnDisk};
