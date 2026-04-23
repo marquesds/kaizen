@@ -1,0 +1,134 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+-*"
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  verify:
+    name: verify version matches tag
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        run: |
+          TAG="${GITHUB_REF#refs/tags/v}"
+          CARGO_VER=$(awk -F'"' '/^version = / {print $2; exit}' Cargo.toml)
+          if [ "$TAG" != "$CARGO_VER" ]; then
+            echo "tag v$TAG != Cargo.toml $CARGO_VER" >&2
+            exit 1
+          fi
+          echo "version=$TAG" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: build ${{ matrix.target }}
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            cross: true
+          - target: x86_64-apple-darwin
+            os: macos-latest
+          - target: aarch64-apple-darwin
+            os: macos-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-${{ matrix.target }}
+      - name: Install cross (for linux cross builds)
+        if: matrix.cross == true
+        run: cargo install --locked cross
+      - name: Build
+        run: |
+          if [ "${{ matrix.cross }}" = "true" ]; then
+            cross build --release --locked --target ${{ matrix.target }} --bin kaizen
+          else
+            cargo build --release --locked --target ${{ matrix.target }} --bin kaizen
+          fi
+      - name: Package
+        id: pkg
+        run: |
+          VERSION="${{ needs.verify.outputs.version }}"
+          NAME="kaizen-v${VERSION}-${{ matrix.target }}"
+          mkdir -p "dist/${NAME}"
+          cp "target/${{ matrix.target }}/release/kaizen" "dist/${NAME}/"
+          cp README.md LICENSE CHANGELOG.md "dist/${NAME}/"
+          tar -C dist -czf "dist/${NAME}.tar.gz" "${NAME}"
+          ( cd dist && shasum -a 256 "${NAME}.tar.gz" > "${NAME}.tar.gz.sha256" )
+          echo "archive=dist/${NAME}.tar.gz" >> "$GITHUB_OUTPUT"
+          echo "sha=dist/${NAME}.tar.gz.sha256" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kaizen-${{ matrix.target }}
+          path: |
+            ${{ steps.pkg.outputs.archive }}
+            ${{ steps.pkg.outputs.sha }}
+
+  release:
+    name: github release
+    needs: [verify, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Extract changelog entry
+        id: changelog
+        run: |
+          VERSION="${{ needs.verify.outputs.version }}"
+          awk -v ver="$VERSION" '
+            /^## \[/ {
+              if (found) exit
+              if ($0 ~ "\\[" ver "\\]") { found=1; next }
+            }
+            found { print }
+          ' CHANGELOG.md > RELEASE_NOTES.md
+          if [ ! -s RELEASE_NOTES.md ]; then
+            echo "See [CHANGELOG.md](CHANGELOG.md)." > RELEASE_NOTES.md
+          fi
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.verify.outputs.version }}
+          name: v${{ needs.verify.outputs.version }}
+          body_path: RELEASE_NOTES.md
+          draft: false
+          prerelease: ${{ contains(needs.verify.outputs.version, '-') }}
+          files: |
+            dist/*.tar.gz
+            dist/*.sha256
+
+  publish:
+    name: cargo publish
+    needs: [verify, release]
+    runs-on: ubuntu-latest
+    if: ${{ !contains(needs.verify.outputs.version, '-') }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo publish --locked --token "${CARGO_REGISTRY_TOKEN}"
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

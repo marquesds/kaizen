@@ -2,6 +2,36 @@
 name = "kaizen"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.85"
+authors = ["Lucas Marques <hi@lucasmarques.me>"]
+license = "AGPL-3.0-or-later"
+description = "Local-first telemetry and tooling for AI coding agent sessions (Cursor, Claude Code, Codex)."
+repository = "https://github.com/lucasmarqs/kaizen"
+homepage = "https://github.com/lucasmarqs/kaizen"
+documentation = "https://docs.rs/kaizen"
+readme = "README.md"
+keywords = ["ai", "agent", "telemetry", "cursor", "claude"]
+categories = ["command-line-utilities", "development-tools"]
+exclude = [
+    "discoveries/",
+    ".kaizen/",
+    ".cursor/",
+    ".claude/",
+    "specs/",
+    "assets/",
+    "docs/",
+    "scripts/",
+    ".github/",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "CONTRIBUTING.md",
+    "ROADMAP.md",
+    "CHANGELOG.md",
+    "CODE_OF_CONDUCT.md",
+    "SECURITY.md",
+    ".gitignore",
+    "*.itf.json",
+]
 
 [lib]
 name = "kaizen"
@@ -10,14 +40,6 @@ path = "src/lib.rs"
 [[bin]]
 name = "kaizen"
 path = "src/main.rs"
-
-[[bin]]
-name = "spike_a"
-path = "src/bin/spike_a.rs"
-
-[[bin]]
-name = "spike_e"
-path = "src/bin/spike_e.rs"
 
 [[test]]
 name = "session_lifecycle"
