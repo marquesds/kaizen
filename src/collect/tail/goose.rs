@@ -160,8 +160,6 @@ fn sessions_select_sql(conn: &Connection) -> &'static str {
     let has = |n: &str| cols.iter().any(|c| c == n);
     if has("model_config_json") && has("provider_name") && has("input_tokens") && has("output_tokens") {
         "SELECT id, working_dir, model_config_json, provider_name, input_tokens, output_tokens FROM sessions"
-    } else if has("working_dir") {
-        "SELECT id, working_dir FROM sessions"
     } else {
         "SELECT id, working_dir FROM sessions"
     }

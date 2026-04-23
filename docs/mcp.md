@@ -1,6 +1,8 @@
 # kaizen MCP (stdio)
 
-Run the [Model Context Protocol](https://modelcontextprotocol.io) server for **full CLI parity** from agents (e.g. Cursor, Claude Code) without shelling to `kaizen`.
+Run the [Model Context Protocol](https://modelcontextprotocol.io) server for **full CLI parity** from agents (Cursor, Claude Code, Goose, OpenCode, GitHub Copilot, and other MCP hosts) without shelling to `kaizen`.
+
+Tier-1 session tailing for Goose, OpenCode, Copilot CLI, and VS Code Copilot Chat runs automatically during `kaizen sessions list`, `kaizen summary`, and related commands (see workspace `.kaizen/config.toml` `[sources.tail]` to disable individual sources).
 
 ## Quint specification
 
@@ -31,6 +33,79 @@ Add a server entry, for example:
 ```
 
 Adjust `command` to an absolute path if `kaizen` is not on `PATH`. Optional: set `"env": { "RUST_LOG": "info" }` for tracing from the `tracing` stack.
+
+## Goose
+
+Register `kaizen mcp` as an MCP extension per [Goose MCP documentation](https://block.github.io/goose/docs/mcp/). Use the **project root** as the server working directory when the host allows it (or pass `workspace` on each tool call). Extension file format and config location depend on your Goose version—follow the official guide for `command` / `args` / environment.
+
+## OpenCode
+
+In `~/.config/opencode/opencode.json` (or project `opencode.json`), add a **local** MCP server per [OpenCode MCP servers](https://dev.opencode.ai/docs/mcp-servers/):
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "kaizen": {
+      "type": "local",
+      "command": ["kaizen", "mcp"],
+      "enabled": true
+    }
+  }
+}
+```
+
+Run OpenCode from the project directory, or rely on per-tool `workspace` arguments.
+
+## GitHub Copilot (VS Code)
+
+VS Code stores MCP servers in **`mcp.json`** (workspace: `.vscode/mcp.json`, or user profile via **MCP: Open User Configuration**). See [MCP configuration in VS Code](https://code.visualstudio.com/docs/copilot/customization/mcp-servers) and the [MCP file format](https://code.visualstudio.com/docs/copilot/reference/mcp-configuration). Example:
+
+```json
+{
+  "servers": {
+    "kaizen": {
+      "type": "stdio",
+      "command": "kaizen",
+      "args": ["mcp"],
+      "env": {}
+    }
+  }
+}
+```
+
+Use `${workspaceFolder}` in `command` / `args` / `env` if needed. Pass `workspace` on tool calls when the server is not started with the repo as cwd.
+
+## GitHub Copilot CLI
+
+Copilot CLI reads MCP definitions from `~/.copilot/mcp-config.json` ([config dir reference](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-config-dir-reference)). Example:
+
+```json
+{
+  "mcpServers": {
+    "kaizen": {
+      "command": "kaizen",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+If you use `COPILOT_HOME` or `--config-dir`, place the file under that directory instead.
+
+## Disabling tier-1 sources
+
+In `.kaizen/config.toml`:
+
+```toml
+[sources.tail]
+goose = true
+opencode = true
+copilot_cli = true
+copilot_vscode = true
+```
+
+Set any value to `false` to skip that agent’s local scan (useful if a VS Code workspace storage walk is too slow).
 
 ## Tools
 
