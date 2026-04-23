@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Timestamp formatting — no chrono dep, pure stdlib.
 
 /// Ms since epoch → `YYYY-MM-DD HH:MM`. Returns `(unknown)` when ms is 0.

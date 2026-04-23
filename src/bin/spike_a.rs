@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Spike A — parse real Cursor/Claude/Codex transcripts.
 //!
 //! Walks `~/.cursor/projects/*/agent-transcripts/*.jsonl`.

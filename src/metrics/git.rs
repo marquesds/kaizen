@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Git-derived churn, authorship, co-change.
 
 use crate::metrics::types::{FileHistory, RepoEdge};

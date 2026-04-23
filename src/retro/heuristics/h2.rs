@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! H2 — Hot file cluster: pairs of files co-edited often across sessions.
 
 use crate::retro::types::{Bet, Inputs};

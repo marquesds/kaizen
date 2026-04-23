@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Atomic report files + Markdown rendering for retro.
 
 use crate::retro::types::Report;

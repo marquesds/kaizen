@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 use kaizen::core::session::{Session, Status, transition};
 use quint_connect::*;
 use serde::Deserialize;

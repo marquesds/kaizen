@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Context passed when appending events so the store can enqueue the sync outbox.
 
 use crate::core::config::SyncConfig;

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Parse Cursor hook JSON from stdin.
 //!
 //! Cursor sends a JSON object with `event`, `session_id`, `timestamp_ms`.

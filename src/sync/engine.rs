@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Flush outbox batches: size limits, split on 413, backoff on 429 / transient errors.
 
 use crate::core::config::SyncConfig;

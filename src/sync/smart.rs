@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Sync shapes for tool spans and repo snapshots.
 
 use crate::core::config::try_team_salt;

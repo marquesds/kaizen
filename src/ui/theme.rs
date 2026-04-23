@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Color constants for TUI.
 
 use ratatui::style::Color;

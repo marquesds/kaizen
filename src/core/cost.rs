@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Model cost estimation from bundled price table.
 //! All values in cost_usd_e6 (1 USD = 1_000_000 units).
 

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Core event + session-record types. Pure data, no IO.
 
 use serde::{Deserialize, Serialize};

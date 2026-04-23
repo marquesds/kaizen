@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Heuristic bets H1–H8.
 
 mod h1;

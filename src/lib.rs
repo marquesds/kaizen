@@ -1,5 +1,7 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 pub mod collect;
 pub mod core;
+pub mod experiment;
 pub mod metrics;
 pub mod report;
 pub mod retro;

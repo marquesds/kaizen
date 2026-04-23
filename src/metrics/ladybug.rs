@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Ladybug sidecar. Derived only. Safe to rebuild.
 
 use crate::metrics::types::{RepoEdge, RepoSnapshotRecord, SymbolFact};

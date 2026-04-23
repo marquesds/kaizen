@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Sync SQLite store. WAL mode, schema migrations as ordered SQL strings.
 
 use crate::core::config::try_team_salt;
@@ -59,6 +60,12 @@ const MIGRATIONS: &[&str] = &[
         name TEXT NOT NULL,
         created_at_ms INTEGER NOT NULL,
         metadata TEXT NOT NULL DEFAULT '{}'
+    )",
+    "CREATE TABLE IF NOT EXISTS experiment_tags (
+        experiment_id TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        variant TEXT NOT NULL,
+        PRIMARY KEY (experiment_id, session_id)
     )",
     "CREATE UNIQUE INDEX IF NOT EXISTS events_session_seq_idx ON events(session_id, seq)",
     "CREATE TABLE IF NOT EXISTS sync_state (
@@ -187,6 +194,10 @@ pub struct Store {
 }
 
 impl Store {
+    pub(crate) fn conn(&self) -> &Connection {
+        &self.conn
+    }
+
     pub fn open(path: &Path) -> Result<Self> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
@@ -1229,6 +1240,13 @@ fn ensure_schema_columns(conn: &Connection) -> Result<()> {
         "kind",
         "TEXT NOT NULL DEFAULT 'events'",
     )?;
+    ensure_column(
+        conn,
+        "experiments",
+        "state",
+        "TEXT NOT NULL DEFAULT 'Draft'",
+    )?;
+    ensure_column(conn, "experiments", "concluded_at_ms", "INTEGER")?;
     Ok(())
 }
 

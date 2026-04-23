@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Hook event types shared by Cursor and Claude Code parsers.
 
 pub mod claude;

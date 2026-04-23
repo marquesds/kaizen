@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Pure smart-metric report builder.
 
 use crate::metrics::types::{MetricsReport, RankedFile, RankedTool, ToolSpanView};

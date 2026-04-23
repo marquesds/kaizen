@@ -51,6 +51,14 @@ path = "tests/spec/retro_pipeline.rs"
 name = "init_setup"
 path = "tests/spec/init_setup.rs"
 
+[[test]]
+name = "experiment_lifecycle"
+path = "tests/spec/experiment_lifecycle.rs"
+
+[[test]]
+name = "retention"
+path = "tests/spec/retention.rs"
+
 [dependencies]
 serde_json = "1"
 serde = { version = "1", features = ["derive"] }

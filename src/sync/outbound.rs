@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Typed outbound JSON matching `POST /v1/events` (single-event shape used in outbox rows).
 
 use crate::core::event::{Event, EventKind, EventSource, SessionRecord};

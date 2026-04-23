@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Git-bound repo facts. Shell out only at boundary.
 
 use anyhow::{Context, Result};

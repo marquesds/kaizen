@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Parse Claude Code hook JSON from stdin.
 //!
 //! Claude Code sends a JSON object with `hook_event_name`, `session_id`, `timestamp_ms`.

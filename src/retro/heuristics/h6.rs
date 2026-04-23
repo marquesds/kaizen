@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! H6 — Skill trigger misfire (`outcome = ignored` in payloads).
 
 use crate::retro::types::{Bet, Inputs};

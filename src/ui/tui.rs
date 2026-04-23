@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Two-pane TUI: session list (left) + events (right).
 
 use crate::core::event::{Event, SessionRecord};

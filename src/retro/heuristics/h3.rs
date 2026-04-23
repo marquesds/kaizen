@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! H3 — Repeated churn on the same path in one session (edit loop proxy).
 
 use crate::core::event::EventKind;

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! H7 — Model routing: premium model with very low per-session cost (possible overkill).
 
 use crate::retro::types::{Bet, Inputs};

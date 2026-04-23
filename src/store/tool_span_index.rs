@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Rebuild tool spans from one session event stream.
 
 use crate::core::event::{Event, EventKind, EventSource};

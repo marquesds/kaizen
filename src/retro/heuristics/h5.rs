@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! H5 — Idle session bloat (long Idle, not Done).
 
 use crate::core::event::SessionStatus;

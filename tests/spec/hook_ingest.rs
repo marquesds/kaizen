@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 use kaizen::collect::hooks::EventKind as HookKind;
 use kaizen::collect::hooks::normalize::hook_to_status;
 use kaizen::core::event::SessionStatus;

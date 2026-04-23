@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Merge heuristics, dedupe vs prior reports, rank top bets.
 
 use crate::retro::heuristics;

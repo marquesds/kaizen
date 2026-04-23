@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Pure data for the retro engine (`Report`, `Bet`, `Inputs`).
 
 use crate::core::event::{Event, SessionRecord};

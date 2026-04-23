@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `kaizen init` — idempotent workspace setup.
 
 use anyhow::Result;
@@ -116,6 +117,20 @@ fn patch_cursor_hooks(ws: &Path) -> Result<()> {
     Ok(())
 }
 
+fn entry_has_kaizen_cmd(entry: &serde_json::Value) -> bool {
+    if entry.get("command").and_then(|c| c.as_str()) == Some(KAIZEN_CLAUDE_HOOK_CMD) {
+        return true;
+    }
+    entry
+        .get("hooks")
+        .and_then(|v| v.as_array())
+        .is_some_and(|inner| {
+            inner
+                .iter()
+                .any(|h| h.get("command").and_then(|c| c.as_str()) == Some(KAIZEN_CLAUDE_HOOK_CMD))
+        })
+}
+
 fn patch_claude_settings(ws: &Path) -> Result<()> {
     let path = ws.join(".claude/settings.json");
     if !path.exists() {
@@ -130,36 +145,44 @@ fn patch_claude_settings(ws: &Path) -> Result<()> {
         }
     };
     let hooks = obj.entry("hooks").or_insert_with(|| serde_json::json!({}));
-    let already = CLAUDE_HOOK_EVENTS.iter().all(|event| {
-        hooks
-            .get(*event)
-            .and_then(|v| v.as_array())
-            .is_some_and(|arr| {
-                arr.iter().any(|v| {
-                    v.get("command").and_then(|c| c.as_str()) == Some(KAIZEN_CLAUDE_HOOK_CMD)
-                })
-            })
-    });
-    if already {
+    let hooks_obj = hooks.as_object_mut().unwrap();
+    let mut changed = false;
+    for event in CLAUDE_HOOK_EVENTS {
+        let arr = hooks_obj
+            .entry((*event).to_string())
+            .or_insert_with(|| serde_json::json!([]));
+        let Some(entries) = arr.as_array_mut() else {
+            continue;
+        };
+        // Migrate any bare {command,type} entries missing the `hooks` wrapper.
+        for entry in entries.iter_mut() {
+            if entry.get("hooks").is_some() {
+                continue;
+            }
+            if let Some(obj) = entry.as_object()
+                && obj.contains_key("command")
+            {
+                let inner = entry.clone();
+                *entry = serde_json::json!({ "hooks": [inner] });
+                changed = true;
+            }
+        }
+        if !entries.iter().any(entry_has_kaizen_cmd) {
+            entries.push(serde_json::json!({
+                "hooks": [
+                    {"type": "command", "command": KAIZEN_CLAUDE_HOOK_CMD}
+                ]
+            }));
+            changed = true;
+        }
+    }
+    if !changed {
         println!("  skipped  .claude/settings.json  (already configured)");
         return Ok(());
     }
     let bak = backup_path(ws, "claude_settings");
     std::fs::create_dir_all(bak.parent().unwrap())?;
     std::fs::copy(&path, &bak)?;
-    let hooks_obj = hooks.as_object_mut().unwrap();
-    for event in CLAUDE_HOOK_EVENTS {
-        let arr = hooks_obj
-            .entry((*event).to_string())
-            .or_insert_with(|| serde_json::json!([]));
-        if let Some(values) = arr.as_array_mut()
-            && !values
-                .iter()
-                .any(|v| v.get("command").and_then(|c| c.as_str()) == Some(KAIZEN_CLAUDE_HOOK_CMD))
-        {
-            values.push(serde_json::json!({"type": "command", "command": KAIZEN_CLAUDE_HOOK_CMD}));
-        }
-    }
     std::fs::write(&path, serde_json::to_string_pretty(&obj)?)?;
     println!("  patched  .claude/settings.json  (+session/tool hooks)");
     Ok(())

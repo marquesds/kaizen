@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Map HookEvent → core Event + derive SessionStatus.
 
 use crate::collect::hooks::{EventKind as HookKind, HookEvent};

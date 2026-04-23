@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Multi-language file analyzers. Tree-sitter when supported.
 
 use crate::metrics::types::{RepoAnalysis, SymbolFact};

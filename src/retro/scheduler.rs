@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Scheduling helpers for weekly retro.
 //!
 //! Recommended crontab (Sunday 09:00 local):

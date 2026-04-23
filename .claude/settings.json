@@ -21,8 +21,12 @@
         ]
       },
       {
-        "command": "kaizen ingest hook --source claude",
-        "type": "command"
+        "hooks": [
+          {
+            "command": "kaizen ingest hook --source claude",
+            "type": "command"
+          }
+        ]
       }
     ]
   },

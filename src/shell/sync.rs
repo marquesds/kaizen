@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! `kaizen sync run` and `kaizen sync status`.
 
 use crate::core::config::{self, try_team_salt};

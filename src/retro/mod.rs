@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Heuristic retro engine (M5): pure ranking + IO at boundaries.
 
 pub mod engine;

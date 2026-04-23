@@ -17,18 +17,22 @@ By contributing, you agree your contributions are under the same license.
 | [docs/roadmap.md](docs/roadmap.md) | Risks, v0.1 scope, definition of done |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to work on the crate |
 
-## Quick start (from source)
-
-Requires a **Rust 2024** toolchain (edition 2024; use a current stable or nightly
-that supports it—check `edition` in `Cargo.toml`).
+## Quick start
 
 ```bash
-cargo build --release
-./target/release/kaizen --help
+cargo install kaizen
+kaizen init                        # scaffold .kaizen/ + wire hooks
+kaizen sessions list               # index + list sessions
+kaizen summary                     # cost/agent/model rollup
+kaizen retro --days 7              # weekly bets report
+kaizen tui                         # live session browser
+kaizen exp new --name add-skill \
+  --metric tokens_per_session --bind git \
+  --duration-days 14 --target-pct -10
 ```
 
-`cargo install` from crates.io is planned for a stable release; until then,
-install with `cargo install --path .` from a clone.
+From a clone: `cargo install --path .` (edition 2024; use current
+stable Rust or nightly that supports it).
 
 ## Status
 
@@ -36,6 +40,14 @@ Pre–v0.1: APIs and features evolve. See [ROADMAP.md](ROADMAP.md).
 
 ## CI
 
-GitHub Actions runs `fmt`, `clippy` (`-D warnings`), and `cargo test` on
-push/PR. Workflow: [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+GitHub Actions runs `fmt`, `clippy` (`-D warnings`), `cargo test`, and
+Quint spec tests on push/PR. Separate job runs `cargo audit` and
+`cargo deny check` against `.cargo/deny.toml`.
+Workflow: [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 Add a [status badge](https://docs.github.com/en/actions/monitoring-and-troubleshooting-workflows/adding-a-workflow-status-badge) after the repo URL is final.
+
+## Release
+
+Maintainer-only: `scripts/release.sh <version>` runs pre-flight checks,
+bumps `Cargo.toml`, cross-compiles for macOS + Linux, and publishes to
+crates.io. Requires `cargo-edit`, `cross`, and a crates.io token.

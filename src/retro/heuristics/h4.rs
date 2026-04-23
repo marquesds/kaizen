@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! H4 — High-cost tool concentration.
 
 use crate::retro::types::{Bet, Inputs};

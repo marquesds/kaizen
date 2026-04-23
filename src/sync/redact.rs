@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Client-side redaction before enqueueing sync outbox rows.
 
 use aho_corasick::AhoCorasick;

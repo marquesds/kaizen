@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Parse Claude Code transcript `.jsonl` files into Events.
 //! Pure parser — no notify dependency, no IO beyond file reads.
 

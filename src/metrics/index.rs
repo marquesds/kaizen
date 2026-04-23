@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Build repo snapshot facts and sidecar.
 
 use crate::core::repo::{binding_for_session, dirty_fingerprint, repo_head, tracked_files};

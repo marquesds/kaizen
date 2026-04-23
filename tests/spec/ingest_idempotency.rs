@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 use quint_connect::*;
 use serde::Deserialize;
 use std::collections::HashSet;

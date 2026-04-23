@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 use clap::{Parser, Subcommand, ValueEnum};
 use std::io::Read;
 use std::path::PathBuf;
@@ -67,6 +68,11 @@ enum Command {
         #[command(subcommand)]
         subcmd: SyncCommand,
     },
+    /// Experiment binding + report.
+    Exp {
+        #[command(subcommand)]
+        subcmd: ExpCommand,
+    },
     /// Weekly-style heuristic retro report.
     Retro {
         /// Trailing window in days (default 7).
@@ -82,6 +88,72 @@ enum Command {
         #[arg(long)]
         force: bool,
         /// workspace root (default: cwd)
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand)]
+enum ExpCommand {
+    /// Create experiment (records control/treatment commits).
+    New {
+        #[arg(long)]
+        name: String,
+        #[arg(long)]
+        hypothesis: String,
+        #[arg(long)]
+        change: String,
+        /// tokens_per_session|cost_per_session|success_rate|tool_loops|duration_minutes|files_per_session
+        #[arg(long)]
+        metric: String,
+        /// git|manual
+        #[arg(long, default_value = "git")]
+        bind: String,
+        #[arg(long, default_value_t = 14)]
+        duration_days: u32,
+        /// target delta pct, e.g. -10.0 for -10%
+        #[arg(long, default_value_t = -10.0)]
+        target_pct: f64,
+        #[arg(long)]
+        control_commit: Option<String>,
+        #[arg(long)]
+        treatment_commit: Option<String>,
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+    },
+    /// List all experiments.
+    List {
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+    },
+    /// Show one experiment's metadata.
+    Status {
+        id: String,
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+    },
+    /// Manual variant tag for a session.
+    Tag {
+        id: String,
+        #[arg(long)]
+        session: String,
+        /// control|treatment|excluded
+        #[arg(long)]
+        variant: String,
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+    },
+    /// Render markdown (or JSON) report with bootstrap CI.
+    Report {
+        id: String,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+    },
+    /// Mark experiment Concluded.
+    Conclude {
+        id: String,
         #[arg(long)]
         workspace: Option<PathBuf>,
     },
@@ -199,6 +271,52 @@ fn main() -> anyhow::Result<()> {
             force,
             workspace,
         } => kaizen::shell::retro::cmd_retro(workspace.as_deref(), days, dry_run, json, force),
+        Command::Exp { subcmd } => dispatch_exp(subcmd),
+    }
+}
+
+fn dispatch_exp(cmd: ExpCommand) -> anyhow::Result<()> {
+    use kaizen::shell::exp;
+    match cmd {
+        ExpCommand::New {
+            name,
+            hypothesis,
+            change,
+            metric,
+            bind,
+            duration_days,
+            target_pct,
+            control_commit,
+            treatment_commit,
+            workspace,
+        } => exp::cmd_new(
+            workspace.as_deref(),
+            exp::NewArgs {
+                name,
+                hypothesis,
+                change,
+                metric,
+                bind,
+                duration_days,
+                target_pct,
+                control_commit,
+                treatment_commit,
+            },
+        ),
+        ExpCommand::List { workspace } => exp::cmd_list(workspace.as_deref()),
+        ExpCommand::Status { id, workspace } => exp::cmd_status(workspace.as_deref(), &id),
+        ExpCommand::Tag {
+            id,
+            session,
+            variant,
+            workspace,
+        } => exp::cmd_tag(workspace.as_deref(), &id, &session, &variant),
+        ExpCommand::Report {
+            id,
+            json,
+            workspace,
+        } => exp::cmd_report(workspace.as_deref(), &id, json),
+        ExpCommand::Conclude { id, workspace } => exp::cmd_conclude(workspace.as_deref(), &id),
     }
 }
 

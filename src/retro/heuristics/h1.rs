@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! H1 — Dead skill: on-disk skill unused in lookback window, not edited recently.
 
 use crate::retro::types::{Bet, Inputs};

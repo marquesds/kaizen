@@ -15,8 +15,8 @@ Risks, v0.1 definition of done, and out-of-scope list:
 | M3 — TUI + hooks | Planned |
 | M4 — Sync + ingest | Planned |
 | M5 — Retro + skill | Planned |
-| M6 — Experiments | Planned |
-| M7 — Hardening + OSS + CI | Planned |
+| M6 — Experiments | In progress |
+| M7 — Hardening + OSS + CI | In progress |
 
 You can mirror these as GitHub milestones or issues; the repo’s source of
 truth for ordering remains [docs/impl-sequence.md](docs/impl-sequence.md).

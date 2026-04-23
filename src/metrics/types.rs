@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Smart metric data. Pure structs only.
 
 use serde::{Deserialize, Serialize};

@@ -12,6 +12,7 @@ env:
 
 jobs:
   rust:
+    name: test + clippy + fmt + quint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -25,3 +26,16 @@ jobs:
       - run: cargo fmt --all -- --check
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test --all
+
+  audit:
+    name: cargo audit + deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install cargo-audit + cargo-deny
+        run: |
+          cargo install --locked cargo-audit
+          cargo install --locked cargo-deny
+      - run: cargo audit
+      - run: cargo deny --manifest-path Cargo.toml --config .cargo/deny.toml check

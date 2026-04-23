@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! H8 — Doc drift: reads under `docs/` then edits elsewhere in the same session.
 
 use crate::core::event::EventKind;

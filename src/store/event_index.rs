@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Derive `files_touched` / `skills_used` rows from ingested events.
 
 use crate::core::event::Event;
