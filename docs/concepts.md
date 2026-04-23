@@ -34,7 +34,7 @@ Sources:
 
 SQLite WAL at `.kaizen/kaizen.db`. Single-writer tokio task. Append-only
 `events` + derived indexes (`tool_spans`, `file_facts`,
-`repo_edges`). LadybugDB sidecar at `.kaizen/codegraph.lbug` for graph
+`repo_edges`). Graph sidecar at `.kaizen/codegraph.db` (SQLite + GraphQLite Cypher extension) for graph
 queries.
 
 ## Redact

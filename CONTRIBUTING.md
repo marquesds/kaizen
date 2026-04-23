@@ -15,7 +15,7 @@ cargo build
 cargo test
 ```
 
-Requires Rust 1.85+ (edition 2024). For Quint specs:
+Requires Rust 1.95+ (edition 2024). For Quint specs:
 
 ```bash
 npm install -g @informalsystems/quint@0.32.0

@@ -34,16 +34,7 @@
       "parameters": {
         "strict_required_status_checks_policy": false,
         "do_not_enforce_on_create": false,
-        "required_status_checks": [
-          { "context": "fmt" },
-          { "context": "clippy" },
-          { "context": "test (ubuntu-latest / stable)" },
-          { "context": "test (macos-latest / stable)" },
-          { "context": "test (ubuntu-latest / 1.85)" },
-          { "context": "test (macos-latest / 1.85)" },
-          { "context": "audit + deny" },
-          { "context": "docs build" }
-        ]
+        "required_status_checks": [{ "context": "CI" }]
       }
     }
   ]

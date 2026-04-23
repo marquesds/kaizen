@@ -3,7 +3,6 @@
 
 use crate::retro::types::Report;
 use anyhow::{Context, Result};
-use fs4::fs_std::FileExt;
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::Path;
@@ -115,8 +114,7 @@ impl ReportsDirLock {
             .truncate(false)
             .open(&p)
             .with_context(|| format!("lock {}", p.display()))?;
-        f.lock_exclusive()
-            .with_context(|| format!("lock_exclusive {}", p.display()))?;
+        fs4::FileExt::lock(&f).with_context(|| format!("lock {}", p.display()))?;
         Ok(Self(f))
     }
 }

@@ -6,7 +6,7 @@
 //! before resampling to blunt skew.
 
 use rand::rngs::SmallRng;
-use rand::{Rng, SeedableRng};
+use rand::{RngExt, SeedableRng};
 use serde::{Deserialize, Serialize};
 
 pub const DEFAULT_RESAMPLES: u32 = 10_000;
@@ -120,10 +120,10 @@ fn bootstrap_ci(
     let mut buf_t = vec![0.0_f64; treatment.len()];
     for _ in 0..resamples {
         for slot in buf_c.iter_mut() {
-            *slot = control[rng.gen_range(0..control.len())];
+            *slot = control[rng.random_range(0..control.len())];
         }
         for slot in buf_t.iter_mut() {
-            *slot = treatment[rng.gen_range(0..treatment.len())];
+            *slot = treatment[rng.random_range(0..treatment.len())];
         }
         let (Some(mc), Some(mt)) = (median(&buf_c), median(&buf_t)) else {
             continue;

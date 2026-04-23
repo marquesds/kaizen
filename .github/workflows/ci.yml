@@ -16,8 +16,18 @@ env:
   RUSTFLAGS: -D warnings
 
 jobs:
-  check:
-    name: linux (fmt, clippy, test, doc)
+  fmt:
+    name: fmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all -- --check
+
+  linux_clippy_test:
+    name: linux (clippy, test)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,13 +37,22 @@ jobs:
       - run: npm install -g @informalsystems/quint@0.32.0
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt, clippy
+          components: clippy
       - uses: Swatinem/rust-cache@v2
         with:
-          key: linux-stable
-      - run: cargo fmt --all -- --check
+          shared-key: linux-stable
       - run: cargo clippy --all-targets -- -D warnings
-      - run: cargo test --all --locked -- --fail-fast
+      - run: cargo test --all --locked
+
+  doc:
+    name: doc
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: linux-stable
       - name: cargo doc
         run: cargo doc --no-deps --all-features
         env:
@@ -41,7 +60,6 @@ jobs:
 
   test:
     name: test (${{ matrix.os }} / ${{ matrix.rust }})
-    needs: [check]
     strategy:
       fail-fast: true
       matrix:
@@ -49,7 +67,7 @@ jobs:
           - os: macos-latest
             rust: stable
           - os: ubuntu-latest
-            rust: "1.85"
+            rust: "1.95"
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -63,11 +81,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.os }}-${{ matrix.rust }}
-      - run: cargo test --all --locked -- --fail-fast
+      - run: cargo test --all --locked
 
   audit:
     name: audit + deny
-    needs: [check]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -77,3 +94,17 @@ jobs:
           tool: cargo-audit, cargo-deny
       - run: cargo audit
       - run: cargo deny --manifest-path Cargo.toml check --config .cargo/deny.toml
+
+  ci:
+    name: CI
+    needs: [fmt, linux_clippy_test, doc, test, audit]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: All jobs succeeded
+        run: |
+          test "${{ needs.fmt.result }}" = "success"
+          test "${{ needs.linux_clippy_test.result }}" = "success"
+          test "${{ needs.doc.result }}" = "success"
+          test "${{ needs.test.result }}" = "success"
+          test "${{ needs.audit.result }}" = "success"

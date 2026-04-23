@@ -4,7 +4,7 @@
 use crate::core::repo::{binding_for_session, dirty_fingerprint, repo_head, tracked_files};
 use crate::metrics::analyze::analyzer_for;
 use crate::metrics::git::load_history;
-use crate::metrics::ladybug::{rebuild_sidecar, symbol_id};
+use crate::metrics::codegraph::{rebuild_sidecar, symbol_id};
 use crate::metrics::types::{FileFact, RepoAnalysis, RepoEdge, RepoSnapshotRecord, SymbolFact};
 use crate::store::Store;
 use anyhow::Result;
@@ -40,7 +40,7 @@ pub fn ensure_indexed(store: &Store, workspace: &Path, force: bool) -> Result<Re
     edges.extend(deps.clone());
     let fan = fan_counts(&deps);
     let mut symbols = vec![];
-    let graph_path = workspace.join(".kaizen/codegraph.lbug");
+    let graph_path = workspace.join(".kaizen/codegraph.db");
     let snapshot = RepoSnapshotRecord {
         id: snapshot_id,
         workspace: workspace_str.clone(),
