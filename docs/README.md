@@ -8,9 +8,10 @@ Index.
 |---|---|
 | [install.md](install.md) | Install, build from source, uninstall |
 | [usage.md](usage.md) | CLI reference |
+| [mcp.md](mcp.md) | MCP stdio server (agent hosts, full CLI parity) |
 | [llm-proxy.md](llm-proxy.md) | Local HTTP forwarder for LLM APIs (Anthropic) |
 | [concepts.md](concepts.md) | Sessions, events, retro, experiments |
-| [config.md](config.md) | Config file + env vars |
+| [config.md](config.md) | Config file + env vars, sync, proxy, pluggable telemetry |
 | [retro.md](retro.md) | Heuristic retro engine |
 | [retro-tuning.md](retro-tuning.md) | Tuning heuristic thresholds |
 | [experiments.md](experiments.md) | Experiments v0 |
@@ -35,6 +36,7 @@ Index.
 | New module | `architecture.md` |
 | New env var | `config.md` |
 | `kaizen proxy` or proxy config | [llm-proxy.md](llm-proxy.md), [config.md](config.md) |
+| `kaizen telemetry` or `[[telemetry.exporters]]` | [usage](usage.md), [config](config.md#telemetry) |
 | New pattern or decision | `patterns.md` or new ADR |
 | Directory layout change | `structure.md` |
 | Ingest / sync contract | `ingest-contract.md` |

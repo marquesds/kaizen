@@ -85,6 +85,19 @@ kaizen sync status              # outbox depth + last flush
 
 Contract: [ingest-contract.md](ingest-contract.md).
 
+## `kaizen telemetry`
+
+Optional pluggable sinks (PostHog, Datadog, OTLP, `dev`) that receive the same redacted batches as Kaizen sync. Configure `[[telemetry.exporters]]` in `~/.kaizen/config.toml` (or workspace); see [config.md](config.md#telemetry).
+
+```bash
+kaizen telemetry configure              # append an exporter template (interactive)
+kaizen telemetry print-effective-config # redacted: which fields resolve from env vs TOML
+```
+
+## `kaizen mcp`
+
+Model Context Protocol server over stdio — full CLI parity for agents (Cursor, Claude Code, Goose, OpenCode, Copilot, and so on) without shelling to `kaizen`. Host config examples and tool behavior: [mcp.md](mcp.md).
+
 ## `kaizen exp`
 
 Experiments v0.

@@ -25,7 +25,6 @@ exclude = [
     "AGENTS.md",
     "CLAUDE.md",
     "CONTRIBUTING.md",
-    "ROADMAP.md",
     "CHANGELOG.md",
     "CODE_OF_CONDUCT.md",
     "SECURITY.md",

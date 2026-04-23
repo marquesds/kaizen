@@ -20,11 +20,18 @@ session lifecycle. Ordered by `event_seq` within a session. See
 Two tiers:
 
 - **Tier 1 — transcript tail.** Watches agent transcript dirs with
-  `notify`, parses JSONL. Rotation and partial-line safe.
+  `notify`, parses JSONL. Rotation and partial-line safe. Optional tail
+  agents: Goose, OpenCode, GitHub Copilot CLI, VS Code Copilot chat (see
+  `sources.tail` in [config.md](config.md#sources), resolved from
+  `~/.kaizen/config.toml`).
 - **Tier 2 — hooks.** `kaizen init` patches Cursor + Claude Code hooks
   to pipe JSON events into `kaizen ingest hook`.
 
-Sources:
+- **LLM HTTP proxy (optional).** `kaizen proxy run` records
+  `EventSource::Proxy` events for requests forwarded to Anthropic-style
+  APIs. See [llm-proxy.md](llm-proxy.md).
+
+Sources (native paths; tail agents add more):
 
 - Cursor: `~/.cursor/projects/*/agent-transcripts/*.jsonl`
 - Claude Code: `~/.claude/projects/*/*.jsonl`

@@ -8,10 +8,16 @@
 - `metrics` builds commit-pinned repo snapshots and Ladybug sidecar.
 - `retro` consumes raw telemetry + smart metrics for heuristic bets.
 - `sync` ships redacted events, tool spans, and repo snapshots.
+- `proxy` forwards LLM HTTP traffic and appends `EventSource::Proxy` rows (see
+  [llm-proxy.md](llm-proxy.md)).
+- `telemetry` fans out the same redacted batches to optional exporters
+  (PostHog, Datadog, OTLP) when configured.
+- `mcp` is the stdio MCP server; tools delegate to the same `shell` commands as
+  the CLI (see [mcp.md](mcp.md)).
 
 ## Data Flow
 
-1. Transcript / hook ingest → `events`.
+1. Transcript, hook, or (optional) proxy ingest → `events`.
 2. Event append rebuilds `files_touched`, `skills_used`, `tool_spans`.
 3. Metrics index scans git + source tree → `repo_snapshots`,
    `file_facts`, `repo_edges`, Ladybug sidecar.
@@ -25,7 +31,9 @@
 - Git CLI for commit/churn/dirty facts.
 - LadybugDB embedded sidecar for graph detail.
 - HTTP ingest server for sync.
+- Optional: HTTP proxy to model APIs ([llm-proxy.md](llm-proxy.md));
+  optional: third-party telemetry when `[telemetry.exporters]` is set.
 
 ## Entry Points
 
-- `src/main.rs` — binary entry, initializes runtime, starts server/loop
+- `src/main.rs` — CLI, `kaizen mcp` (async server), and `kaizen tui` / sync loops

@@ -19,16 +19,17 @@ here explicitly.
 
 ### Changed
 - `Cargo.toml` crates.io metadata (description, license, repo, keywords, categories, `rust-version`, `exclude`).
-- `README.md`, `docs/README.md`, `CONTRIBUTING.md`, `ROADMAP.md` rewritten for OSS.
+- `README.md`, `docs/README.md`, `CONTRIBUTING.md` rewritten for OSS.
 
 ### Removed
+- `ROADMAP.md` — use `docs/` and this file for feature scope; milestones from the former roadmap are shipped.
 - `src/bin/spike_a.rs`, `src/bin/spike_e.rs` — done spike binaries.
 - `docs/impl-sequence.md`, `docs/roadmap.md` — internal build-order docs.
 - Stray `test_testSessionEndsInDone_0.itf.json` Quint trace.
 
 ## [0.1.0] — TBD
 
-Initial public release. Scope: see [ROADMAP.md](ROADMAP.md) — M0 through M7.
+Initial public release. See `docs/usage.md` and the `[Unreleased]` section above for capabilities.
 
 [Unreleased]: https://github.com/lucasmarqs/kaizen/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/lucasmarqs/kaizen/releases/tag/v0.1.0

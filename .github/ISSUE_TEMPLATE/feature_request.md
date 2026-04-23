@@ -20,7 +20,7 @@ assignees: ''
 
 ## Scope
 
-- [ ] Fits v0.1 (see ROADMAP.md)
+- [ ] Fits current product scope (see `docs/` and `CHANGELOG.md` at the repo root)
 - [ ] Requires new discovery cycle
 
 ## Extra context
