@@ -22,7 +22,11 @@ pub fn from_object(obj: &serde_json::Map<String, Value>) -> Option<String> {
     {
         return Some(s);
     }
-    for (parent, key) in [("message", "model"), ("metadata", "model"), ("config", "model")] {
+    for (parent, key) in [
+        ("message", "model"),
+        ("metadata", "model"),
+        ("config", "model"),
+    ] {
         if let Some(s) = obj
             .get(parent)
             .and_then(|o| o.get(key))

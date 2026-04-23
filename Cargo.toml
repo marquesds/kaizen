@@ -112,6 +112,7 @@ tree-sitter-typescript = "0.23"
 tree-sitter-python = "0.25"
 tree-sitter-go = "0.25"
 tree-sitter-java = "0.23"
+rmcp = { version = "1", features = ["server", "transport-io", "schemars", "macros"] }
 
 [dev-dependencies]
 quint-connect = "0.1"
