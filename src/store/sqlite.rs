@@ -14,6 +14,10 @@ use anyhow::{Context, Result};
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use std::path::Path;
 
+/// Max `ts_ms` still treated as transcript-only synthetic timing (seq-based fallbacks).
+/// Rows below this use `sessions.started_at_ms` for time-window matching.
+const SYNTHETIC_TS_CEILING_MS: i64 = 1_000_000_000_000;
+
 const MIGRATIONS: &[&str] = &[
     "CREATE TABLE IF NOT EXISTS sessions (
         id TEXT PRIMARY KEY,
@@ -302,10 +306,22 @@ impl Store {
     pub fn append_event_with_sync(&self, e: &Event, ctx: Option<&SyncIngestContext>) -> Result<()> {
         let payload = serde_json::to_string(&e.payload)?;
         self.conn.execute(
-            "INSERT OR IGNORE INTO events (
+            "INSERT INTO events (
                 session_id, seq, ts_ms, ts_exact, kind, source, tool, tool_call_id,
                 tokens_in, tokens_out, reasoning_tokens, cost_usd_e6, payload
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+             ON CONFLICT(session_id, seq) DO UPDATE SET
+                ts_ms = excluded.ts_ms,
+                ts_exact = excluded.ts_exact,
+                kind = excluded.kind,
+                source = excluded.source,
+                tool = excluded.tool,
+                tool_call_id = excluded.tool_call_id,
+                tokens_in = excluded.tokens_in,
+                tokens_out = excluded.tokens_out,
+                reasoning_tokens = excluded.reasoning_tokens,
+                cost_usd_e6 = excluded.cost_usd_e6,
+                payload = excluded.payload",
             params![
                 e.session_id,
                 e.seq as i64,
@@ -809,10 +825,21 @@ impl Store {
                     s.start_commit, s.end_commit, s.branch, s.dirty_start, s.dirty_end, s.repo_binding_source
              FROM events e
              JOIN sessions s ON s.id = e.session_id
-             WHERE s.workspace = ?1 AND e.ts_ms >= ?2 AND e.ts_ms <= ?3
+             WHERE s.workspace = ?1
+               AND (
+                 (e.ts_ms >= ?2 AND e.ts_ms <= ?3)
+                 OR (e.ts_ms < ?4 AND s.started_at_ms >= ?2 AND s.started_at_ms <= ?3)
+               )
              ORDER BY e.ts_ms ASC, e.session_id ASC, e.seq ASC",
         )?;
-        let rows = stmt.query_map(params![workspace, start_ms as i64, end_ms as i64], |row| {
+        let rows = stmt.query_map(
+            params![
+                workspace,
+                start_ms as i64,
+                end_ms as i64,
+                SYNTHETIC_TS_CEILING_MS,
+            ],
+            |row| {
             let payload_str: String = row.get(12)?;
             let status_str: String = row.get(19)?;
             Ok((
@@ -871,15 +898,25 @@ impl Store {
              WHERE s.workspace = ?1
                AND EXISTS (
                  SELECT 1 FROM events e
+                 JOIN sessions ss ON ss.id = e.session_id
                  WHERE e.session_id = ft.session_id
-                   AND e.ts_ms >= ?2 AND e.ts_ms <= ?3
+                   AND (
+                     (e.ts_ms >= ?2 AND e.ts_ms <= ?3)
+                     OR (e.ts_ms < ?4 AND ss.started_at_ms >= ?2 AND ss.started_at_ms <= ?3)
+                   )
                )
              ORDER BY ft.session_id, ft.path",
         )?;
         let out: Vec<(String, String)> = stmt
-            .query_map(params![workspace, start_ms as i64, end_ms as i64], |r| {
-                Ok((r.get(0)?, r.get(1)?))
-            })?
+            .query_map(
+                params![
+                    workspace,
+                    start_ms as i64,
+                    end_ms as i64,
+                    SYNTHETIC_TS_CEILING_MS,
+                ],
+                |r| { Ok((r.get(0)?, r.get(1)?)) },
+            )?
             .filter_map(|r| r.ok())
             .collect();
         Ok(out)
@@ -895,12 +932,17 @@ impl Store {
              WHERE s.workspace = ?1
                AND EXISTS (
                  SELECT 1 FROM events e
-                 WHERE e.session_id = su.session_id AND e.ts_ms >= ?2
+                 JOIN sessions ss ON ss.id = e.session_id
+                 WHERE e.session_id = su.session_id
+                   AND (e.ts_ms >= ?2 OR (e.ts_ms < ?3 AND ss.started_at_ms >= ?2))
                )
              ORDER BY su.skill",
         )?;
         let out: Vec<String> = stmt
-            .query_map(params![workspace, since_ms as i64], |r| r.get(0))?
+            .query_map(
+                params![workspace, since_ms as i64, SYNTHETIC_TS_CEILING_MS],
+                |r| r.get(0),
+            )?
             .filter_map(|r| r.ok())
             .collect();
         Ok(out)
@@ -920,15 +962,25 @@ impl Store {
              WHERE s.workspace = ?1
                AND EXISTS (
                  SELECT 1 FROM events e
+                 JOIN sessions ss ON ss.id = e.session_id
                  WHERE e.session_id = su.session_id
-                   AND e.ts_ms >= ?2 AND e.ts_ms <= ?3
+                   AND (
+                     (e.ts_ms >= ?2 AND e.ts_ms <= ?3)
+                     OR (e.ts_ms < ?4 AND ss.started_at_ms >= ?2 AND ss.started_at_ms <= ?3)
+                   )
                )
              ORDER BY su.session_id, su.skill",
         )?;
         let out: Vec<(String, String)> = stmt
-            .query_map(params![workspace, start_ms as i64, end_ms as i64], |r| {
-                Ok((r.get(0)?, r.get(1)?))
-            })?
+            .query_map(
+                params![
+                    workspace,
+                    start_ms as i64,
+                    end_ms as i64,
+                    SYNTHETIC_TS_CEILING_MS,
+                ],
+                |r| { Ok((r.get(0)?, r.get(1)?)) },
+            )?
             .filter_map(|r| r.ok())
             .collect();
         Ok(out)

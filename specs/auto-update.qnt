@@ -143,8 +143,9 @@ module auto_update {
     integrity_ok' = false
   }
 
+  // Like other kaizen specs, init is not part of `step`: simulation starts via the
+  // default init transition; `init` remains for scripted `run ...` scenarios below.
   action step: bool = any {
-    init,
     enable_auto,
     user_approves,
     begin_check,
