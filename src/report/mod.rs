@@ -101,8 +101,8 @@ pub fn write_atomic(path: &Path, content: &[u8]) -> Result<()> {
     Ok(())
 }
 
-/// Exclusive lock for the reports directory (released on drop).
-pub struct ReportsDirLock(File);
+/// Exclusive lock for the reports directory (released when the inner [`File`] is closed on drop).
+pub struct ReportsDirLock(#[allow(dead_code)] File);
 
 impl ReportsDirLock {
     pub fn acquire(reports_dir: &Path) -> Result<Self> {
@@ -118,11 +118,5 @@ impl ReportsDirLock {
         f.lock_exclusive()
             .with_context(|| format!("lock_exclusive {}", p.display()))?;
         Ok(Self(f))
-    }
-}
-
-impl Drop for ReportsDirLock {
-    fn drop(&mut self) {
-        let _ = self.0.unlock();
     }
 }
