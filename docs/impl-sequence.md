@@ -61,19 +61,20 @@ Output: recommendation feeding [ADR-001](adr/001-storage.md) (go / dual-engine /
 15. **`collect::hooks::claude`** — `src/collect/hooks/claude.rs`. Same for Claude Code `hook_event_name` format.
 16. **`kaizen ingest hook`** — reads stdin, dispatches by `--source cursor|claude`, appends to SQLite. Done: event lands in TUI within 1s.
 17. **`kaizen init`** — idempotent setup. Writes `.kaizen/config.toml`, patches hooks, backs up, installs retro skill. Done: idempotent on re-run; malformed file → non-zero exit.
-18. **Status state machine wired** — `running`/`waiting`/`idle`/`done` from hook events. Done: `session-lifecycle.qnt` test green on live hook-driven state.
+18. **`specs/init-setup.qnt`** — models `kaizen init` install / patch invariants. Done: rerun is noop; backups only on first hook patch.
+19. **Status state machine wired** — `running`/`waiting`/`idle`/`done` from hook events. Done: `session-lifecycle.qnt` test green on live hook-driven state.
 
 ---
 
 ## M4 — Sync Daemon + Ingest Contract (wk 5–6)
 
-19. **`redact`** — `src/redact/mod.rs`. Secrets, env vars, abs paths, git emails. Aho-corasick + regex. Done: no raw secret pattern in output; fixture before/after.
-20. **`specs/redaction-completeness.qnt`** — every outbound event passes `redact`; no `/Users` in path. Done: `tests/spec/redaction_completeness.rs` green.
-21. **`sync`** — `src/sync/mod.rs`. Reads `sync_outbox`. Batch (500 events / 1 MB / 10 s). UUIDv7 idempotency key. Retry + backoff. HTTPS POST. Dedup on `(team_id, workspace_hash, session_id_hash, event_seq)`. Done: retry 429; dedup 409.
-22. **`specs/sync-backpressure.qnt`** — bounded outbox, retry/backoff, no dup POSTs. Done: `tests/spec/sync_backpressure.rs` green.
-23. **Ingest contract finalized** — [ingest-contract.md](ingest-contract.md) + `specs/openapi/ingest-v1.yaml`.
-24. **Integration test** — `tests/ingest_stub/` real Axum server. Events sync E2E. Asserts dedup + no raw secrets in payload.
-25. **`kaizen sync status`** — outbox depth, last-success timestamp, error rate. Done: watch events sync to local stub.
+20. **`redact`** — `src/redact/mod.rs`. Secrets, env vars, abs paths, git emails. Aho-corasick + regex. Done: no raw secret pattern in output; fixture before/after.
+21. **`specs/redaction-completeness.qnt`** — every outbound event passes `redact`; no `/Users` in path. Done: `tests/spec/redaction_completeness.rs` green.
+22. **`sync`** — `src/sync/mod.rs`. Reads `sync_outbox`. Batch (500 events / 1 MB / 10 s). UUIDv7 idempotency key. Retry + backoff. HTTPS POST. Dedup on `(team_id, workspace_hash, session_id_hash, event_seq)`. Done: retry 429; dedup 409.
+23. **`specs/sync-backpressure.qnt`** — bounded outbox, retry/backoff, no dup POSTs. Done: `tests/spec/sync_backpressure.rs` green.
+24. **Ingest contract finalized** — [ingest-contract.md](ingest-contract.md) + `specs/openapi/ingest-v1.yaml`.
+25. **Integration test** — `tests/ingest_stub/` real Axum server. Events sync E2E. Asserts dedup + no raw secrets in payload.
+26. **`kaizen sync status`** — outbox depth, last-success timestamp, error rate. Done: watch events sync to local stub.
 
 ---
 
