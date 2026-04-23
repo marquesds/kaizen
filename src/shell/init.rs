@@ -2,6 +2,7 @@
 //! `kaizen init` — idempotent workspace setup.
 
 use anyhow::Result;
+use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -33,15 +34,15 @@ fn backup_path(ws: &Path, filename: &str) -> PathBuf {
     ws.join(format!(".kaizen/backup/{}.{}.bak", filename, ts_ms()))
 }
 
-fn ensure_config(ws: &Path) -> Result<()> {
+fn ensure_config(out: &mut String, ws: &Path) -> Result<()> {
     let path = ws.join(".kaizen/config.toml");
     if path.exists() {
-        println!("  skipped  .kaizen/config.toml");
+        writeln!(out, "  skipped  .kaizen/config.toml").unwrap();
         return Ok(());
     }
     std::fs::create_dir_all(ws.join(".kaizen"))?;
     std::fs::write(&path, CONFIG_TOML)?;
-    println!("  created  .kaizen/config.toml");
+    writeln!(out, "  created  .kaizen/config.toml").unwrap();
     Ok(())
 }
 
@@ -72,7 +73,7 @@ fn cursor_hook_exists(root: &serde_json::Value, event: &str) -> bool {
     false
 }
 
-fn patch_cursor_hooks(ws: &Path) -> Result<()> {
+fn patch_cursor_hooks(out: &mut String, ws: &Path) -> Result<()> {
     let path = ws.join(".cursor/hooks.json");
     if !path.exists() {
         return Ok(());
@@ -81,12 +82,12 @@ fn patch_cursor_hooks(ws: &Path) -> Result<()> {
     let mut root: serde_json::Value = match serde_json::from_str(&raw) {
         Ok(v) => v,
         Err(e) => {
-            println!("  error  .cursor/hooks.json: {e}");
+            writeln!(out, "  error  .cursor/hooks.json: {e}").unwrap();
             anyhow::bail!("malformed .cursor/hooks.json: {e}");
         }
     };
     if cursor_hooks_done(&root) {
-        println!("  skipped  .cursor/hooks.json");
+        writeln!(out, "  skipped  .cursor/hooks.json").unwrap();
         return Ok(());
     }
     let bak = backup_path(ws, "cursor_hooks");
@@ -113,7 +114,7 @@ fn patch_cursor_hooks(ws: &Path) -> Result<()> {
         }
     }
     std::fs::write(&path, serde_json::to_string_pretty(&root)?)?;
-    println!("  patched  .cursor/hooks.json  (+session/tool hooks)");
+    writeln!(out, "  patched  .cursor/hooks.json  (+session/tool hooks)").unwrap();
     Ok(())
 }
 
@@ -131,7 +132,7 @@ fn entry_has_kaizen_cmd(entry: &serde_json::Value) -> bool {
         })
 }
 
-fn patch_claude_settings(ws: &Path) -> Result<()> {
+fn patch_claude_settings(out: &mut String, ws: &Path) -> Result<()> {
     let path = ws.join(".claude/settings.json");
     if !path.exists() {
         return Ok(());
@@ -140,7 +141,7 @@ fn patch_claude_settings(ws: &Path) -> Result<()> {
     let mut obj: serde_json::Map<String, serde_json::Value> = match serde_json::from_str(&raw) {
         Ok(v) => v,
         Err(e) => {
-            println!("  error  .claude/settings.json: {e}");
+            writeln!(out, "  error  .claude/settings.json: {e}").unwrap();
             anyhow::bail!("malformed .claude/settings.json: {e}");
         }
     };
@@ -177,42 +178,58 @@ fn patch_claude_settings(ws: &Path) -> Result<()> {
         }
     }
     if !changed {
-        println!("  skipped  .claude/settings.json  (already configured)");
+        writeln!(
+            out,
+            "  skipped  .claude/settings.json  (already configured)"
+        )
+        .unwrap();
         return Ok(());
     }
     let bak = backup_path(ws, "claude_settings");
     std::fs::create_dir_all(bak.parent().unwrap())?;
     std::fs::copy(&path, &bak)?;
     std::fs::write(&path, serde_json::to_string_pretty(&obj)?)?;
-    println!("  patched  .claude/settings.json  (+session/tool hooks)");
+    writeln!(
+        out,
+        "  patched  .claude/settings.json  (+session/tool hooks)"
+    )
+    .unwrap();
     Ok(())
 }
 
-fn write_skill(ws: &Path) -> Result<()> {
+fn write_skill(out: &mut String, ws: &Path) -> Result<()> {
     let path = ws.join(".cursor/skills/kaizen-retro/SKILL.md");
     std::fs::create_dir_all(path.parent().unwrap())?;
     if path.exists() {
         let existing = std::fs::read_to_string(&path)?;
         if !existing.contains("placeholder") && !existing.trim().is_empty() {
-            println!("  skipped  .cursor/skills/kaizen-retro/SKILL.md");
+            writeln!(out, "  skipped  .cursor/skills/kaizen-retro/SKILL.md").unwrap();
             return Ok(());
         }
     }
     std::fs::write(&path, KAIZEN_RETRO_SKILL)?;
-    println!("  wrote  .cursor/skills/kaizen-retro/SKILL.md");
+    writeln!(out, "  wrote  .cursor/skills/kaizen-retro/SKILL.md").unwrap();
     Ok(())
 }
 
-/// Idempotent workspace setup.
-pub fn cmd_init(workspace: Option<&Path>) -> Result<()> {
+/// Text that `kaizen init` would print to stdout.
+pub fn init_text(workspace: Option<&std::path::Path>) -> Result<String> {
     let ws = match workspace {
         Some(p) => p.to_path_buf(),
         None => std::env::current_dir()?,
     };
-    ensure_config(&ws)?;
-    patch_cursor_hooks(&ws)?;
-    patch_claude_settings(&ws)?;
-    write_skill(&ws)?;
-    println!("\nkaizen init complete. Run: kaizen tui");
+    let mut out = String::new();
+    ensure_config(&mut out, &ws)?;
+    patch_cursor_hooks(&mut out, &ws)?;
+    patch_claude_settings(&mut out, &ws)?;
+    write_skill(&mut out, &ws)?;
+    writeln!(out).unwrap();
+    writeln!(out, "kaizen init complete. Run: kaizen tui").unwrap();
+    Ok(out)
+}
+
+/// Idempotent workspace setup.
+pub fn cmd_init(workspace: Option<&Path>) -> Result<()> {
+    print!("{}", init_text(workspace)?);
     Ok(())
 }

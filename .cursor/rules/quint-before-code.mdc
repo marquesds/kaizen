@@ -3,7 +3,7 @@ description: Quint spec in specs/ before Rust when behavior needs formal model
 alwaysApply: true
 ---
 
-# Quint Before Code (When Applicable)
+# Quint Before Code
 
 Skip for trivial edits. Formal Quint before or alongside Rust when wrong behavior likely without explicit model.
 

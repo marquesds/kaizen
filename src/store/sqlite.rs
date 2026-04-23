@@ -178,6 +178,7 @@ pub struct ToolSpanSyncRow {
     pub span_id: String,
     pub session_id: String,
     pub tool: Option<String>,
+    pub tool_call_id: Option<String>,
     pub status: String,
     pub started_at_ms: Option<u64>,
     pub ended_at_ms: Option<u64>,
@@ -1069,24 +1070,25 @@ impl Store {
 
     pub fn tool_spans_for_session(&self, session_id: &str) -> Result<Vec<ToolSpanSyncRow>> {
         let mut stmt = self.conn.prepare(
-            "SELECT span_id, session_id, tool, status, started_at_ms, ended_at_ms, lead_time_ms,
+            "SELECT span_id, session_id, tool, tool_call_id, status, started_at_ms, ended_at_ms, lead_time_ms,
                     tokens_in, tokens_out, reasoning_tokens, cost_usd_e6, paths_json
              FROM tool_spans WHERE session_id = ?1 ORDER BY started_at_ms ASC, span_id ASC",
         )?;
         let rows = stmt.query_map(params![session_id], |row| {
-            let paths_json: String = row.get(11)?;
+            let paths_json: String = row.get(12)?;
             Ok(ToolSpanSyncRow {
                 span_id: row.get(0)?,
                 session_id: row.get(1)?,
                 tool: row.get(2)?,
-                status: row.get(3)?,
-                started_at_ms: row.get::<_, Option<i64>>(4)?.map(|v| v as u64),
-                ended_at_ms: row.get::<_, Option<i64>>(5)?.map(|v| v as u64),
-                lead_time_ms: row.get::<_, Option<i64>>(6)?.map(|v| v as u64),
-                tokens_in: row.get::<_, Option<i64>>(7)?.map(|v| v as u32),
-                tokens_out: row.get::<_, Option<i64>>(8)?.map(|v| v as u32),
-                reasoning_tokens: row.get::<_, Option<i64>>(9)?.map(|v| v as u32),
-                cost_usd_e6: row.get(10)?,
+                tool_call_id: row.get(3)?,
+                status: row.get(4)?,
+                started_at_ms: row.get::<_, Option<i64>>(5)?.map(|v| v as u64),
+                ended_at_ms: row.get::<_, Option<i64>>(6)?.map(|v| v as u64),
+                lead_time_ms: row.get::<_, Option<i64>>(7)?.map(|v| v as u64),
+                tokens_in: row.get::<_, Option<i64>>(8)?.map(|v| v as u32),
+                tokens_out: row.get::<_, Option<i64>>(9)?.map(|v| v as u32),
+                reasoning_tokens: row.get::<_, Option<i64>>(10)?.map(|v| v as u32),
+                cost_usd_e6: row.get(11)?,
                 paths: serde_json::from_str(&paths_json).unwrap_or_default(),
             })
         })?;

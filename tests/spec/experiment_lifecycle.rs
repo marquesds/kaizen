@@ -51,6 +51,8 @@ impl Driver for ExpDriver {
             init => {
                 self.state = ExpLifecycle::Draft;
             },
+            // See `specs/session-lifecycle` driver: outer `any{}` can emit a `step` before the
+            // concrete action; keep the same baseline as that pattern.
             step => {
                 self.state = ExpLifecycle::Draft;
             },
@@ -73,7 +75,8 @@ impl Driver for ExpDriver {
 #[quint_run(
     spec = "specs/experiment-lifecycle.qnt",
     max_samples = 20,
-    max_steps = 6
+    max_steps = 6,
+    seed = "0x1"
 )]
 fn experiment_lifecycle_run() -> impl Driver {
     ExpDriver::default()

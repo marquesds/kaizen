@@ -26,7 +26,8 @@ kaizen/
 │   ├── metrics/         # repo indexing + smart metric report
 │   ├── sync/            # event/span/snapshot sync
 │   └── retro/           # heuristic report engine
-├── tests/               # integration tests
+├── tests/               # integration tests (+ `quint-connect` under `tests/spec/`)
+├── specs/               # Quint specs (`quint` CLI — version in CONTRIBUTING.md)
 ├── docs/                # architecture + design docs
 ├── Cargo.toml           # dependencies, metadata
 └── .cursor/             # agent config (rules, skills, hooks)

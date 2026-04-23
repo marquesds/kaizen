@@ -81,6 +81,32 @@ path = "tests/spec/experiment_lifecycle.rs"
 name = "retention"
 path = "tests/spec/retention.rs"
 
+[[test]]
+name = "mcp_parity"
+path = "tests/mcp_parity.rs"
+
+[[test]]
+name = "mcp_server"
+path = "tests/spec/mcp_server.rs"
+
+[[test]]
+name = "telemetry_exporters"
+path = "tests/spec/telemetry_exporters.rs"
+
+[features]
+default = []
+# Optional fan-out targets (lean default build)
+telemetry-dev = []
+telemetry-posthog = []
+telemetry-datadog = []
+telemetry-otlp = []
+telemetry-all = [
+    "telemetry-dev",
+    "telemetry-posthog",
+    "telemetry-datadog",
+    "telemetry-otlp",
+]
+
 [dependencies]
 serde_json = "1"
 serde = { version = "1", features = ["derive"] }

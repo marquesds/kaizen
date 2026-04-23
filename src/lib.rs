@@ -2,10 +2,12 @@
 pub mod collect;
 pub mod core;
 pub mod experiment;
+pub mod mcp;
 pub mod metrics;
 pub mod report;
 pub mod retro;
 pub mod shell;
 pub mod store;
 pub mod sync;
+pub mod telemetry;
 pub mod ui;

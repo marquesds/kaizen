@@ -4,12 +4,14 @@
 pub mod client;
 pub mod context;
 pub mod engine;
+pub mod export_batch;
 pub mod outbound;
 pub mod redact;
 pub mod smart;
 
 pub use context::SyncIngestContext;
-pub use engine::{FlushStats, flush_outbox_once};
+pub use engine::{FlushExporters, FlushStats, flush_outbox_once};
+pub use export_batch::IngestExportBatch;
 pub use outbound::{EventsBatchBody, OutboundEvent, hash_with_salt, workspace_hash};
 
 use crate::core::config::Config;
