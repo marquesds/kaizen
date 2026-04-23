@@ -16,34 +16,40 @@ env:
   RUSTFLAGS: -D warnings
 
 jobs:
-  fmt:
-    name: fmt
+  check:
+    name: linux (fmt, clippy, test, doc)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm install -g @informalsystems/quint@0.32.0
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt
-      - run: cargo fmt --all -- --check
-
-  clippy:
-    name: clippy
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy
+          components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+        with:
+          key: linux-stable
+      - run: cargo fmt --all -- --check
       - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test --all --locked -- --fail-fast
+      - name: cargo doc
+        run: cargo doc --no-deps --all-features
+        env:
+          RUSTDOCFLAGS: -D warnings
 
   test:
     name: test (${{ matrix.os }} / ${{ matrix.rust }})
+    needs: [check]
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
-        os: [ubuntu-latest, macos-latest]
-        rust: [stable, "1.85"]
+        include:
+          - os: macos-latest
+            rust: stable
+          - os: ubuntu-latest
+            rust: "1.85"
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -57,27 +63,17 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.os }}-${{ matrix.rust }}
-      - run: cargo test --all --locked
+      - run: cargo test --all --locked -- --fail-fast
 
   audit:
     name: audit + deny
+    needs: [check]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - name: Install cargo-audit + cargo-deny
-        run: cargo install --locked cargo-audit cargo-deny
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit, cargo-deny
       - run: cargo audit
-      - run: cargo deny --manifest-path Cargo.toml --config .cargo/deny.toml check
-
-  docs:
-    name: docs build
-    runs-on: ubuntu-latest
-    env:
-      RUSTDOCFLAGS: -D warnings
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo doc --no-deps --all-features
+      - run: cargo deny --manifest-path Cargo.toml check --config .cargo/deny.toml

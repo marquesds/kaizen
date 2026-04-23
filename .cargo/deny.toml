@@ -1,7 +1,7 @@
-# cargo-deny config. Run: `cargo deny check`.
+# cargo-deny config. Run: `cargo deny check -c .cargo/deny.toml` (from repo root).
 #
-# License allow-list kept tight: AGPL-3.0 for kaizen's own code, MIT /
-# Apache / BSD / Unicode for transitive deps. Additions need review.
+# License allow-list kept tight: AGPL-3.0-or-later for kaizen, MIT / Apache / BSD
+# / Unicode for transitive deps. Additions need review.
 
 [graph]
 all-features = true
@@ -9,16 +9,22 @@ all-features = true
 [advisories]
 version = 2
 yanked = "deny"
+# paste is pulled by ratatui 0.29; RUSTSEC is unmaintained/INFO. ratatui 0.30 removes it but requires Rust 1.86+.
+ignore = [
+  { id = "RUSTSEC-2024-0436", reason = "transitive via ratatui; upgrade when MSRV >= 1.86" },
+]
 
 [licenses]
 version = 2
 allow = [
+    "AGPL-3.0-or-later",
     "AGPL-3.0",
     "Apache-2.0",
     "Apache-2.0 WITH LLVM-exception",
     "BSD-2-Clause",
     "BSD-3-Clause",
     "BSL-1.0",
+    "CDLA-Permissive-2.0",
     "CC0-1.0",
     "ISC",
     "MIT",

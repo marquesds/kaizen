@@ -42,7 +42,7 @@ cargo clippy --all-targets -- -D warnings
 echo ">> cargo test"
 cargo test --all
 echo ">> cargo deny check"
-cargo deny --manifest-path Cargo.toml --config .cargo/deny.toml check
+cargo deny --manifest-path Cargo.toml check --config .cargo/deny.toml
 
 echo ">> bump version -> ${VERSION}"
 cargo set-version "${VERSION}"
