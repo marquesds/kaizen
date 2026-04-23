@@ -6,13 +6,13 @@
 
 use crate::core::config::TelemetryConfig;
 use crate::store::Store;
-use crate::telemetry::ExporterRegistry;
 use crate::sync::IngestExportBatch;
 use crate::sync::client::{PostBatchOutcome, SyncHttpClient};
 use crate::sync::outbound::{EventsBatchBody, OutboundEvent};
 use crate::sync::smart::{
     OutboundRepoSnapshotChunk, OutboundToolSpan, RepoSnapshotsBatchBody, ToolSpansBatchBody,
 };
+use crate::telemetry::ExporterRegistry;
 use anyhow::Context;
 use anyhow::Result;
 use std::path::Path;
@@ -51,9 +51,7 @@ pub fn flush_outbox_once(
             break;
         };
         let sent = match build_batch(&rows, cfg, &cfg.team_id, &workspace_hash, &kind)? {
-            Some((ids, batch)) => {
-                post_batch_resilient(&client, store, batch, &ids, flush)?
-            }
+            Some((ids, batch)) => post_batch_resilient(&client, store, batch, &ids, flush)?,
             None => break,
         };
         stats.batches += sent.batches;
@@ -167,7 +165,10 @@ fn post_with_fanout(
     body: &IngestExportBatch,
     key: &Uuid,
     flush: &FlushExporters<'_>,
-) -> Result<(Result<PostBatchOutcome, anyhow::Error>, Result<(), anyhow::Error>)> {
+) -> Result<(
+    Result<PostBatchOutcome, anyhow::Error>,
+    Result<(), anyhow::Error>,
+)> {
     let fan_body = body.clone();
     let reg = flush.registry;
     let fail_open = flush.telemetry.fail_open;
@@ -230,7 +231,7 @@ fn post_batch_resilient(
             PostBatchOutcome::Accepted { .. } | PostBatchOutcome::Conflict => {
                 if let Err(e) = fan_res {
                     return Err(
-                        e.context("telemetry fan-out (before outbox commit; fail_open = false)"),
+                        e.context("telemetry fan-out (before outbox commit; fail_open = false)")
                     );
                 }
                 store.mark_outbox_sent(ids)?;

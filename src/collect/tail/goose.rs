@@ -41,7 +41,10 @@ fn is_goose_schema(conn: &Connection) -> Result<bool> {
     Ok(n >= 2)
 }
 
-fn goose_model_from_row(model_config_json: Option<String>, provider: Option<String>) -> Option<String> {
+fn goose_model_from_row(
+    model_config_json: Option<String>,
+    provider: Option<String>,
+) -> Option<String> {
     if let Some(ref s) = model_config_json {
         if let Ok(v) = serde_json::from_str::<Value>(s) {
             if let Some(m) = v
@@ -158,7 +161,11 @@ fn sessions_select_sql(conn: &Connection) -> &'static str {
         cols.push(c);
     }
     let has = |n: &str| cols.iter().any(|c| c == n);
-    if has("model_config_json") && has("provider_name") && has("input_tokens") && has("output_tokens") {
+    if has("model_config_json")
+        && has("provider_name")
+        && has("input_tokens")
+        && has("output_tokens")
+    {
         "SELECT id, working_dir, model_config_json, provider_name, input_tokens, output_tokens FROM sessions"
     } else {
         "SELECT id, working_dir FROM sessions"
@@ -166,7 +173,10 @@ fn sessions_select_sql(conn: &Connection) -> &'static str {
 }
 
 /// Read all sessions for `workspace` from a Goose `sessions.db`.
-pub fn scan_goose_sqlite(db_path: &Path, workspace: &Path) -> Result<Vec<(SessionRecord, Vec<Event>)>> {
+pub fn scan_goose_sqlite(
+    db_path: &Path,
+    workspace: &Path,
+) -> Result<Vec<(SessionRecord, Vec<Event>)>> {
     let ws_canon = canonical(workspace);
     let conn = Connection::open(db_path).with_context(|| format!("open {}", db_path.display()))?;
     if !is_goose_schema(&conn)? {
@@ -265,7 +275,10 @@ pub fn scan_goose_sqlite(db_path: &Path, workspace: &Path) -> Result<Vec<(Sessio
 }
 
 /// Legacy flat `.jsonl` session files (pre–SQLite migration).
-pub fn scan_goose_legacy_jsonl_dir(sessions_dir: &Path, workspace: &Path) -> Result<Vec<(SessionRecord, Vec<Event>)>> {
+pub fn scan_goose_legacy_jsonl_dir(
+    sessions_dir: &Path,
+    workspace: &Path,
+) -> Result<Vec<(SessionRecord, Vec<Event>)>> {
     let ws_canon = canonical(workspace);
     let mut out = Vec::new();
     if !sessions_dir.is_dir() {
@@ -300,7 +313,11 @@ pub fn scan_goose_legacy_jsonl_dir(sessions_dir: &Path, workspace: &Path) -> Res
             let Ok(v) = serde_json::from_str::<Value>(line) else {
                 continue;
             };
-            if let Some(wd) = v.get("working_dir").or_else(|| v.get("workingDir")).and_then(|x| x.as_str()) {
+            if let Some(wd) = v
+                .get("working_dir")
+                .or_else(|| v.get("workingDir"))
+                .and_then(|x| x.as_str())
+            {
                 if paths_equal(Path::new(wd), &ws_canon) {
                     matches_ws = true;
                 }
@@ -312,8 +329,7 @@ pub fn scan_goose_legacy_jsonl_dir(sessions_dir: &Path, workspace: &Path) -> Res
                 let ts_ms = (created.max(0) as u64).saturating_mul(1000);
                 if let Some(content) = v.get("content") {
                     let s = content.to_string();
-                    if let Ok(chunk) =
-                        events_from_goose_content(&session_id, seq, ts_ms, None, &s)
+                    if let Ok(chunk) = events_from_goose_content(&session_id, seq, ts_ms, None, &s)
                     {
                         let n = chunk.len() as u64;
                         events.extend(chunk);
@@ -355,7 +371,10 @@ pub fn scan_goose_legacy_jsonl_dir(sessions_dir: &Path, workspace: &Path) -> Res
 }
 
 /// All Goose sessions for a workspace (SQLite first, then legacy jsonl in parent dir).
-pub fn scan_goose_workspace(home: &Path, workspace: &Path) -> Result<Vec<(SessionRecord, Vec<Event>)>> {
+pub fn scan_goose_workspace(
+    home: &Path,
+    workspace: &Path,
+) -> Result<Vec<(SessionRecord, Vec<Event>)>> {
     let mut all = Vec::new();
     for db in goose_session_db_paths(home) {
         if db.is_file() {

@@ -98,6 +98,27 @@ enum Command {
     },
     /// Model Context Protocol server (stdio) — see docs/mcp.md.
     Mcp,
+    /// Local HTTP forwarder for Anthropic-style APIs + proxy telemetry. See docs/llm-proxy.md.
+    Proxy {
+        #[command(subcommand)]
+        subcmd: ProxyCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum ProxyCommand {
+    /// Bind and forward until interrupted.
+    Run {
+        /// Address to listen, e.g. 127.0.0.1:3847 (overrides [proxy] in config TOML).
+        #[arg(long)]
+        listen: Option<String>,
+        /// Upstream base URL, e.g. https://api.anthropic.com (no trailing slash).
+        #[arg(long)]
+        upstream: Option<String>,
+        /// workspace root (default: cwd)
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -308,6 +329,14 @@ fn main() -> anyhow::Result<()> {
                 .build()?;
             rt.block_on(kaizen::mcp::run_stdio_server())
         }
+        Command::Proxy {
+            subcmd:
+                ProxyCommand::Run {
+                    listen,
+                    upstream,
+                    workspace,
+                },
+        } => kaizen::shell::proxy::cmd_proxy_run(workspace.as_deref(), listen, upstream),
     }
 }
 

@@ -59,10 +59,11 @@ fn workspace_json_folder_matches(json: &str, workspace: &Path) -> bool {
     let Ok(v) = serde_json::from_str::<Value>(json) else {
         return false;
     };
-    let folder = v
-        .get("folder")
-        .and_then(|f| f.as_str())
-        .or_else(|| v.get("workspace").and_then(|w| w.get("folder")).and_then(|f| f.as_str()));
+    let folder = v.get("folder").and_then(|f| f.as_str()).or_else(|| {
+        v.get("workspace")
+            .and_then(|w| w.get("folder"))
+            .and_then(|f| f.as_str())
+    });
     let Some(f) = folder else {
         return false;
     };
@@ -269,10 +270,15 @@ fn events_from_messages_array(session_id: &str, messages: &[Value]) -> Vec<Event
 }
 
 /// Parse one OpenCode session JSON file.
-pub fn parse_opencode_session_file(path: &Path, workspace: &Path) -> Result<Option<(SessionRecord, Vec<Event>)>> {
+pub fn parse_opencode_session_file(
+    path: &Path,
+    workspace: &Path,
+) -> Result<Option<(SessionRecord, Vec<Event>)>> {
     let text = std::fs::read_to_string(path)?;
     let v: Value = serde_json::from_str(&text)?;
-    if !session_json_directory_field(&v, workspace) && !session_root_matches_workspace(path, workspace) {
+    if !session_json_directory_field(&v, workspace)
+        && !session_root_matches_workspace(path, workspace)
+    {
         return Ok(None);
     }
     let session_id = v
@@ -280,7 +286,11 @@ pub fn parse_opencode_session_file(path: &Path, workspace: &Path) -> Result<Opti
         .or_else(|| v.get("sessionId"))
         .and_then(|x| x.as_str())
         .map(ToOwned::to_owned)
-        .or_else(|| path.file_stem().and_then(|s| s.to_str()).map(ToOwned::to_owned))
+        .or_else(|| {
+            path.file_stem()
+                .and_then(|s| s.to_str())
+                .map(ToOwned::to_owned)
+        })
         .unwrap_or_else(|| "opencode-session".to_string());
 
     let messages = v

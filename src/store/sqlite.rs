@@ -268,6 +268,16 @@ impl Store {
         Ok(())
     }
 
+    /// Next `seq` for a new event in this session (0 when there are no events yet).
+    pub fn next_event_seq(&self, session_id: &str) -> Result<u64> {
+        let n: i64 = self.conn.query_row(
+            "SELECT COALESCE(MAX(seq) + 1, 0) FROM events WHERE session_id = ?1",
+            [session_id],
+            |r| r.get(0),
+        )?;
+        Ok(n as u64)
+    }
+
     pub fn append_event(&self, e: &Event) -> Result<()> {
         self.append_event_with_sync(e, None)
     }

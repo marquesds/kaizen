@@ -93,6 +93,14 @@ path = "tests/spec/mcp_server.rs"
 name = "telemetry_exporters"
 path = "tests/spec/telemetry_exporters.rs"
 
+[[test]]
+name = "llm_proxy"
+path = "tests/spec/llm_proxy.rs"
+
+[[test]]
+name = "auto_update"
+path = "tests/spec/auto_update.rs"
+
 [features]
 default = []
 # Optional fan-out targets (lean default build)
@@ -139,10 +147,12 @@ tree-sitter-python = "0.25"
 tree-sitter-go = "0.25"
 tree-sitter-java = "0.23"
 rmcp = { version = "1", features = ["server", "transport-io", "schemars", "macros"] }
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio", "matched-path"] }
+tower = { version = "0.5", features = ["util"] }
+tower-http = { version = "0.6", features = ["limit", "set-header"] }
 
 [dev-dependencies]
 quint-connect = "0.1"
 itf = "0.4"
-axum = "0.8"
-tower = { version = "0.5", features = ["util"] }
 tempfile = "3"
+tower = { version = "0.5", features = ["util"] }

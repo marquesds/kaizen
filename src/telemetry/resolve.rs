@@ -47,7 +47,10 @@ impl PostHogResolved {
             .map(String::from)
             .or_else(|| env_two("POSTHOG_HOST", "KAIZEN_POSTHOG_HOST"))
             .unwrap_or_else(|| "https://us.i.posthog.com".to_string());
-        Some(Self { host, project_api_key })
+        Some(Self {
+            host,
+            project_api_key,
+        })
     }
 }
 
@@ -74,11 +77,12 @@ impl OtlpResolved {
             ExporterConfig::Otlp { endpoint, .. } => endpoint.as_deref(),
             _ => return None,
         };
-        let endpoint = ep
-            .map(String::from)
-            .or_else(|| {
-                env_two("OTEL_EXPORTER_OTLP_ENDPOINT", "KAIZEN_OTEL_EXPORTER_OTLP_ENDPOINT")
-            })?;
+        let endpoint = ep.map(String::from).or_else(|| {
+            env_two(
+                "OTEL_EXPORTER_OTLP_ENDPOINT",
+                "KAIZEN_OTEL_EXPORTER_OTLP_ENDPOINT",
+            )
+        })?;
         Some(Self { endpoint })
     }
 }

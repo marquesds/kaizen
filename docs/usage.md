@@ -52,6 +52,17 @@ kaizen retro --force            # overwrite this week's report
 Heuristics: see [retro.md](retro.md). Tuning: see
 [retro-tuning.md](retro-tuning.md).
 
+## `kaizen proxy run`
+
+Local HTTP forwarder for Anthropic-style APIs. Records [`EventSource::Proxy` events](concepts.md)
+in `.kaizen/kaizen.db` and honors `[proxy]` in config (see [config](config.md), [llm-proxy](llm-proxy.md)).
+
+```bash
+kaizen proxy run
+kaizen proxy run --listen 127.0.0.1:9000
+kaizen proxy run --upstream https://api.anthropic.com
+```
+
 ## `kaizen ingest hook`
 
 Reads a hook event from stdin and appends to the store. Wired by

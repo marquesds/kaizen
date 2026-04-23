@@ -4,6 +4,7 @@ pub mod core;
 pub mod experiment;
 pub mod mcp;
 pub mod metrics;
+pub mod proxy;
 pub mod report;
 pub mod retro;
 pub mod shell;

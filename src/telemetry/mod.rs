@@ -5,14 +5,14 @@
 
 mod resolve;
 
-#[cfg(feature = "telemetry-dev")]
-mod dev;
-#[cfg(feature = "telemetry-posthog")]
-mod posthog;
 #[cfg(feature = "telemetry-datadog")]
 mod datadog;
+#[cfg(feature = "telemetry-dev")]
+mod dev;
 #[cfg(feature = "telemetry-otlp")]
 mod otlp;
+#[cfg(feature = "telemetry-posthog")]
+mod posthog;
 
 use crate::core::config::{ExporterConfig, TelemetryConfig};
 use crate::sync::IngestExportBatch;
@@ -105,7 +105,9 @@ fn build_exporter(c: &ExporterConfig) -> Option<Arc<dyn TelemetryExporter>> {
             #[cfg(not(feature = "telemetry-posthog"))]
             {
                 let _ = &r;
-                tracing::warn!("PostHog configured but the `telemetry-posthog` feature is not enabled");
+                tracing::warn!(
+                    "PostHog configured but the `telemetry-posthog` feature is not enabled"
+                );
                 None
             }
         }
@@ -118,7 +120,9 @@ fn build_exporter(c: &ExporterConfig) -> Option<Arc<dyn TelemetryExporter>> {
             #[cfg(not(feature = "telemetry-datadog"))]
             {
                 let _ = &r;
-                tracing::warn!("Datadog configured but the `telemetry-datadog` feature is not enabled");
+                tracing::warn!(
+                    "Datadog configured but the `telemetry-datadog` feature is not enabled"
+                );
                 None
             }
         }

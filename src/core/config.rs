@@ -152,6 +152,75 @@ fn default_telemetry_fail_open() -> bool {
     true
 }
 
+/// How to reduce billed input to the model (opt-in; default leaves requests unchanged).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ContextPolicy {
+    /// No transformation beyond optional JSON minify (same tokens as a direct call).
+    #[default]
+    None,
+    /// Keep the last `count` `messages` array entries; system blocks unchanged when present.
+    LastMessages { count: usize },
+    /// Drop oldest messages until a rough `chars/4` estimate stays at or below `max`.
+    MaxInputTokens { max: u32 },
+}
+
+/// Anthropic API-compatible HTTP proxy: forward + local telemetry. See `docs/llm-proxy.md`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProxyConfig {
+    /// e.g. `127.0.0.1:3847` (bind address for `kaizen proxy run`).
+    #[serde(default = "default_proxy_listen")]
+    pub listen: String,
+    /// Base URL, no trailing slash, e.g. `https://api.anthropic.com`.
+    #[serde(default = "default_proxy_upstream")]
+    pub upstream: String,
+    /// Prefer `Accept-Encoding: gzip` to upstream (response bodies may be gzip).
+    #[serde(default = "default_true")]
+    pub compress_transport: bool,
+    /// Re-encode JSON bodies to compact `serde_json` (no key reorder; whitespace only).
+    #[serde(default = "default_true")]
+    pub minify_json: bool,
+    /// Slurp cap for a single upstream response (streaming not yet teed; see doc).
+    #[serde(default = "default_proxy_max_body_mb")]
+    pub max_response_body_mb: u32,
+    /// Reject / fail incoming client bodies above this (POST bodies before forward).
+    #[serde(default = "default_proxy_max_request_body_mb")]
+    pub max_request_body_mb: u32,
+    /// Optional token-aware truncation of `messages` in JSON bodies.
+    #[serde(default)]
+    pub context_policy: ContextPolicy,
+}
+
+fn default_proxy_listen() -> String {
+    "127.0.0.1:3847".to_string()
+}
+
+fn default_proxy_upstream() -> String {
+    "https://api.anthropic.com".to_string()
+}
+
+fn default_proxy_max_body_mb() -> u32 {
+    256
+}
+
+fn default_proxy_max_request_body_mb() -> u32 {
+    32
+}
+
+impl Default for ProxyConfig {
+    fn default() -> Self {
+        Self {
+            listen: default_proxy_listen(),
+            upstream: default_proxy_upstream(),
+            compress_transport: true,
+            minify_json: true,
+            max_response_body_mb: default_proxy_max_body_mb(),
+            max_request_body_mb: default_proxy_max_request_body_mb(),
+            context_policy: ContextPolicy::default(),
+        }
+    }
+}
+
 /// Optional third-party telemetry sinks; same redacted batches as Kaizen sync.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TelemetryConfig {
@@ -232,6 +301,8 @@ pub struct Config {
     pub sync: SyncConfig,
     #[serde(default)]
     pub telemetry: TelemetryConfig,
+    #[serde(default)]
+    pub proxy: ProxyConfig,
 }
 
 /// Load config: workspace `.kaizen/config.toml` then `~/.kaizen/config.toml`.
@@ -267,6 +338,48 @@ fn merge(base: Config, user: Config) -> Config {
         retention: user.retention,
         sync: merge_sync(base.sync, user.sync),
         telemetry: merge_telemetry(base.telemetry, user.telemetry),
+        proxy: merge_proxy(base.proxy, user.proxy),
+    }
+}
+
+fn merge_proxy(base: ProxyConfig, user: ProxyConfig) -> ProxyConfig {
+    let def = ProxyConfig::default();
+    ProxyConfig {
+        listen: if user.listen != def.listen {
+            user.listen
+        } else {
+            base.listen
+        },
+        upstream: if user.upstream != def.upstream {
+            user.upstream
+        } else {
+            base.upstream
+        },
+        compress_transport: if user.compress_transport != def.compress_transport {
+            user.compress_transport
+        } else {
+            base.compress_transport
+        },
+        minify_json: if user.minify_json != def.minify_json {
+            user.minify_json
+        } else {
+            base.minify_json
+        },
+        max_response_body_mb: if user.max_response_body_mb != def.max_response_body_mb {
+            user.max_response_body_mb
+        } else {
+            base.max_response_body_mb
+        },
+        max_request_body_mb: if user.max_request_body_mb != def.max_request_body_mb {
+            user.max_request_body_mb
+        } else {
+            base.max_request_body_mb
+        },
+        context_policy: if user.context_policy != def.context_policy {
+            user.context_policy
+        } else {
+            base.context_policy
+        },
     }
 }
 
