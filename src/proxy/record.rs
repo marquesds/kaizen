@@ -2,13 +2,46 @@
 //! SQLite: ensure proxy session, append one `Cost` or `Error` per completed forward.
 
 use crate::core::config::Config;
+use crate::core::cost::CostTable;
 use crate::core::event::{Event, EventKind, EventSource, SessionRecord, SessionStatus};
 use crate::store::Store;
 use crate::sync::ingest_ctx;
 use anyhow::Context;
 use serde_json::json;
 use std::path::Path;
+use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+static COST_TABLE: OnceLock<CostTable> = OnceLock::new();
+
+fn bundled_cost_table() -> &'static CostTable {
+    COST_TABLE.get_or_init(|| CostTable::load().expect("bundled assets/cost.toml"))
+}
+
+/// Per ADR 002: estimate from price table. Skip heuristic for failed forwards with no usage
+/// (avoids attributing fake spend to transport errors).
+///
+/// Successful responses with no `usage` in the body use the bundled `cursor` row heuristic,
+/// same as when the model id is unknown — avoids `cost_usd_e6 = 0` for priced models with
+/// zero tokens.
+fn proxy_event_cost_usd_e6(a: &RecordArgs) -> Option<i64> {
+    let saw_usage = a.tokens_in.is_some() || a.tokens_out.is_some() || a.reasoning_tokens.is_some();
+    if a.upstream_error.is_some() && !saw_usage {
+        return None;
+    }
+    let tin = a.tokens_in.unwrap_or(0);
+    let tout = a
+        .tokens_out
+        .unwrap_or(0)
+        .saturating_add(a.reasoning_tokens.unwrap_or(0));
+    let table = bundled_cost_table();
+    let cost = if a.upstream_error.is_none() && !saw_usage {
+        table.estimate(None, 0, 0)
+    } else {
+        table.estimate(a.model.as_deref(), tin, tout)
+    };
+    Some(cost)
+}
 
 /// Append telemetry for one upstream round-trip. Pure sync — call from `spawn_blocking`.
 pub fn record_forward_outcome(
@@ -74,7 +107,7 @@ pub fn record_forward_outcome(
         tokens_in: a.tokens_in,
         tokens_out: a.tokens_out,
         reasoning_tokens: a.reasoning_tokens,
-        cost_usd_e6: None,
+        cost_usd_e6: proxy_event_cost_usd_e6(a),
         payload,
     };
     store.append_event_with_sync(&e, sync_c.as_ref())?;
@@ -106,8 +139,53 @@ fn now_ms() -> Result<u64, anyhow::Error> {
 mod tests {
     use super::*;
 
+    fn sample_args() -> RecordArgs {
+        RecordArgs {
+            session_id: "s".into(),
+            model: Some("claude-sonnet-4".into()),
+            path: "/v1/messages".into(),
+            method: "POST".into(),
+            status: 200,
+            request_id: None,
+            tokens_in: None,
+            tokens_out: None,
+            reasoning_tokens: None,
+            upstream_error: None,
+        }
+    }
+
     #[test]
     fn time_ok() {
         assert!(now_ms().unwrap() > 1_000_000_000);
+    }
+
+    #[test]
+    fn proxy_cost_matches_table_when_tokens_present() {
+        let mut a = sample_args();
+        a.tokens_in = Some(1000);
+        a.tokens_out = Some(500);
+        assert_eq!(proxy_event_cost_usd_e6(&a), Some(10_500));
+    }
+
+    #[test]
+    fn proxy_cost_heuristic_when_success_but_no_usage() {
+        let a = sample_args();
+        assert!(proxy_event_cost_usd_e6(&a).is_some_and(|c| c > 0));
+    }
+
+    #[test]
+    fn proxy_cost_none_on_error_without_usage() {
+        let mut a = sample_args();
+        a.upstream_error = Some("timeout".into());
+        assert_eq!(proxy_event_cost_usd_e6(&a), None);
+    }
+
+    #[test]
+    fn proxy_cost_on_error_when_usage_present() {
+        let mut a = sample_args();
+        a.upstream_error = Some("upstream 429".into());
+        a.tokens_in = Some(100);
+        a.tokens_out = Some(50);
+        assert!(proxy_event_cost_usd_e6(&a).is_some_and(|c| c > 0));
     }
 }
