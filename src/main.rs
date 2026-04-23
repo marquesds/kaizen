@@ -335,10 +335,11 @@ fn ingest_hook(source: Source, workspace: Option<PathBuf>) -> anyhow::Result<()>
     let ev = kaizen::collect::hooks::normalize::hook_to_event(&event, 0);
     if let Some(status) = kaizen::collect::hooks::normalize::hook_to_status(&event.kind) {
         if matches!(event.kind, kaizen::collect::hooks::EventKind::SessionStart) {
+            let model = kaizen::collect::model_from_json::from_value(&event.payload);
             let record = kaizen::core::event::SessionRecord {
                 id: event.session_id.clone(),
                 agent: "unknown".to_string(),
-                model: None,
+                model,
                 workspace: ws.to_string_lossy().to_string(),
                 started_at_ms: event.ts_ms,
                 ended_at_ms: None,

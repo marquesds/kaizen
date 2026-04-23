@@ -1,1 +1,1 @@
-{"role":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_02","name":"shell","input":{"command":"cargo test"}}]},"tokens":{"inputTokens":1200,"outputTokens":800}}
+{"role":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_02","name":"shell","input":{"command":"cargo test"}}]},"model":"claude-3-5-sonnet-fixture","tokens":{"inputTokens":1200,"outputTokens":800}}

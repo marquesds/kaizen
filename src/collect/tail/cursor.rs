@@ -2,6 +2,7 @@
 //! Parse Cursor agent-transcript `.jsonl` files into Events.
 //! Pure parser — no notify dependency, no IO beyond file reads.
 
+use crate::collect::model_from_json;
 use crate::core::event::{Event, EventKind, EventSource, SessionRecord, SessionStatus};
 use anyhow::{Context, Result};
 use serde_json::Value;
@@ -121,7 +122,8 @@ fn file_mtime_ms(path: &Path) -> u64 {
 }
 
 /// Read every `*.jsonl` directly under `dir` (sorted by name) and parse into events.
-fn scan_jsonl_in_dir(dir: &Path, session_id: &str) -> Result<Vec<Event>> {
+/// First `model` (or supported nested field) found in any line is returned for the session.
+fn scan_jsonl_in_dir(dir: &Path, session_id: &str) -> Result<(Vec<Event>, Option<String>)> {
     let mut entries: Vec<_> = std::fs::read_dir(dir)
         .with_context(|| format!("read dir: {}", dir.display()))?
         .filter_map(|e| e.ok())
@@ -131,11 +133,15 @@ fn scan_jsonl_in_dir(dir: &Path, session_id: &str) -> Result<Vec<Event>> {
 
     let mut events = Vec::new();
     let mut seq: u64 = 0;
+    let mut model: Option<String> = None;
     for entry in entries {
         let content = std::fs::read_to_string(entry.path())?;
         for line in content.lines() {
             if line.trim().is_empty() {
                 continue;
+            }
+            if model.is_none() {
+                model = model_from_json::from_line(line);
             }
             if let Some(ev) = parse_cursor_line(session_id, seq, 0, line)? {
                 events.push(ev);
@@ -145,18 +151,22 @@ fn scan_jsonl_in_dir(dir: &Path, session_id: &str) -> Result<Vec<Event>> {
             }
         }
     }
-    Ok(events)
+    Ok((events, model))
 }
 
 /// Parse a single transcript `.jsonl` file into events.
-fn scan_jsonl_file(path: &Path, session_id: &str) -> Result<Vec<Event>> {
+fn scan_jsonl_file(path: &Path, session_id: &str) -> Result<(Vec<Event>, Option<String>)> {
     let content =
         std::fs::read_to_string(path).with_context(|| format!("read file: {}", path.display()))?;
     let mut events = Vec::new();
     let mut seq: u64 = 0;
+    let mut model: Option<String> = None;
     for line in content.lines() {
         if line.trim().is_empty() {
             continue;
+        }
+        if model.is_none() {
+            model = model_from_json::from_line(line);
         }
         if let Some(ev) = parse_cursor_line(session_id, seq, 0, line)? {
             events.push(ev);
@@ -165,7 +175,7 @@ fn scan_jsonl_file(path: &Path, session_id: &str) -> Result<Vec<Event>> {
             seq += 1;
         }
     }
-    Ok(events)
+    Ok((events, model))
 }
 
 fn cursor_workspace_for_session_dir(dir: &Path) -> String {
@@ -185,10 +195,12 @@ pub fn scan_session_dir_all(dir: &Path) -> Result<Vec<(SessionRecord, Vec<Event>
 
     let workspace = cursor_workspace_for_session_dir(dir);
 
+    let (main_events, main_model) = scan_jsonl_in_dir(dir, &session_id)?;
+
     let main_record = SessionRecord {
         id: session_id.clone(),
         agent: "cursor".to_string(),
-        model: None,
+        model: main_model,
         workspace: workspace.clone(),
         started_at_ms: crate::collect::tail::dir_mtime_ms(dir),
         ended_at_ms: None,
@@ -201,7 +213,6 @@ pub fn scan_session_dir_all(dir: &Path) -> Result<Vec<(SessionRecord, Vec<Event>
         dirty_end: None,
         repo_binding_source: None,
     };
-    let main_events = scan_jsonl_in_dir(dir, &session_id)?;
 
     let mut out = vec![(main_record, main_events)];
 
@@ -224,10 +235,11 @@ pub fn scan_session_dir_all(dir: &Path) -> Result<Vec<(SessionRecord, Vec<Event>
             if sub_id.is_empty() {
                 continue;
             }
+            let (events, sub_model) = scan_jsonl_file(&path, &sub_id)?;
             let record = SessionRecord {
                 id: sub_id.clone(),
                 agent: "cursor".to_string(),
-                model: None,
+                model: sub_model,
                 workspace: workspace.clone(),
                 started_at_ms: file_mtime_ms(&path),
                 ended_at_ms: None,
@@ -240,7 +252,6 @@ pub fn scan_session_dir_all(dir: &Path) -> Result<Vec<(SessionRecord, Vec<Event>
                 dirty_end: None,
                 repo_binding_source: None,
             };
-            let events = scan_jsonl_file(&path, &sub_id)?;
             out.push((record, events));
         }
     }
@@ -262,10 +273,11 @@ pub fn scan_session_dir(dir: &Path) -> Result<(SessionRecord, Vec<Event>)> {
         .unwrap_or("")
         .to_string();
     let workspace = cursor_workspace_for_session_dir(dir);
+    let (events, model) = scan_jsonl_in_dir(dir, &session_id)?;
     let record = SessionRecord {
         id: session_id.clone(),
         agent: "cursor".to_string(),
-        model: None,
+        model,
         workspace,
         started_at_ms: crate::collect::tail::dir_mtime_ms(dir),
         ended_at_ms: None,
@@ -278,7 +290,6 @@ pub fn scan_session_dir(dir: &Path) -> Result<(SessionRecord, Vec<Event>)> {
         dirty_end: None,
         repo_binding_source: None,
     };
-    let events = scan_jsonl_in_dir(dir, &session_id)?;
     Ok((record, events))
 }
 
@@ -332,6 +343,7 @@ mod tests {
             std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/cursor");
         let (record, events) = scan_session_dir(&fixture_dir).unwrap();
         assert_eq!(record.agent, "cursor");
+        assert_eq!(record.model.as_deref(), Some("Test Fixture Model"));
         assert_eq!(record.status, SessionStatus::Done);
         assert!(!events.is_empty(), "expected events from fixture files");
         assert!(events.iter().any(|e| e.kind == EventKind::ToolCall));
