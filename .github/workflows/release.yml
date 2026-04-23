@@ -109,7 +109,7 @@ jobs:
           if [ ! -s RELEASE_NOTES.md ]; then
             echo "See [CHANGELOG.md](CHANGELOG.md)." > RELEASE_NOTES.md
           fi
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ needs.verify.outputs.version }}
           name: v${{ needs.verify.outputs.version }}
