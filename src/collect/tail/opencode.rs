@@ -352,6 +352,10 @@ pub fn scan_opencode_workspace(workspace: &Path) -> Result<Vec<(SessionRecord, V
     let project = root.join("project");
     let storage = root.join("storage");
     let mut files = Vec::new();
+    let local_opencode = workspace.join(".opencode");
+    if local_opencode.is_dir() {
+        walk_json_files(&local_opencode, &mut files, 0);
+    }
     if project.is_dir() {
         walk_json_files(&project, &mut files, 0);
     }
