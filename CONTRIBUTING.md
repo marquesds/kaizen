@@ -35,7 +35,7 @@ Every PR must pass:
 cargo fmt --all -- --check
 cargo clippy --all-targets -- -D warnings
 cargo test --all
-cargo deny --manifest-path Cargo.toml --config .cargo/deny.toml check
+cargo deny --manifest-path Cargo.toml check --config .cargo/deny.toml
 ```
 
 CI enforces all of the above on push and PR. See
