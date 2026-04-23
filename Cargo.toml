@@ -87,7 +87,7 @@ serde = { version = "1", features = ["derive"] }
 clap = { version = "4", features = ["derive"] }
 anyhow = "1"
 rusqlite = { version = "0.32", features = ["bundled"] }
-rand = { version = "0.8", features = ["small_rng"] }
+rand = { version = "0.9", features = ["small_rng"] }
 tokio = { version = "1", features = ["full"] }
 notify = "6"
 tracing = "0.1"
