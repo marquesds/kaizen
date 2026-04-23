@@ -3,8 +3,8 @@
 
 use crate::core::repo::{binding_for_session, dirty_fingerprint, repo_head, tracked_files};
 use crate::metrics::analyze::analyzer_for;
-use crate::metrics::git::load_history;
 use crate::metrics::codegraph::{rebuild_sidecar, symbol_id};
+use crate::metrics::git::load_history;
 use crate::metrics::types::{FileFact, RepoAnalysis, RepoEdge, RepoSnapshotRecord, SymbolFact};
 use crate::store::Store;
 use anyhow::Result;
