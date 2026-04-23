@@ -1,10 +1,20 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+use clap::CommandFactory;
 use clap::{Parser, Subcommand, ValueEnum};
 use std::io::Read;
+use std::io::Write;
 use std::path::PathBuf;
 
+const LONG_ABOUT: &str = "Local-first telemetry for AI coding agents. Collect, query, and improve how agents use your repo — offline by default. Docs: https://github.com/lucasmarqs/kaizen/blob/main/docs/README.md";
+
 #[derive(Parser)]
-#[command(name = "kaizen", about = "Agent session tracker")]
+#[command(
+    name = "kaizen",
+    about = "AI agent session telemetry and insights",
+    long_about = LONG_ABOUT,
+    version,
+    propagate_version = true
+)]
 struct Cli {
     #[command(subcommand)]
     cmd: Command,
@@ -13,40 +23,57 @@ struct Cli {
 #[derive(Subcommand)]
 enum Command {
     /// Ingest events from hooks or other sources.
+    #[command(next_help_heading = "Operate")]
     Ingest {
         #[command(subcommand)]
         subcmd: IngestCommand,
     },
     /// Session list/show commands.
+    #[command(next_help_heading = "Trust & observe")]
     Sessions {
         #[command(subcommand)]
         subcmd: SessionsCommand,
     },
     /// Aggregate session + cost stats across all agents.
+    #[command(next_help_heading = "Trust & observe")]
     Summary {
         /// workspace root (default: cwd)
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// Emit JSON (same fields as the MCP `kaizen_summary` tool with json=true).
+        #[arg(long)]
+        json: bool,
     },
     /// Open interactive TUI.
+    #[command(next_help_heading = "Trust & observe")]
     Tui {
         /// workspace root (default: cwd)
         #[arg(long)]
         workspace: Option<PathBuf>,
     },
     /// Idempotent workspace setup (writes config, patches hooks, installs skill).
+    #[command(next_help_heading = "Trust & observe")]
     Init {
         /// workspace root (default: cwd)
         #[arg(long)]
         workspace: Option<PathBuf>,
     },
+    /// Verify config, store, and hook wiring for this workspace.
+    #[command(next_help_heading = "Trust & observe")]
+    Doctor {
+        /// workspace root (default: cwd)
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+    },
     /// Rich session insights: activity by day, top tools, recent sessions.
+    #[command(next_help_heading = "Trust & observe")]
     Insights {
         /// workspace root (default: cwd)
         #[arg(long)]
         workspace: Option<PathBuf>,
     },
     /// Smart metrics: code hotspots, slow tools, token sinks.
+    #[command(next_help_heading = "Trust & observe")]
     Metrics {
         #[command(subcommand)]
         subcmd: Option<MetricsCommand>,
@@ -64,21 +91,25 @@ enum Command {
         workspace: Option<PathBuf>,
     },
     /// Flush local outbox to the configured ingest endpoint.
+    #[command(next_help_heading = "Operate")]
     Sync {
         #[command(subcommand)]
         subcmd: SyncCommand,
     },
     /// Optional third-party telemetry sinks (PostHog, Datadog, OTLP, dev) alongside Kaizen sync.
+    #[command(next_help_heading = "Operate")]
     Telemetry {
         #[command(subcommand)]
         subcmd: TelemetrySubcommand,
     },
     /// Experiment binding + report.
+    #[command(next_help_heading = "Improve")]
     Exp {
         #[command(subcommand)]
         subcmd: ExpCommand,
     },
     /// Weekly-style heuristic retro report.
+    #[command(next_help_heading = "Improve")]
     Retro {
         /// Trailing window in days (default 7).
         #[arg(long, default_value_t = 7)]
@@ -97,12 +128,30 @@ enum Command {
         workspace: Option<PathBuf>,
     },
     /// Model Context Protocol server (stdio) — see docs/mcp.md.
+    #[command(next_help_heading = "Integrations")]
     Mcp,
+    /// Print shell completion script to stdout; redirect or eval to install.
+    #[command(next_help_heading = "Shell")]
+    Completions {
+        #[arg(value_enum)]
+        shell: CompletionShell,
+    },
     /// Local HTTP forwarder for Anthropic-style APIs + proxy telemetry. See docs/llm-proxy.md.
+    #[command(next_help_heading = "Operate")]
     Proxy {
         #[command(subcommand)]
         subcmd: ProxyCommand,
     },
+}
+
+/// Shells supported by clap_complete (redirect stdout to a file, or eval).
+#[derive(Copy, Clone, Debug, ValueEnum, Eq, PartialEq)]
+enum CompletionShell {
+    Bash,
+    Elvish,
+    Fish,
+    Powershell,
+    Zsh,
 }
 
 #[derive(Subcommand)]
@@ -253,6 +302,9 @@ enum SessionsCommand {
         /// workspace root (default: cwd)
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// Emit JSON (same as MCP with json=true)
+        #[arg(long)]
+        json: bool,
     },
     /// Show full details for a session.
     Show {
@@ -277,16 +329,39 @@ fn main() -> anyhow::Result<()> {
             subcmd: IngestCommand::Hook { source, workspace },
         } => ingest_hook(source, workspace),
         Command::Sessions {
-            subcmd: SessionsCommand::List { workspace },
-        } => kaizen::shell::cli::cmd_sessions_list(workspace.as_deref()),
+            subcmd: SessionsCommand::List { workspace, json },
+        } => kaizen::shell::cli::cmd_sessions_list(workspace.as_deref(), json),
         Command::Sessions {
             subcmd: SessionsCommand::Show { id, workspace },
         } => kaizen::shell::cli::cmd_session_show(&id, workspace.as_deref()),
-        Command::Summary { workspace } => kaizen::shell::cli::cmd_summary(workspace.as_deref()),
+        Command::Summary { workspace, json } => {
+            kaizen::shell::cli::cmd_summary(workspace.as_deref(), json)
+        }
         Command::Tui { workspace } => tokio::runtime::Runtime::new()?.block_on(
             kaizen::ui::tui::run(workspace.as_deref().unwrap_or(&std::env::current_dir()?)),
         ),
         Command::Init { workspace } => kaizen::shell::cli::cmd_init(workspace.as_deref()),
+        Command::Doctor { workspace } => {
+            let code = kaizen::shell::doctor::cmd_doctor(workspace.as_deref())?;
+            // Non-zero: store/IO failure; hooks missing stay 0
+            if code != 0 {
+                std::process::exit(code);
+            }
+            Ok(())
+        }
+        Command::Completions { shell } => {
+            let sh = match shell {
+                CompletionShell::Bash => clap_complete::Shell::Bash,
+                CompletionShell::Elvish => clap_complete::Shell::Elvish,
+                CompletionShell::Fish => clap_complete::Shell::Fish,
+                CompletionShell::Powershell => clap_complete::Shell::PowerShell,
+                CompletionShell::Zsh => clap_complete::Shell::Zsh,
+            };
+            let mut cmd = Cli::command();
+            clap_complete::generate(sh, &mut cmd, "kaizen", &mut std::io::stdout());
+            let _ = std::io::stdout().flush();
+            Ok(())
+        }
         Command::Insights { workspace } => kaizen::shell::cli::cmd_insights(workspace.as_deref()),
         Command::Metrics {
             subcmd,

@@ -11,6 +11,10 @@ here explicitly.
 ## [Unreleased]
 
 ### Added
+
+- `docs/telemetry-journey.md` — end-to-end “session → data” learning path; README and `docs/`
+  index point to it. Root `README` clarifies that long-form docs live in the GitHub `docs/`
+  tree, not in the crates.io package. Library `//!` doc links to `docs/`.
 - `kaizen proxy run` — local HTTP forwarder for Anthropic-style APIs, `[proxy]` in `config.toml`, `docs/llm-proxy.md`.
 - `docs/install.md`, `docs/usage.md`, `docs/concepts.md` — user-facing docs.
 - `CODE_OF_CONDUCT.md`, `SECURITY.md`, issue + PR templates.
@@ -18,6 +22,8 @@ here explicitly.
 - Release workflow: tag `vX.Y.Z` → cross-compile, GitHub Release, crates.io publish.
 
 ### Changed
+- `AGENTS.md` and `.cursor/rules/caveman-writing.mdc` — reader-facing exception for `README.md`,
+  `docs/**/*.md` user guides, `CONTRIBUTING.md`, and user-facing `CHANGELOG` entries.
 - `Cargo.toml` crates.io metadata (description, license, repo, keywords, categories, `rust-version`, `exclude`).
 - `README.md`, `docs/README.md`, `CONTRIBUTING.md` rewritten for OSS.
 

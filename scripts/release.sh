@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 # kaizen release: run pre-flight checks, bump version, tag, push.
-# GitHub Actions (.github/workflows/release.yml) picks up the tag and
-# cross-compiles, uploads the release, and publishes to crates.io.
+# Preferred path to ship a version: merge Cargo.toml + CHANGELOG on main,
+# then run the "Release" workflow (workflow_dispatch) in GitHub Actions —
+# it creates the tag via the API, then builds and publishes.
+# This script is for local GPG-signed tags and a traditional git-push flow;
+# .github/workflows/release.yml still runs the same build / GitHub Release /
+# cargo publish for pushed tags.
 #
 # Usage: scripts/release.sh <new-version>
 #

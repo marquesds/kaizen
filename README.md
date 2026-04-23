@@ -4,7 +4,12 @@ Local-first telemetry and tooling for AI coding agent sessions
 (Cursor, Claude Code, Codex). Collect, store, and reason about what
 agents do in your repos — offline by default, redacted before any sync.
 
-[![CI](https://github.com/marquesds/kaizen/actions/workflows/ci.yml/badge.svg)](https://github.com/marquesds/kaizen/actions/workflows/ci.yml)
+Narrative guides and references live in this repository under [`docs/`](docs/README.md). The
+[crates.io](https://crates.io/crates/kaizen) page links to
+[docs.rs](https://docs.rs/kaizen) for the **Rust API**; full markdown documentation is not
+inside that tarball.
+
+[![CI](https://github.com/lucasmarqs/kaizen/actions/workflows/ci.yml/badge.svg)](https://github.com/lucasmarqs/kaizen/actions/workflows/ci.yml)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
 [![Crates.io](https://img.shields.io/crates/v/kaizen.svg)](https://crates.io/crates/kaizen)
 
@@ -15,6 +20,22 @@ agents do in your repos — offline by default, redacted before any sync.
 - **Heuristic retro** — weekly bets: what to change to make agents cheaper / faster.
 - **Experiments** — A/B a rule, skill, or repo change against a real metric.
 - **Local-first** — SQLite on your disk. No data leaves the machine unless you configure sync.
+
+## How it works (about 60 seconds)
+
+Kaizen does not run the model. It **observes** agent activity: conversation and tool use land in
+local SQLite; optional HTTP proxy logging adds another path. A metrics pass ties sessions to
+**file-level** and **graph** facts so the CLI, TUI, retro, and experiments can reason about your
+**repo**, not just token totals. Read the full pipeline (with a diagram) in
+[docs/telemetry-journey.md](docs/telemetry-journey.md).
+
+| If you want… | Start here |
+|-------------|------------|
+| Cost and rollups by agent / model | [docs/usage.md](docs/usage.md) (`summary`, `metrics`) |
+| Browse and tail sessions | [docs/usage.md](docs/usage.md) (`sessions`, `tui`) |
+| Heuristic “what to change” weekly bets | [docs/retro.md](docs/retro.md) |
+| A/B a rule or change against a metric | [docs/experiments.md](docs/experiments.md) |
+| The end-to-end data story (ingest → store → facts) | [docs/telemetry-journey.md](docs/telemetry-journey.md) |
 
 ## Install
 
@@ -30,6 +51,7 @@ Requires Rust 1.95+ (edition 2024). Full install guide:
 
 ```bash
 kaizen init                  # scaffold .kaizen/ + wire hooks
+kaizen doctor                # verify config, DB, and hook wiring (optional)
 kaizen sessions list         # index sessions in the current repo
 kaizen summary               # cost / agent / model rollup
 kaizen tui                   # live session browser
@@ -51,6 +73,7 @@ Full CLI reference: [docs/usage.md](docs/usage.md).
 | [docs/concepts.md](docs/concepts.md) | Sessions, events, retro, experiments |
 | [docs/architecture.md](docs/architecture.md) | Module graph, data flow |
 | [docs/config.md](docs/config.md) | Config file + env vars |
+| [docs/telemetry-journey.md](docs/telemetry-journey.md) | How sessions become stored facts (learning path) |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Dev setup, tests, PR flow |
 | [CHANGELOG.md](CHANGELOG.md) | Release notes |
 

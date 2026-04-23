@@ -111,10 +111,11 @@ Set any value to `false` to skip that agent’s local scan (useful if a VS Code 
 
 | Tool | CLI equivalent | Notes |
 |------|----------------|--------|
+| `kaizen_capabilities` | (no CLI; static text) | Read first: which tool to use for cost rollups vs repo metrics, sessions, retro, etc. |
 | `kaizen_ingest_hook` | `kaizen ingest hook` | Pass hook JSON in `payload` (not stdin). `source`: `cursor` or `claude`. |
-| `kaizen_sessions_list` | `kaizen sessions list` | |
+| `kaizen_sessions_list` | `kaizen sessions list` | Optional `json: true` matches `kaizen sessions list --json`. |
 | `kaizen_session_show` | `kaizen sessions show` | `id` + optional `workspace`. |
-| `kaizen_summary` | `kaizen summary` | |
+| `kaizen_summary` | `kaizen summary` | Optional `json: true` matches `kaizen summary --json`. |
 | `kaizen_tui` | `kaizen tui` | Not runnable over MCP; returns a structured “use CLI” payload with `is_error` semantics. |
 | `kaizen_init` | `kaizen init` | Writes/updates workspace files, same as CLI. |
 | `kaizen_insights` | `kaizen insights` | |

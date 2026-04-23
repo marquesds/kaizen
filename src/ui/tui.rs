@@ -31,7 +31,17 @@ const THIRTY_DAYS_SEC: u64 = 30 * 24 * 3600;
 const MS_HEURISTIC_THRESHOLD: u64 = 1_000_000_000_000;
 
 struct App {
+    /// Unfiltered from store (last refresh).
+    sessions_all: Vec<SessionRecord>,
+    /// Filtered by agent substring (see `agent_filter`).
     sessions: Vec<SessionRecord>,
+    /// Lowercase substring match on `SessionRecord::agent` (empty = show all).
+    agent_filter: String,
+    /// Typing a new filter; Enter commits, Esc cancels.
+    filter_mode: bool,
+    filter_buf: String,
+    /// Shown in status after `y` copy.
+    clipboard_note: String,
     events: Vec<Event>,
     /// `tool_call_id` -> `lead_time_ms` for the selected session (from `tool_spans`).
     tool_lead_by_call: HashMap<String, u64>,
@@ -53,11 +63,16 @@ impl App {
         let db = workspace.join(".kaizen/kaizen.db");
         let store = Store::open(&db)?;
         let ws = workspace.to_string_lossy().to_string();
-        let sessions = store.list_sessions(&ws)?;
+        let sessions_all = store.list_sessions(&ws)?;
         let _ = index::ensure_indexed(&store, workspace, false);
         let metrics = report::build_report(&store, &ws, 7).ok();
         let mut app = Self {
-            sessions,
+            sessions: Vec::new(),
+            sessions_all,
+            agent_filter: String::new(),
+            filter_mode: false,
+            filter_buf: String::new(),
+            clipboard_note: String::new(),
             events: vec![],
             tool_lead_by_call: HashMap::new(),
             sel_session: 0,
@@ -71,12 +86,29 @@ impl App {
             store,
             workspace: ws,
         };
+        app.reapply_filter();
         app.refresh()?;
         Ok(app)
     }
 
+    fn reapply_filter(&mut self) {
+        let f = self.agent_filter.to_lowercase();
+        if f.is_empty() {
+            self.sessions.clone_from(&self.sessions_all);
+        } else {
+            self.sessions = self
+                .sessions_all
+                .iter()
+                .filter(|s| s.agent.to_lowercase().contains(&f))
+                .cloned()
+                .collect();
+        }
+        self.sel_session = self.sel_session.min(self.sessions.len().saturating_sub(1));
+    }
+
     fn refresh(&mut self) -> Result<()> {
-        self.sessions = self.store.list_sessions(&self.workspace)?;
+        self.sessions_all = self.store.list_sessions(&self.workspace)?;
+        self.reapply_filter();
         self.pulse = !self.pulse;
         if let Some(s) = self.sessions.get(self.sel_session) {
             self.events = self.store.list_events_for_session(&s.id)?;
@@ -230,8 +262,18 @@ fn draw_sessions(f: &mut ratatui::Frame, app: &App, area: ratatui::layout::Rect)
     } else {
         theme::BORDER_INACTIVE
     };
+    let title = if app.agent_filter.is_empty() {
+        format!("Sessions ({})", app.sessions.len())
+    } else {
+        format!(
+            "Sessions {}/{} (agent filter: {:?})",
+            app.sessions.len(),
+            app.sessions_all.len(),
+            app.agent_filter
+        )
+    };
     let block = Block::default()
-        .title(format!("Sessions ({})", app.sessions.len()))
+        .title(title)
         .borders(Borders::ALL)
         .border_style(Style::default().fg(border_color));
     let now = now_ms();
@@ -381,35 +423,59 @@ fn draw_metrics(f: &mut ratatui::Frame, app: &App, area: ratatui::layout::Rect) 
         .title("Metrics")
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme::BORDER_ACTIVE));
-    let mut lines = vec!["Slow tools".to_string()];
-    if let Some(metrics) = &app.metrics {
-        for row in metrics.slowest_tools.iter().take(4) {
-            let p95 = row
-                .p95_ms
-                .map(|v| format!("{v}ms"))
-                .unwrap_or_else(|| "-".into());
-            lines.push(format!("{} p95={} tok={}", row.tool, p95, row.total_tokens));
+    let empty = app.metrics.is_none()
+        || app
+            .metrics
+            .as_ref()
+            .is_some_and(|m| m.slowest_tools.is_empty() && m.hottest_files.is_empty());
+    let text = if empty {
+        "(No metrics in this window yet. Run `kaizen metrics` in a shell, or `r` here after a repo is indexed.)\n\nMetrics need a successful snapshot + events for tool spans — see docs/telemetry-journey.md."
+            .to_string()
+    } else {
+        let mut lines = vec!["Slow tools".to_string()];
+        if let Some(metrics) = &app.metrics {
+            for row in metrics.slowest_tools.iter().take(4) {
+                let p95 = row
+                    .p95_ms
+                    .map(|v| format!("{v}ms"))
+                    .unwrap_or_else(|| "-".into());
+                lines.push(format!("{} p95={} tok={}", row.tool, p95, row.total_tokens));
+            }
+            lines.push(String::new());
+            lines.push("Hot files".into());
+            for row in metrics.hottest_files.iter().take(4) {
+                lines.push(format!("{} {}", row.value, row.path));
+            }
         }
-        lines.push(String::new());
-        lines.push("Hot files".into());
-        for row in metrics.hottest_files.iter().take(4) {
-            lines.push(format!("{} {}", row.value, row.path));
-        }
-    }
-    f.render_widget(Paragraph::new(lines.join("\n")).block(block), area);
+        lines.join("\n")
+    };
+    f.render_widget(Paragraph::new(text).block(block), area);
 }
 
 fn draw_statusbar(f: &mut ratatui::Frame, app: &App, area: ratatui::layout::Rect) {
     let pulse = if app.pulse { "●" } else { "○" };
-    let text = format!(
-        "LIVE {pulse}  j/k move  |  Tab pane  |  m metrics  |  Enter detail  |  ? help  |  q quit"
-    );
+    let text = if app.filter_mode {
+        format!(
+            "FILTER  type agent substring  |  Enter apply  |  Esc cancel  |  buffer: {}",
+            app.filter_buf
+        )
+    } else {
+        let note = if app.clipboard_note.is_empty() {
+            String::new()
+        } else {
+            format!("  |  {}", app.clipboard_note)
+        };
+        format!(
+            "LIVE {pulse}  j/k  Tab  m metrics  / filter  y copy id  Enter detail  ? help  q quit{note}"
+        )
+    };
     f.render_widget(Paragraph::new(text), area);
 }
 
 fn draw_help(f: &mut ratatui::Frame) {
     let text = "j/k ↑/↓  move in focused pane  |  g/G first/last  |  Tab  switch pane\n\
-                Enter  toggle event detail  |  Esc  back  |  r  refresh  |  q  quit";
+                Enter  toggle event detail  |  Esc  back  |  r  refresh  |  q  quit\n\
+                /  filter sessions by agent substring  |  y  copy session id (left pane)";
     let block = Block::default().title("Help").borders(Borders::ALL);
     f.render_widget(Paragraph::new(text).block(block), f.area());
 }
@@ -455,7 +521,46 @@ pub async fn run(workspace: &Path) -> Result<()> {
                     && let CxEvent::Key(k) = cxev::read()?
                 {
                     if k.kind != KeyEventKind::Press { continue; }
+                    if app.filter_mode {
+                        match k.code {
+                            KeyCode::Enter => {
+                                app.agent_filter = app.filter_buf.trim().to_string();
+                                app.filter_mode = false;
+                                let _ = app.refresh();
+                            }
+                            KeyCode::Esc => {
+                                app.filter_mode = false;
+                                app.filter_buf.clear();
+                            }
+                            KeyCode::Backspace => {
+                                app.filter_buf.pop();
+                            }
+                            KeyCode::Char(c) => {
+                                app.filter_buf.push(c);
+                            }
+                            _ => {}
+                        }
+                        continue;
+                    }
                     match k.code {
+                        KeyCode::Char('/') => {
+                            app.filter_mode = true;
+                            app.filter_buf.clone_from(&app.agent_filter);
+                        }
+                        KeyCode::Char('y') if app.left_focus => {
+                            if let Some(id) = app.selected_id() {
+                                match arboard::Clipboard::new() {
+                                    Ok(mut cb) => {
+                                        if cb.set_text(id).is_ok() {
+                                            app.clipboard_note = "copied session id".to_string();
+                                        } else {
+                                            app.clipboard_note = "clipboard write failed".to_string();
+                                        }
+                                    }
+                                    Err(_) => app.clipboard_note = "no clipboard".to_string(),
+                                }
+                            }
+                        }
                         KeyCode::Char('q') | KeyCode::Esc if !app.detail && !app.show_help => break,
                         KeyCode::Char('q') if app.show_help => { app.show_help = false; }
                         KeyCode::Char('q') => { app.detail = false; app.show_help = false; }

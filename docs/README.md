@@ -2,11 +2,19 @@
 
 Index.
 
+## Start here (learning)
+
+If you are new to **what** gets stored and **in what order**, read
+[telemetry-journey.md](telemetry-journey.md) first. It connects transcripts, hooks, and the
+optional HTTP proxy to the SQLite tables and derived facts. Use [concepts.md](concepts.md) as a
+glossary.
+
 ## For users
 
 | Doc | Purpose |
 |---|---|
 | [install.md](install.md) | Install, build from source, uninstall |
+| [telemetry-journey.md](telemetry-journey.md) | How agent sessions map to data (ingest → events → facts) |
 | [usage.md](usage.md) | CLI reference |
 | [mcp.md](mcp.md) | MCP stdio server (agent hosts, full CLI parity) |
 | [llm-proxy.md](llm-proxy.md) | Local HTTP forwarder for LLM APIs (Anthropic) |
@@ -42,5 +50,6 @@ Index.
 | Ingest / sync contract | `ingest-contract.md` |
 | Retro / experiments product spec | `retro.md` / `experiments.md` |
 | New CLI command or flag | `usage.md` |
+| User-facing learning story or pipeline change | [telemetry-journey.md](telemetry-journey.md), [architecture.md](architecture.md) |
 
 Stale docs worse than no docs — keep current or delete.

@@ -23,8 +23,9 @@ Skip sections that don't match. Don't dump full walkthrough.
 
 ## 2. What kaizen Is
 
-Rust binary crate for agent session telemetry. Collects, stores, and analyzes AI agent session data.
-See `docs/structure.md` and `docs/architecture.md`.
+Rust binary + library for agent session telemetry. Collects, stores, and analyzes AI agent
+session data. For the user-facing pipeline story, see `docs/telemetry-journey.md`. For layout,
+`docs/structure.md` and `docs/architecture.md`.
 
 ## 3. Stack Snapshot
 
@@ -32,8 +33,9 @@ See `docs/structure.md` and `docs/architecture.md`.
 |---|---|---|
 | Language | Rust (edition 2024) | systems lang |
 | Async runtime | tokio | async I/O |
-| HTTP | axum or hyper | TBD |
-| Storage | TBD | see docs/datamodel.md |
+| HTTP (server) | axum | CLI / proxy / TUI side |
+| HTTP (client) | reqwest | sync, outbox, proxy upstream |
+| Storage | SQLite WAL, GraphQLite sidecar for code graph | `docs/datamodel.md` |
 | Observability | tracing | structured logs |
 | Tests | #[test] / #[tokio::test] | built-in + tokio |
 
@@ -91,7 +93,8 @@ First files to open:
 
 From `AGENTS.md` + `.cursor/rules/`:
 
-- Caveman writing in all `.md`/`.mdc`, doc comments, inline comments, plans
+- Caveman default for skills/rules; reader-facing `docs/**`, root `README`, `CONTRIBUTING` use
+  full prose per `AGENTS.md` exception
 - ≤200 lines per file (incl. `.md`)
 - ≤10 lines per function, no cyclomatic branching — iterator chains + match
 - No narrating comments

@@ -8,8 +8,11 @@ Fragments OK. Short synonyms. Technical terms exact. Code blocks unchanged.
 Off only: user says "stop caveman" or "normal mode".
 See `.cursor/skills/caveman/SKILL.md` for intensity levels and examples.
 
-**Writing rule** — caveman style applies everywhere: `docs/`, `.cursor/skills/`, `.cursor/rules/`, `AGENTS.md`, any `.md`/`.mdc`, doc comments (`///`/`//!`), inline comments, plans, specs, ADRs, task breakdowns.
-See `.cursor/rules/caveman-writing.mdc` for examples.
+**Writing rule** — caveman default for: `.cursor/skills/`, `.cursor/rules/`, `AGENTS.md` (this file except where reader-facing), internal `.md`/`.mdc` not listed below, doc comments (`///`/`//!`) when contract-style, inline comments, plans, specs, ADRs, task breakdowns.
+
+**Reader-facing exception** — full, clear technical prose (complete sentences, scannable structure): root [`README.md`](README.md), [`docs/**/*.md`](docs/README.md) user documentation, [`CONTRIBUTING.md`](CONTRIBUTING.md), and user-facing release notes in [`CHANGELOG.md`](CHANGELOG.md). Same tone as a strong engineering blog, not marketing fluff.
+
+See `.cursor/rules/caveman-writing.mdc` for examples and the exception list.
 
 ## 1. Plan Mode Default
 

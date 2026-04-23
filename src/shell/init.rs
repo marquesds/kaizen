@@ -46,9 +46,12 @@ fn ensure_config(out: &mut String, ws: &Path) -> Result<()> {
     Ok(())
 }
 
-const KAIZEN_CURSOR_HOOK_CMD: &str = "kaizen ingest hook --source cursor";
-const KAIZEN_CLAUDE_HOOK_CMD: &str = "kaizen ingest hook --source claude";
+/// Hook command string written to `.cursor/hooks.json`.
+pub const KAIZEN_CURSOR_HOOK_CMD: &str = "kaizen ingest hook --source cursor";
+/// Hook command string written to `.claude/settings.json`.
+pub const KAIZEN_CLAUDE_HOOK_CMD: &str = "kaizen ingest hook --source claude";
 
+/// `true` if every Cursor hook event points at the kaizen ingest command.
 fn cursor_hooks_done(root: &serde_json::Value) -> bool {
     CURSOR_HOOK_EVENTS
         .iter()
@@ -197,6 +200,40 @@ fn patch_claude_settings(out: &mut String, ws: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Read-only: `.cursor/hooks.json` missing, valid JSON with full kaizen wiring, or not.
+pub fn cursor_kaizen_hook_wiring(ws: &Path) -> Result<Option<bool>, String> {
+    let path = ws.join(".cursor/hooks.json");
+    if !path.exists() {
+        return Ok(None);
+    }
+    let raw = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let root: serde_json::Value = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
+    Ok(Some(cursor_hooks_done(&root)))
+}
+
+/// Read-only: `.claude/settings.json` hooks all reference kaizen (same as post-patch `entry_has_kaizen_cmd`).
+pub fn claude_kaizen_hook_wiring(ws: &Path) -> Result<Option<bool>, String> {
+    let path = ws.join(".claude/settings.json");
+    if !path.exists() {
+        return Ok(None);
+    }
+    let raw = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let obj: serde_json::Map<String, serde_json::Value> =
+        serde_json::from_str(&raw).map_err(|e| e.to_string())?;
+    let Some(hooks) = obj.get("hooks").and_then(|v| v.as_object()) else {
+        return Ok(Some(false));
+    };
+    for event in CLAUDE_HOOK_EVENTS {
+        let Some(arr) = hooks.get(*event).and_then(|v| v.as_array()) else {
+            return Ok(Some(false));
+        };
+        if !arr.iter().any(entry_has_kaizen_cmd) {
+            return Ok(Some(false));
+        }
+    }
+    Ok(Some(true))
+}
+
 fn write_skill(out: &mut String, ws: &Path) -> Result<()> {
     let path = ws.join(".cursor/skills/kaizen-retro/SKILL.md");
     std::fs::create_dir_all(path.parent().unwrap())?;
@@ -224,7 +261,30 @@ pub fn init_text(workspace: Option<&std::path::Path>) -> Result<String> {
     patch_claude_settings(&mut out, &ws)?;
     write_skill(&mut out, &ws)?;
     writeln!(out).unwrap();
-    writeln!(out, "kaizen init complete. Run: kaizen tui").unwrap();
+    writeln!(out, "kaizen init complete.").unwrap();
+    writeln!(out).unwrap();
+    writeln!(out, "Next steps:").unwrap();
+    writeln!(
+        out,
+        "  1. kaizen sessions list   # see indexed sessions (run an agent in this repo if empty)"
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "  2. kaizen summary         # cost and rollups by agent / model"
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "  3. kaizen metrics         # or: kaizen tui  (browse + live tail)"
+    )
+    .unwrap();
+    writeln!(out).unwrap();
+    writeln!(
+        out,
+        "MCP: run `kaizen mcp` (stdio) — https://github.com/lucasmarqs/kaizen/blob/main/docs/mcp.md"
+    )
+    .unwrap();
     Ok(out)
 }
 

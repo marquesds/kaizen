@@ -1,5 +1,10 @@
 # Concepts
 
+**New to the mental model?** Read [telemetry-journey.md](telemetry-journey.md) for the
+end-to-end path from agent activity to stored facts, then return here for definitions.
+
+---
+
 Shared vocabulary. Deep dives live in dedicated docs.
 
 ## Session

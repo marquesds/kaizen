@@ -23,4 +23,4 @@
 
 ## Notes for reviewer
 
-<!-- Anything tricky, follow-ups, or decisions you want a second opinion on. -->
+<!-- Anything tricky, follow-ups, or decisions you want a second opinion on. If the change affects the user mental model, confirm `docs/telemetry-journey.md` and/or `docs/concepts.md` still match. -->

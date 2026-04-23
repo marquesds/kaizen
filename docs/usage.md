@@ -2,6 +2,12 @@
 
 CLI reference. All commands accept `--workspace <path>` (default: cwd).
 
+Run `kaizen --help` for grouped subcommands (Trust & observe, Operate, Improve, Integrations, Shell).
+
+## `kaizen doctor`
+
+Health check: version, config paths, store open, optional Cursor/Claude hook wiring. Exit `1` if the local store cannot be opened or `.kaizen/` is not writable (useful in CI). Does not write files.
+
 ## `kaizen init`
 
 Idempotent workspace setup. Writes `.kaizen/config.toml`, patches agent
@@ -12,6 +18,7 @@ under `.kaizen/backup/`.
 
 ```bash
 kaizen sessions list           # all sessions in workspace
+kaizen sessions list --json   # machine-readable
 kaizen sessions show <id>      # full detail: events, tools, cost
 ```
 
@@ -19,6 +26,22 @@ kaizen sessions show <id>      # full detail: events, tools, cost
 
 Roll-up of count, total USD, by-agent, by-model across all ingested
 sessions.
+
+```bash
+kaizen summary --json         # same shape as the MCP `kaizen_summary` tool with json=true
+```
+
+## `kaizen completions`
+
+Print a shell completion script to stdout. Install (examples):
+
+```bash
+kaizen completions bash  > ~/.local/share/bash-completion/completions/kaizen
+kaizen completions zsh   | sudo tee /usr/local/share/zsh/site-functions/_kaizen
+kaizen completions fish  > ~/.config/fish/completions/kaizen.fish
+```
+
+Restart the shell or `source` your profile as appropriate for your platform.
 
 ## `kaizen insights`
 

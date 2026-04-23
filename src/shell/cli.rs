@@ -14,13 +14,55 @@ use crate::metrics::{index, report};
 use crate::shell::fmt::fmt_ts;
 use crate::store::Store;
 use anyhow::Result;
+use serde::Serialize;
+use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 
 pub use crate::shell::init::cmd_init;
 pub use crate::shell::insights::cmd_insights;
 
+#[derive(Serialize)]
+struct SessionsListJson {
+    workspace: String,
+    count: usize,
+    sessions: Vec<SessionRecord>,
+}
+
+#[derive(Serialize)]
+struct SummaryJsonOut {
+    #[serde(flatten)]
+    stats: crate::store::SummaryStats,
+    cost_usd: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    hotspot: Option<crate::metrics::types::RankedFile>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    slowest_tool: Option<crate::metrics::types::RankedTool>,
+}
+
+struct ScanSpinner(Option<indicatif::ProgressBar>);
+
+impl ScanSpinner {
+    fn start(msg: &'static str) -> Self {
+        if !std::io::stdout().is_terminal() {
+            return Self(None);
+        }
+        let p = indicatif::ProgressBar::new_spinner();
+        p.set_message(msg.to_string());
+        p.enable_steady_tick(std::time::Duration::from_millis(120));
+        Self(Some(p))
+    }
+}
+
+impl Drop for ScanSpinner {
+    fn drop(&mut self) {
+        if let Some(p) = self.0.take() {
+            p.finish_and_clear();
+        }
+    }
+}
+
 /// `kaizen sessions list` — same output as CLI stdout.
-pub fn sessions_list_text(workspace: Option<&Path>) -> Result<String> {
+pub fn sessions_list_text(workspace: Option<&Path>, json_out: bool) -> Result<String> {
     let ws = workspace_path(workspace)?;
     let cfg = config::load(&ws)?;
     let db_path = ws.join(".kaizen/kaizen.db");
@@ -30,6 +72,16 @@ pub fn sessions_list_text(workspace: Option<&Path>) -> Result<String> {
     scan_all_agents(&ws, &cfg, &ws_str, &store)?;
 
     let sessions = store.list_sessions(&ws_str)?;
+    if json_out {
+        return Ok(format!(
+            "{}\n",
+            serde_json::to_string_pretty(&SessionsListJson {
+                workspace: ws_str,
+                count: sessions.len(),
+                sessions,
+            })?
+        ));
+    }
     use std::fmt::Write;
     let mut out = String::new();
     writeln!(
@@ -52,13 +104,26 @@ pub fn sessions_list_text(workspace: Option<&Path>) -> Result<String> {
     }
     if sessions.is_empty() {
         writeln!(&mut out, "(no sessions)").unwrap();
+        sessions_empty_state_hints(&mut out);
     }
     Ok(out)
 }
 
+fn sessions_empty_state_hints(out: &mut String) {
+    use std::fmt::Write;
+    let _ = writeln!(out);
+    let _ = writeln!(out, "No sessions found for this workspace. Try:");
+    let _ = writeln!(out, "  · `kaizen doctor` — verify config and hooks");
+    let _ = writeln!(out, "  · a short agent session in this repo, then re-run");
+    let _ = writeln!(
+        out,
+        "  · docs: https://github.com/lucasmarqs/kaizen/blob/main/docs/config.md (sources)"
+    );
+}
+
 /// `kaizen sessions list` — scan all agent transcripts, upsert sessions, print table.
-pub fn cmd_sessions_list(workspace: Option<&Path>) -> Result<()> {
-    print!("{}", sessions_list_text(workspace)?);
+pub fn cmd_sessions_list(workspace: Option<&Path>, json_out: bool) -> Result<()> {
+    print!("{}", sessions_list_text(workspace, json_out)?);
     Ok(())
 }
 
@@ -102,7 +167,7 @@ pub fn cmd_session_show(id: &str, workspace: Option<&Path>) -> Result<()> {
 }
 
 /// `kaizen summary` — same output as CLI stdout.
-pub fn summary_text(workspace: Option<&Path>) -> Result<String> {
+pub fn summary_text(workspace: Option<&Path>, json_out: bool) -> Result<String> {
     let ws = workspace_path(workspace)?;
     let cfg = config::load(&ws)?;
     let db_path = ws.join(".kaizen/kaizen.db");
@@ -113,6 +178,34 @@ pub fn summary_text(workspace: Option<&Path>) -> Result<String> {
 
     let stats = store.summary_stats(&ws_str)?;
     let cost_dollars = stats.total_cost_usd_e6 as f64 / 1_000_000.0;
+    if json_out {
+        let mut hotspot = None;
+        let mut slowest_tool = None;
+        if let Ok(_snapshot) = index::ensure_indexed(&store, &ws, false)
+            && let Ok(metrics) = report::build_report(&store, &ws_str, 7)
+        {
+            if let Some(ctx) = crate::sync::ingest_ctx(&cfg, ws.clone())
+                && let Some(snapshot) = metrics.snapshot.as_ref()
+                && let Ok(facts) = store.file_facts_for_snapshot(&snapshot.id)
+                && let Ok(edges) = store.repo_edges_for_snapshot(&snapshot.id)
+            {
+                let _ = crate::sync::smart::enqueue_repo_snapshot(
+                    &store, snapshot, &facts, &edges, &ctx,
+                );
+            }
+            hotspot = metrics.hottest_files.first().cloned();
+            slowest_tool = metrics.slowest_tools.first().cloned();
+        }
+        return Ok(format!(
+            "{}\n",
+            serde_json::to_string_pretty(&SummaryJsonOut {
+                stats,
+                cost_usd: cost_dollars,
+                hotspot,
+                slowest_tool,
+            })?
+        ));
+    }
     use std::fmt::Write;
     let mut out = String::new();
     writeln!(
@@ -172,8 +265,8 @@ pub fn summary_text(workspace: Option<&Path>) -> Result<String> {
 }
 
 /// `kaizen summary` — aggregate session + cost stats across all agents.
-pub fn cmd_summary(workspace: Option<&Path>) -> Result<()> {
-    print!("{}", summary_text(workspace)?);
+pub fn cmd_summary(workspace: Option<&Path>, json_out: bool) -> Result<()> {
+    print!("{}", summary_text(workspace, json_out)?);
     Ok(())
 }
 
@@ -183,6 +276,7 @@ pub(crate) fn scan_all_agents(
     ws_str: &str,
     store: &Store,
 ) -> Result<()> {
+    let _spin = ScanSpinner::start("Scanning agent sessions…");
     let slug = workspace_slug(ws_str);
     let sync_ctx = crate::sync::ingest_ctx(cfg, ws.to_path_buf());
 
