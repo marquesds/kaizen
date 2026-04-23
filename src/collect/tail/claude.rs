@@ -108,9 +108,16 @@ pub fn parse_claude_line(
 }
 
 fn line_ts_ms(obj: &serde_json::Map<String, Value>) -> Option<u64> {
-    ["timestamp_ms", "ts_ms", "created_at_ms"]
+    if let Some(t) = ["timestamp_ms", "ts_ms", "created_at_ms"]
         .iter()
         .find_map(|k| obj.get(*k).and_then(|v| v.as_u64()))
+    {
+        return Some(t);
+    }
+    if let Some(t) = obj.get("timestamp").and_then(|v| v.as_u64()) {
+        return Some(if t < 1_000_000_000_000 { t.saturating_mul(1000) } else { t });
+    }
+    None
 }
 
 /// Walk all `.jsonl` files under `dir`; return inferred `SessionRecord` + events.
@@ -132,6 +139,7 @@ pub fn scan_claude_session_dir(dir: &Path) -> Result<(SessionRecord, Vec<Event>)
     let mut seq: u64 = 0;
     let mut model: Option<String> = None;
 
+    let base_ts = crate::collect::tail::dir_mtime_ms(dir);
     let mut entries: Vec<_> = std::fs::read_dir(dir)
         .with_context(|| format!("read dir: {}", dir.display()))?
         .filter_map(|e| e.ok())
@@ -148,7 +156,7 @@ pub fn scan_claude_session_dir(dir: &Path) -> Result<(SessionRecord, Vec<Event>)
             if model.is_none() {
                 model = model_from_json::from_line(line);
             }
-            if let Some(ev) = parse_claude_line(&session_id, seq, 0, line)? {
+            if let Some(ev) = parse_claude_line(&session_id, seq, base_ts, line)? {
                 events.push(ev);
             }
             seq += 1;

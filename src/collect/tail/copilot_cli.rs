@@ -166,6 +166,7 @@ pub fn scan_copilot_cli_session_dir(
         .unwrap_or("copilot-cli")
         .to_string();
 
+    let base_ts = dir_mtime_ms(session_dir);
     let content = std::fs::read_to_string(&events_path)?;
     let mut events = Vec::new();
     let mut seq: u64 = 0;
@@ -179,7 +180,7 @@ pub fn scan_copilot_cli_session_dir(
         {
             model = model_from_json::from_value(&v);
         }
-        if let Some(ev) = parse_copilot_cli_line(&session_id, seq, 0, line)? {
+        if let Some(ev) = parse_copilot_cli_line(&session_id, seq, base_ts, line)? {
             events.push(ev);
         }
         seq += 1;

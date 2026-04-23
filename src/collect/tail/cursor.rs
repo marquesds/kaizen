@@ -91,9 +91,17 @@ pub fn parse_cursor_line(
 }
 
 fn line_ts_ms(obj: &serde_json::Map<String, Value>) -> Option<u64> {
-    ["timestamp_ms", "ts_ms", "created_at_ms"]
+    if let Some(t) = ["timestamp_ms", "ts_ms", "created_at_ms"]
         .iter()
         .find_map(|k| obj.get(*k).and_then(|v| v.as_u64()))
+    {
+        return Some(t);
+    }
+    // Cursor often omits per-line times; `timestamp` may be seconds (≈1e9) or ms (≈1.7e12).
+    if let Some(t) = obj.get("timestamp").and_then(|v| v.as_u64()) {
+        return Some(if t < 1_000_000_000_000 { t.saturating_mul(1000) } else { t });
+    }
+    None
 }
 
 fn reasoning_tokens(obj: &serde_json::Map<String, Value>) -> Option<u32> {
@@ -124,6 +132,9 @@ fn file_mtime_ms(path: &Path) -> u64 {
 /// Read every `*.jsonl` directly under `dir` (sorted by name) and parse into events.
 /// First `model` (or supported nested field) found in any line is returned for the session.
 fn scan_jsonl_in_dir(dir: &Path, session_id: &str) -> Result<(Vec<Event>, Option<String>)> {
+    // Transcript lines often omit `timestamp_ms`; align synthetic times with the session
+    // dir mtime (same as `SessionRecord.started_at_ms`) so retro windows and queries match.
+    let base_ts = super::dir_mtime_ms(dir);
     let mut entries: Vec<_> = std::fs::read_dir(dir)
         .with_context(|| format!("read dir: {}", dir.display()))?
         .filter_map(|e| e.ok())
@@ -143,7 +154,7 @@ fn scan_jsonl_in_dir(dir: &Path, session_id: &str) -> Result<(Vec<Event>, Option
             if model.is_none() {
                 model = model_from_json::from_line(line);
             }
-            if let Some(ev) = parse_cursor_line(session_id, seq, 0, line)? {
+            if let Some(ev) = parse_cursor_line(session_id, seq, base_ts, line)? {
                 events.push(ev);
                 seq += 1;
             } else {
@@ -156,6 +167,7 @@ fn scan_jsonl_in_dir(dir: &Path, session_id: &str) -> Result<(Vec<Event>, Option
 
 /// Parse a single transcript `.jsonl` file into events.
 fn scan_jsonl_file(path: &Path, session_id: &str) -> Result<(Vec<Event>, Option<String>)> {
+    let base_ts = file_mtime_ms(path);
     let content =
         std::fs::read_to_string(path).with_context(|| format!("read file: {}", path.display()))?;
     let mut events = Vec::new();
@@ -168,7 +180,7 @@ fn scan_jsonl_file(path: &Path, session_id: &str) -> Result<(Vec<Event>, Option<
         if model.is_none() {
             model = model_from_json::from_line(line);
         }
-        if let Some(ev) = parse_cursor_line(session_id, seq, 0, line)? {
+        if let Some(ev) = parse_cursor_line(session_id, seq, base_ts, line)? {
             events.push(ev);
             seq += 1;
         } else {
