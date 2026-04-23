@@ -76,6 +76,7 @@ jobs:
         with:
           node-version: "20"
       - run: npm install -g @informalsystems/quint@0.32.0
+      - run: scripts/check-quint-specs.sh
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust }}
