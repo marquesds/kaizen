@@ -34,10 +34,36 @@ impl Default for CursorSourceConfig {
     }
 }
 
+/// Enable tier-1 tail ingestion for agents that store data outside Cursor/Claude/Codex paths.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TailAgentToggles {
+    #[serde(default = "default_true")]
+    pub goose: bool,
+    #[serde(default = "default_true")]
+    pub opencode: bool,
+    #[serde(default = "default_true")]
+    pub copilot_cli: bool,
+    #[serde(default = "default_true")]
+    pub copilot_vscode: bool,
+}
+
+impl Default for TailAgentToggles {
+    fn default() -> Self {
+        Self {
+            goose: true,
+            opencode: true,
+            copilot_cli: true,
+            copilot_vscode: true,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SourcesConfig {
     #[serde(default)]
     pub cursor: CursorSourceConfig,
+    #[serde(default)]
+    pub tail: TailAgentToggles,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -118,6 +144,82 @@ pub fn try_team_salt(cfg: &SyncConfig) -> Option<[u8; 32]> {
     bytes.try_into().ok()
 }
 
+fn default_true() -> bool {
+    true
+}
+
+fn default_telemetry_fail_open() -> bool {
+    true
+}
+
+/// Optional third-party telemetry sinks; same redacted batches as Kaizen sync.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TelemetryConfig {
+    /// When `true` (default), ignore exporter errors; when `false`, `flush` fails if any secondary errors.
+    #[serde(default = "default_telemetry_fail_open")]
+    pub fail_open: bool,
+    /// Declarative list; `type = "none"` rows are accepted and ignored.
+    #[serde(default)]
+    pub exporters: Vec<ExporterConfig>,
+}
+
+impl Default for TelemetryConfig {
+    fn default() -> Self {
+        Self {
+            fail_open: default_telemetry_fail_open(),
+            exporters: Vec::new(),
+        }
+    }
+}
+
+/// One pluggable sink; TOML `type` is the tag.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub enum ExporterConfig {
+    /// No-op row for sparse tables / templates.
+    None,
+    /// Echo to tracing (for wiring tests; requires the `telemetry-dev` build feature).
+    Dev {
+        #[serde(default = "default_true")]
+        enabled: bool,
+    },
+    PostHog {
+        #[serde(default = "default_true")]
+        enabled: bool,
+        /// e.g. `https://us.i.posthog.com` (default when unset)
+        host: Option<String>,
+        /// Prefer env `POSTHOG_API_KEY` or `KAIZEN_POSTHOG_API_KEY`
+        project_api_key: Option<String>,
+    },
+    Datadog {
+        #[serde(default = "default_true")]
+        enabled: bool,
+        /// e.g. `datadoghq.com`; env `DD_SITE` overrides
+        site: Option<String>,
+        /// Prefer env `DD_API_KEY` or `KAIZEN_DD_API_KEY`
+        api_key: Option<String>,
+    },
+    Otlp {
+        #[serde(default = "default_true")]
+        enabled: bool,
+        /// Env `OTEL_EXPORTER_OTLP_ENDPOINT` (or KAIZEN_ prefix) when unset here
+        endpoint: Option<String>,
+    },
+}
+
+impl ExporterConfig {
+    /// Whether this row should be considered for `load_exporters` (excludes `None`).
+    pub fn is_enabled(&self) -> bool {
+        match self {
+            ExporterConfig::None => false,
+            ExporterConfig::Dev { enabled, .. } => *enabled,
+            ExporterConfig::PostHog { enabled, .. } => *enabled,
+            ExporterConfig::Datadog { enabled, .. } => *enabled,
+            ExporterConfig::Otlp { enabled, .. } => *enabled,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Config {
     #[serde(default)]
@@ -128,6 +230,8 @@ pub struct Config {
     pub retention: RetentionConfig,
     #[serde(default)]
     pub sync: SyncConfig,
+    #[serde(default)]
+    pub telemetry: TelemetryConfig,
 }
 
 /// Load config: workspace `.kaizen/config.toml` then `~/.kaizen/config.toml`.
@@ -162,6 +266,25 @@ fn merge(base: Config, user: Config) -> Config {
         sources: user.sources,
         retention: user.retention,
         sync: merge_sync(base.sync, user.sync),
+        telemetry: merge_telemetry(base.telemetry, user.telemetry),
+    }
+}
+
+fn merge_telemetry(base: TelemetryConfig, user: TelemetryConfig) -> TelemetryConfig {
+    let def = TelemetryConfig::default();
+    let fail_open = if user.fail_open != def.fail_open {
+        user.fail_open
+    } else {
+        base.fail_open
+    };
+    let exporters = if !user.exporters.is_empty() {
+        user.exporters
+    } else {
+        base.exporters
+    };
+    TelemetryConfig {
+        fail_open,
+        exporters,
     }
 }
 
@@ -262,5 +385,26 @@ mod tests {
         };
         let merged = merge(base, user);
         assert_eq!(merged.scan.roots, vec!["/user"]);
+    }
+
+    #[test]
+    fn merge_telemetry_exporters_user_wins_non_empty() {
+        let base = Config {
+            telemetry: TelemetryConfig {
+                fail_open: true,
+                exporters: vec![ExporterConfig::None],
+            },
+            ..Default::default()
+        };
+        let user = Config {
+            telemetry: TelemetryConfig {
+                fail_open: false,
+                exporters: vec![ExporterConfig::Dev { enabled: true }],
+            },
+            ..Default::default()
+        };
+        let merged = merge(base, user);
+        assert!(!merged.telemetry.fail_open);
+        assert_eq!(merged.telemetry.exporters.len(), 1);
     }
 }

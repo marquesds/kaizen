@@ -2,8 +2,10 @@
 pub mod cli;
 pub mod exp;
 pub mod fmt;
+pub mod ingest;
 pub mod init;
 pub mod insights;
 pub mod metrics;
 pub mod retro;
 pub mod sync;
+pub mod telemetry;

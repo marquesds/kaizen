@@ -5,8 +5,10 @@ mod stub;
 use axum::{body::Body, http::Request};
 use tower::ServiceExt;
 
+use kaizen::core::config::TelemetryConfig;
 use kaizen::core::event::{Event, EventKind, EventSource, SessionRecord, SessionStatus};
 use kaizen::store::Store;
+use kaizen::sync::FlushExporters;
 
 #[tokio::test]
 async fn health_returns_200() {
@@ -127,7 +129,11 @@ team_salt_hex = "{salt_hex}"
     let sync_cfg = cfg.sync.clone();
     tokio::task::spawn_blocking(move || {
         let store = Store::open(&db_path).unwrap();
-        kaizen::sync::flush_outbox_once(&store, &ws_path, &sync_cfg, &salt).unwrap();
+        let flush = FlushExporters {
+            telemetry: &TelemetryConfig::default(),
+            registry: None,
+        };
+        kaizen::sync::flush_outbox_once(&store, &ws_path, &sync_cfg, &salt, &flush).unwrap();
     })
     .await
     .unwrap();

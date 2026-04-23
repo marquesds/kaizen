@@ -1,25 +1,39 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Flush outbox batches: size limits, split on 413, backoff on 429 / transient errors.
+//! Optional `FlushExporters` runs HTTP fan-out in parallel with the primary Kaizen POST; only
+//! a successful (or 409) primary result commits outbox. Secondary `Err` is observed only in that
+//! same step (and blocks commit when `fail_open` is `false`).
 
-use crate::core::config::SyncConfig;
+use crate::core::config::TelemetryConfig;
 use crate::store::Store;
+use crate::telemetry::ExporterRegistry;
+use crate::sync::IngestExportBatch;
 use crate::sync::client::{PostBatchOutcome, SyncHttpClient};
 use crate::sync::outbound::{EventsBatchBody, OutboundEvent};
 use crate::sync::smart::{
     OutboundRepoSnapshotChunk, OutboundToolSpan, RepoSnapshotsBatchBody, ToolSpansBatchBody,
 };
-use anyhow::{Context, Result};
+use anyhow::Context;
+use anyhow::Result;
 use std::path::Path;
 use std::thread;
 use std::time::Duration;
 use uuid::Uuid;
 
+/// Context for optional pluggable sinks (see [`crate::telemetry`]). Only holds references; copy freely.
+#[derive(Clone, Copy)]
+pub struct FlushExporters<'a> {
+    pub telemetry: &'a TelemetryConfig,
+    pub registry: Option<&'a ExporterRegistry>,
+}
+
 /// Flush pending outbox rows (all that fit batch constraints per iteration).
 pub fn flush_outbox_once(
     store: &Store,
     workspace_root: &Path,
-    cfg: &SyncConfig,
+    cfg: &crate::core::config::SyncConfig,
     team_salt: &[u8; 32],
+    flush: &FlushExporters<'_>,
 ) -> Result<FlushStats> {
     if cfg.endpoint.is_empty() {
         return Ok(FlushStats::default());
@@ -33,11 +47,13 @@ pub fn flush_outbox_once(
         if rows.is_empty() {
             break;
         }
-        let Some(kind) = rows.first().map(|(_, kind, _)| kind.clone()) else {
+        let Some(kind) = rows.first().map(|(_, k, _)| k.clone()) else {
             break;
         };
         let sent = match build_batch(&rows, cfg, &cfg.team_id, &workspace_hash, &kind)? {
-            Some((ids, batch)) => post_batch_resilient(&client, store, batch, &ids)?,
+            Some((ids, batch)) => {
+                post_batch_resilient(&client, store, batch, &ids, flush)?
+            }
             None => break,
         };
         stats.batches += sent.batches;
@@ -61,11 +77,11 @@ struct Sent {
 
 fn build_batch(
     rows: &[(i64, String, String)],
-    cfg: &SyncConfig,
+    cfg: &crate::core::config::SyncConfig,
     team_id: &str,
     workspace_hash: &str,
     kind: &str,
-) -> Result<Option<(Vec<i64>, PendingBatch)>> {
+) -> Result<Option<(Vec<i64>, IngestExportBatch)>> {
     match kind {
         "events" => {
             let (ids, events) = pack_batch_payloads::<OutboundEvent>(rows, cfg, kind)?;
@@ -74,7 +90,7 @@ fn build_batch(
             }
             Ok(Some((
                 ids,
-                PendingBatch::Events(EventsBatchBody {
+                IngestExportBatch::Events(EventsBatchBody {
                     team_id: team_id.into(),
                     workspace_hash: workspace_hash.into(),
                     events,
@@ -88,7 +104,7 @@ fn build_batch(
             }
             Ok(Some((
                 ids,
-                PendingBatch::ToolSpans(ToolSpansBatchBody {
+                IngestExportBatch::ToolSpans(ToolSpansBatchBody {
                     team_id: team_id.into(),
                     workspace_hash: workspace_hash.into(),
                     spans,
@@ -103,7 +119,7 @@ fn build_batch(
             }
             Ok(Some((
                 ids,
-                PendingBatch::RepoSnapshots(RepoSnapshotsBatchBody {
+                IngestExportBatch::RepoSnapshots(RepoSnapshotsBatchBody {
                     team_id: team_id.into(),
                     workspace_hash: workspace_hash.into(),
                     snapshots,
@@ -116,7 +132,7 @@ fn build_batch(
 
 fn pack_batch_payloads<T>(
     rows: &[(i64, String, String)],
-    cfg: &SyncConfig,
+    cfg: &crate::core::config::SyncConfig,
     kind: &str,
 ) -> Result<(Vec<i64>, Vec<T>)>
 where
@@ -145,35 +161,78 @@ where
     Ok((ids, out))
 }
 
-enum PendingBatch {
-    Events(EventsBatchBody),
-    ToolSpans(ToolSpansBatchBody),
-    RepoSnapshots(RepoSnapshotsBatchBody),
+/// Primary POST in parallel with optional exporter fan-out. Returns `(post, fan)`.
+fn post_with_fanout(
+    client: &SyncHttpClient,
+    body: &IngestExportBatch,
+    key: &Uuid,
+    flush: &FlushExporters<'_>,
+) -> Result<(Result<PostBatchOutcome, anyhow::Error>, Result<(), anyhow::Error>)> {
+    let fan_body = body.clone();
+    let reg = flush.registry;
+    let fail_open = flush.telemetry.fail_open;
+    Ok(std::thread::scope(|s| {
+        let handle = s.spawn(move || {
+            if let Some(r) = reg {
+                r.fan_out(fail_open, &fan_body)
+            } else {
+                Ok(())
+            }
+        });
+        let post_res: Result<PostBatchOutcome, anyhow::Error> = (|| {
+            let o = match body {
+                IngestExportBatch::Events(b) => client.post_events_batch(b, key)?,
+                IngestExportBatch::ToolSpans(b) => client.post_tool_spans_batch(b, key)?,
+                IngestExportBatch::RepoSnapshots(b) => client.post_repo_snapshots_batch(b, key)?,
+            };
+            Ok(o)
+        })();
+        let fan_res = match handle.join() {
+            Ok(Ok(())) => Ok(()),
+            Ok(Err(e)) => Err(e),
+            Err(p) => Err(anyhow::anyhow!("telemetry fan-out join panicked: {p:?}")),
+        };
+        (post_res, fan_res)
+    }))
 }
 
 fn post_batch_resilient(
     client: &SyncHttpClient,
     store: &Store,
-    body: PendingBatch,
+    body: IngestExportBatch,
     ids: &[i64],
+    flush: &FlushExporters<'_>,
 ) -> Result<Sent> {
     let mut backoff = Duration::from_millis(200);
     let max_backoff = Duration::from_secs(30);
     let mut server_failures = 0u32;
 
     loop {
-        if batch_len(&body) == 0 {
+        if body.item_count() == 0 {
             return Ok(Sent::default());
         }
 
         let key = Uuid::now_v7();
-        let outcome = match &body {
-            PendingBatch::Events(body) => client.post_events_batch(body, &key)?,
-            PendingBatch::ToolSpans(body) => client.post_tool_spans_batch(body, &key)?,
-            PendingBatch::RepoSnapshots(body) => client.post_repo_snapshots_batch(body, &key)?,
+        let (post_res, fan_res) = post_with_fanout(client, &body, &key, flush)?;
+        let outcome = post_res;
+
+        let outcome = match outcome {
+            Ok(o) => o,
+            Err(e) => {
+                if fan_res.is_err() {
+                    tracing::trace!(error = %e, "primary post and fan-out both failed");
+                }
+                return Err(e);
+            }
         };
+
         match outcome {
             PostBatchOutcome::Accepted { .. } | PostBatchOutcome::Conflict => {
+                if let Err(e) = fan_res {
+                    return Err(
+                        e.context("telemetry fan-out (before outbox commit; fail_open = false)"),
+                    );
+                }
                 store.mark_outbox_sent(ids)?;
                 store.set_sync_state_ok()?;
                 return Ok(Sent {
@@ -182,37 +241,52 @@ fn post_batch_resilient(
                 });
             }
             PostBatchOutcome::TooLarge => {
-                if batch_len(&body) <= 1 {
+                if let Err(e) = fan_res {
+                    tracing::warn!(error = %e, "telemetry fan-out failed; continuing 413 split");
+                }
+                if body.item_count() <= 1 {
                     store.set_sync_state_error("413: single event too large for server")?;
                     anyhow::bail!(
                         "413: single event too large; tighten redaction or max_body_bytes"
                     );
                 }
-                let mid = batch_len(&body) / 2;
+                let mid = body.item_count() / 2;
                 let left_ids = ids[..mid].to_vec();
                 let right_ids = ids[mid..].to_vec();
                 let (left_body, right_body) = split_batch(body, mid);
-                let a = post_batch_resilient(client, store, left_body, &left_ids)?;
-                let b = post_batch_resilient(client, store, right_body, &right_ids)?;
+                let a = post_batch_resilient(client, store, left_body, &left_ids, flush)?;
+                let b = post_batch_resilient(client, store, right_body, &right_ids, flush)?;
                 return Ok(Sent {
                     batches: a.batches + b.batches,
                     events: a.events + b.events,
                 });
             }
             PostBatchOutcome::RateLimited(d) => {
+                if let Err(e) = fan_res {
+                    tracing::warn!(error = %e, "telemetry fan-out failed during 429; will retry");
+                }
                 thread::sleep(d);
             }
             PostBatchOutcome::Unauthorized => {
+                if let Err(e) = fan_res {
+                    tracing::warn!(error = %e, "telemetry fan-out during 401");
+                }
                 let msg = "401 unauthorized (check team_token)";
                 store.set_sync_state_error(msg)?;
                 anyhow::bail!("{msg}");
             }
             PostBatchOutcome::ClientError(c) => {
+                if let Err(e) = fan_res {
+                    tracing::warn!(error = %e, "telemetry fan-out during client error {c}");
+                }
                 let msg = format!("HTTP client error {c}");
                 store.set_sync_state_error(&msg)?;
                 anyhow::bail!("{msg}");
             }
             PostBatchOutcome::ServerError(c) => {
+                if let Err(e) = fan_res {
+                    tracing::warn!(error = %e, "telemetry fan-out during {c} server error");
+                }
                 server_failures += 1;
                 if server_failures > 12 {
                     let msg = format!("HTTP server error {c} (exhausted retries)");
@@ -226,47 +300,39 @@ fn post_batch_resilient(
     }
 }
 
-fn batch_len(body: &PendingBatch) -> usize {
+fn split_batch(body: IngestExportBatch, mid: usize) -> (IngestExportBatch, IngestExportBatch) {
     match body {
-        PendingBatch::Events(body) => body.events.len(),
-        PendingBatch::ToolSpans(body) => body.spans.len(),
-        PendingBatch::RepoSnapshots(body) => body.snapshots.len(),
-    }
-}
-
-fn split_batch(body: PendingBatch, mid: usize) -> (PendingBatch, PendingBatch) {
-    match body {
-        PendingBatch::Events(body) => (
-            PendingBatch::Events(EventsBatchBody {
+        IngestExportBatch::Events(body) => (
+            IngestExportBatch::Events(EventsBatchBody {
                 team_id: body.team_id.clone(),
                 workspace_hash: body.workspace_hash.clone(),
                 events: body.events[..mid].to_vec(),
             }),
-            PendingBatch::Events(EventsBatchBody {
+            IngestExportBatch::Events(EventsBatchBody {
                 team_id: body.team_id,
                 workspace_hash: body.workspace_hash,
                 events: body.events[mid..].to_vec(),
             }),
         ),
-        PendingBatch::ToolSpans(body) => (
-            PendingBatch::ToolSpans(ToolSpansBatchBody {
+        IngestExportBatch::ToolSpans(body) => (
+            IngestExportBatch::ToolSpans(ToolSpansBatchBody {
                 team_id: body.team_id.clone(),
                 workspace_hash: body.workspace_hash.clone(),
                 spans: body.spans[..mid].to_vec(),
             }),
-            PendingBatch::ToolSpans(ToolSpansBatchBody {
+            IngestExportBatch::ToolSpans(ToolSpansBatchBody {
                 team_id: body.team_id,
                 workspace_hash: body.workspace_hash,
                 spans: body.spans[mid..].to_vec(),
             }),
         ),
-        PendingBatch::RepoSnapshots(body) => (
-            PendingBatch::RepoSnapshots(RepoSnapshotsBatchBody {
+        IngestExportBatch::RepoSnapshots(body) => (
+            IngestExportBatch::RepoSnapshots(RepoSnapshotsBatchBody {
                 team_id: body.team_id.clone(),
                 workspace_hash: body.workspace_hash.clone(),
                 snapshots: body.snapshots[..mid].to_vec(),
             }),
-            PendingBatch::RepoSnapshots(RepoSnapshotsBatchBody {
+            IngestExportBatch::RepoSnapshots(RepoSnapshotsBatchBody {
                 team_id: body.team_id,
                 workspace_hash: body.workspace_hash,
                 snapshots: body.snapshots[mid..].to_vec(),

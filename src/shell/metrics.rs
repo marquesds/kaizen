@@ -9,7 +9,13 @@ use crate::sync::{ingest_ctx, smart};
 use anyhow::Result;
 use std::path::Path;
 
-pub fn cmd_metrics(workspace: Option<&Path>, days: u32, json_out: bool, force: bool) -> Result<()> {
+/// Same output as `kaizen metrics` (human or pretty JSON when `json_out`).
+pub fn metrics_text(
+    workspace: Option<&Path>,
+    days: u32,
+    json_out: bool,
+    force: bool,
+) -> Result<String> {
     let ws = workspace_path(workspace)?;
     let cfg = config::load(&ws)?;
     let db_path = ws.join(".kaizen/kaizen.db");
@@ -20,22 +26,33 @@ pub fn cmd_metrics(workspace: Option<&Path>, days: u32, json_out: bool, force: b
     maybe_enqueue_snapshot(&store, &cfg, &ws, &snapshot)?;
     let metrics = report::build_report(&store, &ws_str, days)?;
     if json_out {
-        println!("{}", serde_json::to_string_pretty(&metrics)?);
-        return Ok(());
+        return Ok(serde_json::to_string_pretty(&metrics)?);
     }
-    print_human(&metrics);
+    Ok(format_human(&metrics))
+}
+
+pub fn cmd_metrics(workspace: Option<&Path>, days: u32, json_out: bool, force: bool) -> Result<()> {
+    print!("{}", metrics_text(workspace, days, json_out, force)?);
     Ok(())
 }
 
-pub fn cmd_metrics_index(workspace: Option<&Path>, force: bool) -> Result<()> {
+/// Same output as `kaizen metrics index`.
+pub fn metrics_index_text(workspace: Option<&Path>, force: bool) -> Result<String> {
     let ws = workspace_path(workspace)?;
     let cfg = config::load(&ws)?;
     let db_path = ws.join(".kaizen/kaizen.db");
     let store = Store::open(&db_path)?;
     let snapshot = index::ensure_indexed(&store, &ws, force)?;
     maybe_enqueue_snapshot(&store, &cfg, &ws, &snapshot)?;
-    println!("snapshot: {}", snapshot.id);
-    println!("graph:    {}", snapshot.graph_path);
+    use std::fmt::Write;
+    let mut s = String::new();
+    writeln!(&mut s, "snapshot: {}", snapshot.id).unwrap();
+    writeln!(&mut s, "graph:    {}", snapshot.graph_path).unwrap();
+    Ok(s)
+}
+
+pub fn cmd_metrics_index(workspace: Option<&Path>, force: bool) -> Result<()> {
+    print!("{}", metrics_index_text(workspace, force)?);
     Ok(())
 }
 
@@ -54,45 +71,68 @@ fn maybe_enqueue_snapshot(
 }
 
 pub fn print_human(metrics: &crate::metrics::types::MetricsReport) {
-    print_files("Hottest files", &metrics.hottest_files);
-    print_files("Most changed", &metrics.most_changed_files);
-    print_files("Most complex", &metrics.most_complex_files);
-    print_files("Highest risk", &metrics.highest_risk_files);
-    print_tools("Slowest tools", &metrics.slowest_tools);
-    print_tools("Highest token tools", &metrics.highest_token_tools);
-    print_tools("Highest reasoning tools", &metrics.highest_reasoning_tools);
-    print_files("Agent pain hotspots", &metrics.agent_pain_hotspots);
+    print!("{}", format_human(metrics));
 }
 
-fn print_files(title: &str, rows: &[crate::metrics::types::RankedFile]) {
-    println!("{title}");
+fn format_files(title: &str, rows: &[crate::metrics::types::RankedFile]) -> String {
+    use std::fmt::Write;
+    let mut s = String::new();
+    writeln!(&mut s, "{title}").unwrap();
     if rows.is_empty() {
-        println!("  (none)");
-        println!();
-        return;
+        writeln!(&mut s, "  (none)").unwrap();
+        writeln!(&mut s).unwrap();
+        return s;
     }
     for row in rows.iter().take(5) {
-        println!("  {:>8}  {}", row.value, row.path);
+        writeln!(&mut s, "  {:>8}  {}", row.value, row.path).unwrap();
     }
-    println!();
+    writeln!(&mut s).unwrap();
+    s
 }
 
-fn print_tools(title: &str, rows: &[crate::metrics::types::RankedTool]) {
-    println!("{title}");
+fn format_tools(title: &str, rows: &[crate::metrics::types::RankedTool]) -> String {
+    use std::fmt::Write;
+    let mut s = String::new();
+    writeln!(&mut s, "{title}").unwrap();
     if rows.is_empty() {
-        println!("  (none)");
-        println!();
-        return;
+        writeln!(&mut s, "  (none)").unwrap();
+        writeln!(&mut s).unwrap();
+        return s;
     }
     for row in rows.iter().take(5) {
         let p95 = row
             .p95_ms
             .map(|v| format!("{v}ms"))
             .unwrap_or_else(|| "-".into());
-        println!(
+        writeln!(
+            &mut s,
             "  {:<14} calls={} p95={} tok={} rtok={}",
             row.tool, row.calls, p95, row.total_tokens, row.total_reasoning_tokens
-        );
+        )
+        .unwrap();
     }
-    println!();
+    writeln!(&mut s).unwrap();
+    s
+}
+
+fn format_human(metrics: &crate::metrics::types::MetricsReport) -> String {
+    let mut out = String::new();
+    out.push_str(&format_files("Hottest files", &metrics.hottest_files));
+    out.push_str(&format_files("Most changed", &metrics.most_changed_files));
+    out.push_str(&format_files("Most complex", &metrics.most_complex_files));
+    out.push_str(&format_files("Highest risk", &metrics.highest_risk_files));
+    out.push_str(&format_tools("Slowest tools", &metrics.slowest_tools));
+    out.push_str(&format_tools(
+        "Highest token tools",
+        &metrics.highest_token_tools,
+    ));
+    out.push_str(&format_tools(
+        "Highest reasoning tools",
+        &metrics.highest_reasoning_tools,
+    ));
+    out.push_str(&format_files(
+        "Agent pain hotspots",
+        &metrics.agent_pain_hotspots,
+    ));
+    out
 }

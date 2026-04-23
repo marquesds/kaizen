@@ -39,3 +39,28 @@ id = "cursor"
 input_per_mtok = 3000000
 output_per_mtok = 15000000
 avg_tokens_per_turn = 5000
+
+# Heuristic rows for extra agents when model id is unknown (treat like Sonnet-scale).
+[[models]]
+id = "goose"
+input_per_mtok = 3000000
+output_per_mtok = 15000000
+avg_tokens_per_turn = 5000
+
+[[models]]
+id = "opencode"
+input_per_mtok = 3000000
+output_per_mtok = 15000000
+avg_tokens_per_turn = 5000
+
+[[models]]
+id = "copilot-cli"
+input_per_mtok = 2500000
+output_per_mtok = 10000000
+avg_tokens_per_turn = 5000
+
+[[models]]
+id = "copilot-vscode"
+input_per_mtok = 2500000
+output_per_mtok = 10000000
+avg_tokens_per_turn = 5000

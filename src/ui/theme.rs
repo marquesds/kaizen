@@ -6,7 +6,7 @@ use ratatui::style::Color;
 pub const RUNNING: Color = Color::LightGreen;
 pub const WAITING: Color = Color::Yellow;
 pub const IDLE: Color = Color::Cyan;
-pub const DONE: Color = Color::DarkGray;
+pub const DONE: Color = Color::Gray;
 
 pub const AGENT_CURSOR: Color = Color::Blue;
 pub const AGENT_CLAUDE: Color = Color::Magenta;
@@ -22,6 +22,9 @@ pub fn agent_color(agent: &str) -> Color {
         "cursor" => AGENT_CURSOR,
         "claude" => AGENT_CLAUDE,
         "codex" => AGENT_CODEX,
+        "goose" => Color::LightYellow,
+        "opencode" => Color::LightCyan,
+        "copilot-cli" | "copilot-vscode" => Color::Green,
         _ => AGENT_OTHER,
     }
 }

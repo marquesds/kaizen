@@ -68,6 +68,11 @@ enum Command {
         #[command(subcommand)]
         subcmd: SyncCommand,
     },
+    /// Optional third-party telemetry sinks (PostHog, Datadog, OTLP, dev) alongside Kaizen sync.
+    Telemetry {
+        #[command(subcommand)]
+        subcmd: TelemetrySubcommand,
+    },
     /// Experiment binding + report.
     Exp {
         #[command(subcommand)]
@@ -88,6 +93,22 @@ enum Command {
         #[arg(long)]
         force: bool,
         /// workspace root (default: cwd)
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+    },
+    /// Model Context Protocol server (stdio) — see docs/mcp.md.
+    Mcp,
+}
+
+#[derive(Subcommand)]
+enum TelemetrySubcommand {
+    /// Append `[[telemetry.exporters]]` template to `~/.kaizen/config.toml` (editor fill-in).
+    Configure {
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+    },
+    /// Redacted: merged telemetry exporter resolution (TOML + env).
+    PrintEffectiveConfig {
         #[arg(long)]
         workspace: Option<PathBuf>,
     },
@@ -264,6 +285,14 @@ fn main() -> anyhow::Result<()> {
         Command::Sync {
             subcmd: SyncCommand::Status { workspace },
         } => kaizen::shell::sync::cmd_sync_status(workspace.as_deref()),
+        Command::Telemetry { subcmd } => match subcmd {
+            TelemetrySubcommand::Configure { workspace } => {
+                kaizen::shell::telemetry::cmd_telemetry_configure(workspace.as_deref())
+            }
+            TelemetrySubcommand::PrintEffectiveConfig { workspace } => {
+                kaizen::shell::telemetry::cmd_telemetry_print_effective(workspace.as_deref())
+            }
+        },
         Command::Retro {
             days,
             dry_run,
@@ -272,6 +301,13 @@ fn main() -> anyhow::Result<()> {
             workspace,
         } => kaizen::shell::retro::cmd_retro(workspace.as_deref(), days, dry_run, json, force),
         Command::Exp { subcmd } => dispatch_exp(subcmd),
+        Command::Mcp => {
+            // Requires multi-threaded runtime (rmcp + spawn_blocking in tools)
+            let rt = tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()?;
+            rt.block_on(kaizen::mcp::run_stdio_server())
+        }
     }
 }
 
@@ -323,40 +359,9 @@ fn dispatch_exp(cmd: ExpCommand) -> anyhow::Result<()> {
 fn ingest_hook(source: Source, workspace: Option<PathBuf>) -> anyhow::Result<()> {
     let mut input = String::new();
     std::io::stdin().read_to_string(&mut input)?;
-    let event = match source {
-        Source::Cursor => kaizen::collect::hooks::cursor::parse_cursor_hook(&input)?,
-        Source::Claude => kaizen::collect::hooks::claude::parse_claude_hook(&input)?,
+    let src = match source {
+        Source::Cursor => kaizen::shell::ingest::IngestSource::Cursor,
+        Source::Claude => kaizen::shell::ingest::IngestSource::Claude,
     };
-    let ws = workspace.unwrap_or_else(|| std::env::current_dir().expect("cwd"));
-    let cfg = kaizen::core::config::load(&ws)?;
-    let sync_ctx = kaizen::sync::ingest_ctx(&cfg, ws.clone());
-    let db_path = ws.join(".kaizen/kaizen.db");
-    let store = kaizen::store::Store::open(&db_path)?;
-    let ev = kaizen::collect::hooks::normalize::hook_to_event(&event, 0);
-    if let Some(status) = kaizen::collect::hooks::normalize::hook_to_status(&event.kind) {
-        if matches!(event.kind, kaizen::collect::hooks::EventKind::SessionStart) {
-            let model = kaizen::collect::model_from_json::from_value(&event.payload);
-            let record = kaizen::core::event::SessionRecord {
-                id: event.session_id.clone(),
-                agent: "unknown".to_string(),
-                model,
-                workspace: ws.to_string_lossy().to_string(),
-                started_at_ms: event.ts_ms,
-                ended_at_ms: None,
-                status: status.clone(),
-                trace_path: String::new(),
-                start_commit: None,
-                end_commit: None,
-                branch: None,
-                dirty_start: None,
-                dirty_end: None,
-                repo_binding_source: None,
-            };
-            store.upsert_session(&record)?;
-        } else {
-            store.update_session_status(&event.session_id, status)?;
-        }
-    }
-    store.append_event_with_sync(&ev, sync_ctx.as_ref())?;
-    Ok(())
+    kaizen::shell::ingest::ingest_hook_text(src, &input, workspace)
 }

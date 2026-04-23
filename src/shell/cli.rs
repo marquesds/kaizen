@@ -3,7 +3,11 @@
 
 use crate::collect::tail::claude::scan_claude_session_dir;
 use crate::collect::tail::codex::scan_codex_session_dir;
+use crate::collect::tail::copilot_cli::scan_copilot_cli_workspace;
+use crate::collect::tail::copilot_vscode::scan_copilot_vscode_workspace;
 use crate::collect::tail::cursor::scan_session_dir_all;
+use crate::collect::tail::goose::scan_goose_workspace;
+use crate::collect::tail::opencode::scan_opencode_workspace;
 use crate::core::config;
 use crate::core::event::{Event, SessionRecord};
 use crate::metrics::{index, report};
@@ -15,8 +19,8 @@ use std::path::{Path, PathBuf};
 pub use crate::shell::init::cmd_init;
 pub use crate::shell::insights::cmd_insights;
 
-/// `kaizen sessions list` — scan all agent transcripts, upsert sessions, print table.
-pub fn cmd_sessions_list(workspace: Option<&Path>) -> Result<()> {
+/// `kaizen sessions list` — same output as CLI stdout.
+pub fn sessions_list_text(workspace: Option<&Path>) -> Result<String> {
     let ws = workspace_path(workspace)?;
     let cfg = config::load(&ws)?;
     let db_path = ws.join(".kaizen/kaizen.db");
@@ -26,49 +30,79 @@ pub fn cmd_sessions_list(workspace: Option<&Path>) -> Result<()> {
     scan_all_agents(&ws, &cfg, &ws_str, &store)?;
 
     let sessions = store.list_sessions(&ws_str)?;
-    println!("{:<40} {:<10} {:<10} STARTED", "ID", "AGENT", "STATUS");
-    println!("{}", "-".repeat(80));
+    use std::fmt::Write;
+    let mut out = String::new();
+    writeln!(
+        &mut out,
+        "{:<40} {:<10} {:<10} STARTED",
+        "ID", "AGENT", "STATUS"
+    )
+    .unwrap();
+    writeln!(&mut out, "{}", "-".repeat(80)).unwrap();
     for s in &sessions {
-        println!(
+        writeln!(
+            &mut out,
             "{:<40} {:<10} {:<10} {}",
             s.id,
             s.agent,
             format!("{:?}", s.status),
             fmt_ts(s.started_at_ms),
-        );
+        )
+        .unwrap();
     }
     if sessions.is_empty() {
-        println!("(no sessions)");
+        writeln!(&mut out, "(no sessions)").unwrap();
     }
+    Ok(out)
+}
+
+/// `kaizen sessions list` — scan all agent transcripts, upsert sessions, print table.
+pub fn cmd_sessions_list(workspace: Option<&Path>) -> Result<()> {
+    print!("{}", sessions_list_text(workspace)?);
     Ok(())
+}
+
+/// `kaizen sessions show` — same output as CLI stdout.
+pub fn session_show_text(id: &str, workspace: Option<&Path>) -> Result<String> {
+    let ws = workspace_path(workspace)?;
+    let db_path = ws.join(".kaizen/kaizen.db");
+    let store = Store::open(&db_path)?;
+    use std::fmt::Write;
+    let mut out = String::new();
+    match store.get_session(id)? {
+        Some(s) => {
+            writeln!(&mut out, "id:           {}", s.id).unwrap();
+            writeln!(&mut out, "agent:        {}", s.agent).unwrap();
+            writeln!(
+                &mut out,
+                "model:        {}",
+                s.model.as_deref().unwrap_or("-")
+            )
+            .unwrap();
+            writeln!(&mut out, "workspace:    {}", s.workspace).unwrap();
+            writeln!(&mut out, "started_at:   {}", fmt_ts(s.started_at_ms)).unwrap();
+            writeln!(
+                &mut out,
+                "ended_at:     {}",
+                s.ended_at_ms.map(fmt_ts).unwrap_or_else(|| "-".to_string())
+            )
+            .unwrap();
+            writeln!(&mut out, "status:       {:?}", s.status).unwrap();
+            writeln!(&mut out, "trace_path:   {}", s.trace_path).unwrap();
+        }
+        None => anyhow::bail!("session not found: {id} — try `kaizen sessions list`"),
+    }
+    Ok(out)
 }
 
 /// `kaizen sessions show <id>` — print full session fields.
 pub fn cmd_session_show(id: &str, workspace: Option<&Path>) -> Result<()> {
-    let ws = workspace_path(workspace)?;
-    let db_path = ws.join(".kaizen/kaizen.db");
-    let store = Store::open(&db_path)?;
-    match store.get_session(id)? {
-        Some(s) => {
-            println!("id:           {}", s.id);
-            println!("agent:        {}", s.agent);
-            println!("model:        {}", s.model.as_deref().unwrap_or("-"));
-            println!("workspace:    {}", s.workspace);
-            println!("started_at:   {}", fmt_ts(s.started_at_ms));
-            println!(
-                "ended_at:     {}",
-                s.ended_at_ms.map(fmt_ts).unwrap_or_else(|| "-".to_string())
-            );
-            println!("status:       {:?}", s.status);
-            println!("trace_path:   {}", s.trace_path);
-        }
-        None => anyhow::bail!("session not found: {id} — try `kaizen sessions list`"),
-    }
+    print!("{}", session_show_text(id, workspace)?);
     Ok(())
 }
 
-/// `kaizen summary` — aggregate session + cost stats across all agents.
-pub fn cmd_summary(workspace: Option<&Path>) -> Result<()> {
+/// `kaizen summary` — same output as CLI stdout.
+pub fn summary_text(workspace: Option<&Path>) -> Result<String> {
     let ws = workspace_path(workspace)?;
     let cfg = config::load(&ws)?;
     let db_path = ws.join(".kaizen/kaizen.db");
@@ -79,10 +113,14 @@ pub fn cmd_summary(workspace: Option<&Path>) -> Result<()> {
 
     let stats = store.summary_stats(&ws_str)?;
     let cost_dollars = stats.total_cost_usd_e6 as f64 / 1_000_000.0;
-    println!(
+    use std::fmt::Write;
+    let mut out = String::new();
+    writeln!(
+        &mut out,
         "Sessions: {}   Cost: ${:.2}",
         stats.session_count, cost_dollars
-    );
+    )
+    .unwrap();
 
     if !stats.by_agent.is_empty() {
         let parts: Vec<String> = stats
@@ -90,7 +128,7 @@ pub fn cmd_summary(workspace: Option<&Path>) -> Result<()> {
             .iter()
             .map(|(a, n)| format!("{a} {n}"))
             .collect();
-        println!("By agent:  {}", parts.join(" · "));
+        writeln!(&mut out, "By agent:  {}", parts.join(" · ")).unwrap();
     }
     if !stats.by_model.is_empty() {
         let parts: Vec<String> = stats
@@ -98,7 +136,7 @@ pub fn cmd_summary(workspace: Option<&Path>) -> Result<()> {
             .iter()
             .map(|(m, n)| format!("{m} {n}"))
             .collect();
-        println!("By model:  {}", parts.join(" · "));
+        writeln!(&mut out, "By model:  {}", parts.join(" · ")).unwrap();
     }
     if !stats.top_tools.is_empty() {
         let parts: Vec<String> = stats
@@ -106,7 +144,7 @@ pub fn cmd_summary(workspace: Option<&Path>) -> Result<()> {
             .iter()
             .map(|(t, n)| format!("{t} {n}"))
             .collect();
-        println!("Top tools: {}", parts.join(" · "));
+        writeln!(&mut out, "Top tools: {}", parts.join(" · ")).unwrap();
     }
     if let Ok(_snapshot) = index::ensure_indexed(&store, &ws, false)
         && let Ok(metrics) = report::build_report(&store, &ws_str, 7)
@@ -120,16 +158,22 @@ pub fn cmd_summary(workspace: Option<&Path>) -> Result<()> {
                 crate::sync::smart::enqueue_repo_snapshot(&store, snapshot, &facts, &edges, &ctx);
         }
         if let Some(file) = metrics.hottest_files.first() {
-            println!("Hotspot:   {} ({})", file.path, file.value);
+            writeln!(&mut out, "Hotspot:   {} ({})", file.path, file.value).unwrap();
         }
         if let Some(tool) = metrics.slowest_tools.first() {
             let p95 = tool
                 .p95_ms
                 .map(|v| format!("{v}ms"))
                 .unwrap_or_else(|| "-".into());
-            println!("Slowest:   {} p95 {}", tool.tool, p95);
+            writeln!(&mut out, "Slowest:   {} p95 {}", tool.tool, p95).unwrap();
         }
     }
+    Ok(out)
+}
+
+/// `kaizen summary` — aggregate session + cost stats across all agents.
+pub fn cmd_summary(workspace: Option<&Path>) -> Result<()> {
+    print!("{}", summary_text(workspace)?);
     Ok(())
 }
 
@@ -196,6 +240,52 @@ pub(crate) fn scan_all_agents(
         sync_ctx.as_ref(),
     )?;
 
+    let tail = &cfg.sources.tail;
+    let home_pb = PathBuf::from(&home);
+    if tail.goose {
+        let sessions = scan_goose_workspace(&home_pb, ws)?;
+        persist_session_batch(store, sessions, sync_ctx.as_ref())?;
+    }
+    if tail.opencode {
+        let sessions = scan_opencode_workspace(ws)?;
+        persist_session_batch(store, sessions, sync_ctx.as_ref())?;
+    }
+    if tail.copilot_cli {
+        let sessions = scan_copilot_cli_workspace(ws)?;
+        persist_session_batch(store, sessions, sync_ctx.as_ref())?;
+    }
+    if tail.copilot_vscode {
+        let sessions = scan_copilot_vscode_workspace(ws)?;
+        persist_session_batch(store, sessions, sync_ctx.as_ref())?;
+    }
+
+    Ok(())
+}
+
+fn persist_session_batch(
+    store: &Store,
+    sessions: Vec<(SessionRecord, Vec<Event>)>,
+    sync_ctx: Option<&crate::sync::SyncIngestContext>,
+) -> Result<()> {
+    for (mut record, events) in sessions {
+        if record.start_commit.is_none() && !record.workspace.is_empty() {
+            let binding = crate::core::repo::binding_for_session(
+                Path::new(&record.workspace),
+                record.started_at_ms,
+                record.ended_at_ms,
+            );
+            record.start_commit = binding.start_commit;
+            record.end_commit = binding.end_commit;
+            record.branch = binding.branch;
+            record.dirty_start = binding.dirty_start;
+            record.dirty_end = binding.dirty_end;
+            record.repo_binding_source = binding.source;
+        }
+        store.upsert_session(&record)?;
+        for ev in events {
+            store.append_event_with_sync(&ev, sync_ctx)?;
+        }
+    }
     Ok(())
 }
 

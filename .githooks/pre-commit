@@ -1,0 +1,7 @@
+#!/usr/bin/env sh
+# Fails the commit if any Rust file needs reformatting.
+# To fix: `cargo fmt --all` then `git add` the changes.
+# Enable once per clone: `git config core.hooksPath .githooks`
+set -eu
+
+cargo fmt --all -- --check

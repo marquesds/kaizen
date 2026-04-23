@@ -27,7 +27,7 @@ pub struct NewArgs {
     pub treatment_commit: Option<String>,
 }
 
-pub fn cmd_new(workspace: Option<&Path>, args: NewArgs) -> Result<()> {
+pub fn exp_new_text(workspace: Option<&Path>, args: NewArgs) -> Result<String> {
     let ws = workspace_path(workspace)?;
     let db_path = ws.join(".kaizen/kaizen.db");
     let store = Store::open(&db_path)?;
@@ -52,7 +52,11 @@ pub fn cmd_new(workspace: Option<&Path>, args: NewArgs) -> Result<()> {
         concluded_at_ms: None,
     };
     exp_store::save_experiment(&store, &exp_rec)?;
-    println!("created {} · {}", exp_rec.id, exp_rec.name);
+    Ok(format!("created {} · {}\n", exp_rec.id, exp_rec.name))
+}
+
+pub fn cmd_new(workspace: Option<&Path>, args: NewArgs) -> Result<()> {
+    print!("{}", exp_new_text(workspace, args)?);
     Ok(())
 }
 
@@ -104,59 +108,99 @@ fn parent_of(ws: &Path, commit: &str) -> Result<String> {
     Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
 
-pub fn cmd_list(workspace: Option<&Path>) -> Result<()> {
+pub fn exp_list_text(workspace: Option<&Path>) -> Result<String> {
+    use std::fmt::Write;
     let ws = workspace_path(workspace)?;
     let store = Store::open(&ws.join(".kaizen/kaizen.db"))?;
     let all = exp_store::list_experiments(&store)?;
+    let mut out = String::new();
     if all.is_empty() {
-        println!("(no experiments)");
-        return Ok(());
+        writeln!(&mut out, "(no experiments)").unwrap();
+        return Ok(out);
     }
-    println!("{:<38} {:<10} {:<24} METRIC", "ID", "STATE", "NAME");
-    println!("{}", "-".repeat(96));
+    writeln!(
+        &mut out,
+        "{:<38} {:<10} {:<24} METRIC",
+        "ID", "STATE", "NAME"
+    )
+    .unwrap();
+    writeln!(&mut out, "{}", "-".repeat(96)).unwrap();
     for e in &all {
-        println!(
+        writeln!(
+            &mut out,
             "{:<38} {:<10?} {:<24} {}",
             e.id,
             e.state,
             truncate(&e.name, 24),
             e.metric.as_str()
-        );
+        )
+        .unwrap();
     }
+    Ok(out)
+}
+
+pub fn cmd_list(workspace: Option<&Path>) -> Result<()> {
+    print!("{}", exp_list_text(workspace)?);
     Ok(())
 }
 
-pub fn cmd_status(workspace: Option<&Path>, id: &str) -> Result<()> {
+pub fn exp_status_text(workspace: Option<&Path>, id: &str) -> Result<String> {
+    use std::fmt::Write;
     let ws = workspace_path(workspace)?;
     let store = Store::open(&ws.join(".kaizen/kaizen.db"))?;
     let e = exp_store::load_experiment(&store, id)?
         .ok_or_else(|| anyhow!("experiment not found: {id}"))?;
-    println!("id:         {}", e.id);
-    println!("name:       {}", e.name);
-    println!("state:      {:?}", e.state);
-    println!("metric:     {}", e.metric.as_str());
-    println!("duration:   {}d", e.duration_days);
-    println!("created:    {}", e.created_at_ms);
+    let mut out = String::new();
+    writeln!(&mut out, "id:         {}", e.id).unwrap();
+    writeln!(&mut out, "name:       {}", e.name).unwrap();
+    writeln!(&mut out, "state:      {:?}", e.state).unwrap();
+    writeln!(&mut out, "metric:     {}", e.metric.as_str()).unwrap();
+    writeln!(&mut out, "duration:   {}d", e.duration_days).unwrap();
+    writeln!(&mut out, "created:    {}", e.created_at_ms).unwrap();
     if let Some(c) = e.concluded_at_ms {
-        println!("concluded:  {c}");
+        writeln!(&mut out, "concluded:  {c}").unwrap();
     }
-    println!("hypothesis: {}", e.hypothesis);
-    println!("change:     {}", e.change_description);
+    writeln!(&mut out, "hypothesis: {}", e.hypothesis).unwrap();
+    writeln!(&mut out, "change:     {}", e.change_description).unwrap();
     match &e.binding {
         Binding::GitCommit {
             control_commit,
             treatment_commit,
-        } => println!("binding:    git control={control_commit} treatment={treatment_commit}"),
+        } => {
+            writeln!(
+                &mut out,
+                "binding:    git control={control_commit} treatment={treatment_commit}"
+            )
+            .unwrap();
+        }
         Binding::Branch {
             control_branch,
             treatment_branch,
-        } => println!("binding:    branch control={control_branch} treatment={treatment_branch}"),
-        Binding::ManualTag { variant_field } => println!("binding:    manual({variant_field})"),
+        } => {
+            writeln!(
+                &mut out,
+                "binding:    branch control={control_branch} treatment={treatment_branch}"
+            )
+            .unwrap();
+        }
+        Binding::ManualTag { variant_field } => {
+            writeln!(&mut out, "binding:    manual({variant_field})").unwrap();
+        }
     }
+    Ok(out)
+}
+
+pub fn cmd_status(workspace: Option<&Path>, id: &str) -> Result<()> {
+    print!("{}", exp_status_text(workspace, id)?);
     Ok(())
 }
 
-pub fn cmd_tag(workspace: Option<&Path>, id: &str, session_id: &str, variant: &str) -> Result<()> {
+pub fn exp_tag_text(
+    workspace: Option<&Path>,
+    id: &str,
+    session_id: &str,
+    variant: &str,
+) -> Result<String> {
     let ws = workspace_path(workspace)?;
     let store = Store::open(&ws.join(".kaizen/kaizen.db"))?;
     let v = match variant {
@@ -170,11 +214,15 @@ pub fn cmd_tag(workspace: Option<&Path>, id: &str, session_id: &str, variant: &s
         }
     };
     exp_store::tag_session(&store, id, session_id, v)?;
-    println!("tagged {session_id} -> {variant} for {id}");
+    Ok(format!("tagged {session_id} -> {variant} for {id}\n"))
+}
+
+pub fn cmd_tag(workspace: Option<&Path>, id: &str, session_id: &str, variant: &str) -> Result<()> {
+    print!("{}", exp_tag_text(workspace, id, session_id, variant)?);
     Ok(())
 }
 
-pub fn cmd_report(workspace: Option<&Path>, id: &str, json_out: bool) -> Result<()> {
+pub fn exp_report_text(workspace: Option<&Path>, id: &str, json_out: bool) -> Result<String> {
     let ws = workspace_path(workspace)?;
     let cfg = config::load(&ws)?;
     let store = Store::open(&ws.join(".kaizen/kaizen.db"))?;
@@ -187,14 +235,18 @@ pub fn cmd_report(workspace: Option<&Path>, id: &str, json_out: bool) -> Result<
     let manual = exp_store::manual_tags(&store, id)?;
     let report = exp::run(&exp_rec, &sessions, &manual, &ws);
     if json_out {
-        println!("{}", serde_json::to_string_pretty(&report)?);
+        Ok(serde_json::to_string_pretty(&report)?)
     } else {
-        print!("{}", exp::to_markdown(&report));
+        Ok(exp::to_markdown(&report))
     }
+}
+
+pub fn cmd_report(workspace: Option<&Path>, id: &str, json_out: bool) -> Result<()> {
+    print!("{}", exp_report_text(workspace, id, json_out)?);
     Ok(())
 }
 
-pub fn cmd_conclude(workspace: Option<&Path>, id: &str) -> Result<()> {
+pub fn exp_conclude_text(workspace: Option<&Path>, id: &str) -> Result<String> {
     let ws = workspace_path(workspace)?;
     let store = Store::open(&ws.join(".kaizen/kaizen.db"))?;
     let exp_rec = exp_store::load_experiment(&store, id)?
@@ -202,7 +254,11 @@ pub fn cmd_conclude(workspace: Option<&Path>, id: &str) -> Result<()> {
     let next = transition(exp_rec.state, "conclude")
         .ok_or_else(|| anyhow!("cannot conclude from {:?}", exp_rec.state))?;
     exp_store::set_state(&store, id, next, now_ms())?;
-    println!("concluded {id}");
+    Ok(format!("concluded {id}\n"))
+}
+
+pub fn cmd_conclude(workspace: Option<&Path>, id: &str) -> Result<()> {
+    print!("{}", exp_conclude_text(workspace, id)?);
     Ok(())
 }
 
