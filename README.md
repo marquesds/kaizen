@@ -4,7 +4,7 @@ Local-first telemetry and tooling for AI coding agent sessions
 (Cursor, Claude Code, Codex). Collect, store, and reason about what
 agents do in your repos — offline by default, redacted before any sync.
 
-[![CI](https://github.com/lucasmarqs/kaizen/actions/workflows/ci.yml/badge.svg)](https://github.com/lucasmarqs/kaizen/actions/workflows/ci.yml)
+[![CI](https://github.com/marquesds/kaizen/actions/workflows/ci.yml/badge.svg)](https://github.com/marquesds/kaizen/actions/workflows/ci.yml)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
 [![Crates.io](https://img.shields.io/crates/v/kaizen.svg)](https://crates.io/crates/kaizen)
 
