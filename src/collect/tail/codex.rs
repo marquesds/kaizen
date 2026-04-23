@@ -2,6 +2,7 @@
 //! Parse Codex (OpenAI) transcript `.jsonl` files into Events.
 //! Pure parser — no notify dependency, no IO beyond file reads.
 
+use crate::collect::model_from_json;
 use crate::core::event::{Event, EventKind, EventSource, SessionRecord, SessionStatus};
 use anyhow::{Context, Result};
 use serde_json::Value;
@@ -106,25 +107,9 @@ pub fn scan_codex_session_dir(dir: &Path) -> Result<(SessionRecord, Vec<Event>)>
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_default();
 
-    let record = SessionRecord {
-        id: session_id.clone(),
-        agent: "codex".to_string(),
-        model: None,
-        workspace,
-        started_at_ms: crate::collect::tail::dir_mtime_ms(dir),
-        ended_at_ms: None,
-        status: SessionStatus::Done,
-        trace_path: dir.to_string_lossy().to_string(),
-        start_commit: None,
-        end_commit: None,
-        branch: None,
-        dirty_start: None,
-        dirty_end: None,
-        repo_binding_source: None,
-    };
-
     let mut events = Vec::new();
     let mut seq: u64 = 0;
+    let mut model: Option<String> = None;
 
     let mut entries: Vec<_> = std::fs::read_dir(dir)
         .with_context(|| format!("read dir: {}", dir.display()))?
@@ -139,6 +124,9 @@ pub fn scan_codex_session_dir(dir: &Path) -> Result<(SessionRecord, Vec<Event>)>
             if line.trim().is_empty() {
                 continue;
             }
+            if model.is_none() {
+                model = model_from_json::from_line(line);
+            }
             if let Some(ev) = parse_codex_line(&session_id, seq, 0, line)? {
                 events.push(ev);
             }
@@ -146,6 +134,22 @@ pub fn scan_codex_session_dir(dir: &Path) -> Result<(SessionRecord, Vec<Event>)>
         }
     }
 
+    let record = SessionRecord {
+        id: session_id.clone(),
+        agent: "codex".to_string(),
+        model,
+        workspace,
+        started_at_ms: crate::collect::tail::dir_mtime_ms(dir),
+        ended_at_ms: None,
+        status: SessionStatus::Done,
+        trace_path: dir.to_string_lossy().to_string(),
+        start_commit: None,
+        end_commit: None,
+        branch: None,
+        dirty_start: None,
+        dirty_end: None,
+        repo_binding_source: None,
+    };
     Ok((record, events))
 }
 
@@ -183,6 +187,7 @@ mod tests {
             std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/codex");
         let (record, events) = scan_codex_session_dir(&fixture_dir).unwrap();
         assert_eq!(record.agent, "codex");
+        assert_eq!(record.model.as_deref(), Some("gpt-4o-fixture"));
         assert!(!events.is_empty(), "expected events from fixture files");
     }
 }
