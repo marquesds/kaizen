@@ -90,9 +90,7 @@ impl App {
             self.events.clear();
             self.tool_lead_by_call.clear();
         }
-        self.sel_event = self
-            .sel_event
-            .min(self.events.len().saturating_sub(1));
+        self.sel_event = self.sel_event.min(self.events.len().saturating_sub(1));
         self.metrics = report::build_report(&self.store, &self.workspace, 7).ok();
         Ok(())
     }
@@ -188,18 +186,10 @@ fn format_event_tokens(e: &Event) -> Option<String> {
             out = format!("{out}+r{r}");
         }
     }
-    if out.is_empty() {
-        None
-    } else {
-        Some(out)
-    }
+    if out.is_empty() { None } else { Some(out) }
 }
 
-fn event_row_text(
-    now_ms: u64,
-    e: &Event,
-    lead: &HashMap<String, u64>,
-) -> String {
+fn event_row_text(now_ms: u64, e: &Event, lead: &HashMap<String, u64>) -> String {
     let age = time_ago_label(now_ms, e.ts_ms);
     let tool = e.tool.as_deref().unwrap_or("-");
     let lead_s = e
@@ -255,20 +245,14 @@ fn draw_sessions(f: &mut ratatui::Frame, app: &App, area: ratatui::layout::Rect)
             let tag = session_status_letter(s);
             let m = model_suffix(&s.model);
             let line = Line::from(vec![
-                Span::styled(
-                    format!("{:.10}", s.id),
-                    Style::default().fg(Color::Gray),
-                ),
+                Span::styled(format!("{:.10}", s.id), Style::default().fg(Color::Gray)),
                 Span::raw(" "),
                 Span::styled(
                     format!("{:.7}", s.agent),
                     Style::default().fg(theme::agent_color(&s.agent)),
                 ),
                 Span::raw(" "),
-                Span::styled(
-                    format!("{tag}"),
-                    Style::default().fg(st_color),
-                ),
+                Span::styled(format!("{tag}"), Style::default().fg(st_color)),
                 Span::raw(" "),
                 Span::styled(age, Style::default().fg(Color::White)),
                 Span::styled(m, Style::default().fg(Color::Gray)),

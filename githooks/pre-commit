@@ -1,0 +1,20 @@
+#!/bin/sh
+# Run rustfmt for the whole workspace (matches CI: cargo fmt --all -- --check).
+# Re-stages any staged .rs files so formatting is part of the commit.
+set -e
+cd "$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
+
+if ! command -v cargo >/dev/null 2>&1; then
+	printf '%s\n' "pre-commit: cargo not found; install Rust to format Rust code." >&2
+	exit 1
+fi
+
+if ! git diff --cached --name-only --diff-filter=ACM | grep -q '\.rs$'; then
+	exit 0
+fi
+
+cargo fmt --all
+
+git diff --cached --name-only --diff-filter=ACM | grep -E '\.rs$' | while IFS= read -r f; do
+	[ -f "$f" ] && git add -- "$f"
+done

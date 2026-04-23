@@ -6,6 +6,7 @@ pub mod ingest;
 pub mod init;
 pub mod insights;
 pub mod metrics;
+pub mod proxy;
 pub mod retro;
 pub mod sync;
 pub mod telemetry;

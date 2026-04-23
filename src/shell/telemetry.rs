@@ -16,7 +16,10 @@ pub fn cmd_telemetry_configure(workspace: Option<&Path>) -> Result<()> {
     std::fs::create_dir_all(p.parent().unwrap())?;
 
     println!("Kaizen pluggable telemetry — optional sinks fan-out alongside Kaizen sync.");
-    println!("This command appends a `[[telemetry.exporters]]` table to {}.", p.display());
+    println!(
+        "This command appends a `[[telemetry.exporters]]` table to {}.",
+        p.display()
+    );
     print!("Type `posthog`, `datadog`, `otlp`, or `dev` (or empty to abort): ");
     std::io::stdout().flush()?;
     let mut line = String::new();
@@ -93,13 +96,19 @@ pub fn print_effective_config_text(workspace: Option<&Path>) -> Result<String> {
                         r.project_api_key.len()
                     )
                 } else {
-                    format!("[{i}] type=posthog (unresolved: set POSTHOG_API_KEY or project_api_key)")
+                    format!(
+                        "[{i}] type=posthog (unresolved: set POSTHOG_API_KEY or project_api_key)"
+                    )
                 };
                 writeln!(&mut s, "{line}").unwrap();
             }
             ExporterConfig::Datadog { .. } => {
                 let line = if let Some(r) = DatadogResolved::from_config(e) {
-                    format!("[{i}] type=datadog site={} key=<redacted len {}>", r.site, r.api_key.len())
+                    format!(
+                        "[{i}] type=datadog site={} key=<redacted len {}>",
+                        r.site,
+                        r.api_key.len()
+                    )
                 } else {
                     format!("[{i}] type=datadog (unresolved: set DD_API_KEY or api_key in TOML)")
                 };

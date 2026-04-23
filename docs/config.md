@@ -8,6 +8,11 @@
 
 <!-- Add crate roles as dependencies grow -->
 
+## `~/.kaizen/config.toml` and `.kaizen/config.toml`
+
+Merge order: defaults → workspace TOML → user `~/.kaizen` TOML (later wins on most keys).
+See [llm-proxy.md](llm-proxy.md) for the `[proxy]` table.
+
 ## Environment Variables
 
 | Var | Required | Default | Purpose |

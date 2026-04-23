@@ -11,6 +11,7 @@ here explicitly.
 ## [Unreleased]
 
 ### Added
+- `kaizen proxy run` — local HTTP forwarder for Anthropic-style APIs, `[proxy]` in `config.toml`, `docs/llm-proxy.md`.
 - `docs/install.md`, `docs/usage.md`, `docs/concepts.md` — user-facing docs.
 - `CODE_OF_CONDUCT.md`, `SECURITY.md`, issue + PR templates.
 - `CHANGELOG.md` (this file).

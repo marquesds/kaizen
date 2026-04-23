@@ -23,6 +23,7 @@ Collects, stores, and analyzes agent session data.
 kaizen/
 ├── src/
 │   ├── main.rs          # binary entry point
+│   ├── proxy/            # local LLM API forwarder + `EventSource::Proxy` (see `docs/llm-proxy.md`)
 │   ├── metrics/         # repo indexing + smart metric report
 │   ├── sync/            # event/span/snapshot sync
 │   └── retro/           # heuristic report engine

@@ -8,6 +8,7 @@ Index.
 |---|---|
 | [install.md](install.md) | Install, build from source, uninstall |
 | [usage.md](usage.md) | CLI reference |
+| [llm-proxy.md](llm-proxy.md) | Local HTTP forwarder for LLM APIs (Anthropic) |
 | [concepts.md](concepts.md) | Sessions, events, retro, experiments |
 | [config.md](config.md) | Config file + env vars |
 | [retro.md](retro.md) | Heuristic retro engine |
@@ -33,6 +34,7 @@ Index.
 | New/changed data struct | `datamodel.md` |
 | New module | `architecture.md` |
 | New env var | `config.md` |
+| `kaizen proxy` or proxy config | [llm-proxy.md](llm-proxy.md), [config.md](config.md) |
 | New pattern or decision | `patterns.md` or new ADR |
 | Directory layout change | `structure.md` |
 | Ingest / sync contract | `ingest-contract.md` |

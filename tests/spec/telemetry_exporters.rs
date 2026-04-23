@@ -86,7 +86,11 @@ impl Driver for TelemetryExportersDriver {
     }
 }
 
-#[quint_run(spec = "specs/telemetry-exporters.qnt", max_samples = 12, max_steps = 8)]
+#[quint_run(
+    spec = "specs/telemetry-exporters.qnt",
+    max_samples = 12,
+    max_steps = 8
+)]
 fn telemetry_exporters_run() -> impl Driver {
     TelemetryExportersDriver::default()
 }

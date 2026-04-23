@@ -40,11 +40,7 @@ pub fn vscode_workspace_storage_roots() -> Vec<PathBuf> {
                 roots.push(base.join("Code - Insiders/User/workspaceStorage"));
             }
         }
-        #[cfg(not(any(
-            target_os = "macos",
-            target_os = "linux",
-            target_os = "windows"
-        )))]
+        #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
         {
             roots.push(h.join(".config/Code/User/workspaceStorage"));
             roots.push(h.join(".config/Code - Insiders/User/workspaceStorage"));
@@ -85,7 +81,11 @@ fn parse_vscode_copilot_json(path: &Path, session_id: &str) -> Result<Vec<Event>
 
             if let Some(reqs) = turn.get("requests").and_then(|r| r.as_array()) {
                 for req in reqs {
-                    if let Some(tool) = req.get("toolName").or_else(|| req.get("commandId")).and_then(|x| x.as_str()) {
+                    if let Some(tool) = req
+                        .get("toolName")
+                        .or_else(|| req.get("commandId"))
+                        .and_then(|x| x.as_str())
+                    {
                         events.push(Event {
                             session_id: session_id.to_string(),
                             seq,
