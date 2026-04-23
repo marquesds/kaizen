@@ -23,7 +23,7 @@ cargo install kaizen
 kaizen init
 ```
 
-Requires Rust 1.85+ (edition 2024). Full install guide:
+Requires Rust 1.95+ (edition 2024). Full install guide:
 [docs/install.md](docs/install.md).
 
 ## Quick start

@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- Rust 1.85+ (edition 2024). Install via [rustup](https://rustup.rs).
+- Rust 1.95+ (edition 2024). Install via [rustup](https://rustup.rs).
 - macOS or Linux. Windows not supported in v0.1.
 - Optional for dev: Node 20+ for Quint specs, `cargo-audit`, `cargo-deny`.
 
