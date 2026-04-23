@@ -103,7 +103,7 @@ aho-corasick = "1"
 regex = "1"
 hex = "0.4"
 time = { version = "0.3", features = ["formatting", "macros", "local-offset"] }
-fs4 = { version = "0.13", features = ["sync"] }
+fs4 = { version = "1.0", features = ["sync"] }
 lbug = "0.15"
 tree-sitter = "0.25"
 tree-sitter-rust = "0.24"
