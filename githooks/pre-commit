@@ -4,13 +4,21 @@
 set -e
 cd "$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
 
+staged="$(git diff --cached --name-only --diff-filter=ACM)"
+
+printf '%s\n' "$staged" | grep -q '\.qnt$' && {
+	if ! command -v quint >/dev/null 2>&1; then
+		printf '%s\n' "pre-commit: quint not found; install @informalsystems/quint@0.32.0 to commit spec changes (CONTRIBUTING.md)." >&2
+		exit 1
+	fi
+	scripts/check-quint-specs.sh
+}
+
+printf '%s\n' "$staged" | grep -q '\.rs$' || exit 0
+
 if ! command -v cargo >/dev/null 2>&1; then
 	printf '%s\n' "pre-commit: cargo not found; install Rust to format Rust code." >&2
 	exit 1
-fi
-
-if ! git diff --cached --name-only --diff-filter=ACM | grep -q '\.rs$'; then
-	exit 0
 fi
 
 cargo fmt --all
