@@ -94,7 +94,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 toml = "0.8"
 ratatui = "0.29"
-crossterm = "0.28"
+crossterm = "0.29"
 reqwest = { version = "0.12", default-features = false, features = ["json", "gzip", "blocking", "rustls-tls"] }
 flate2 = "1"
 uuid = { version = "1", features = ["v7"] }
