@@ -11,7 +11,7 @@ use crate::sync::outbound::outbound_event_from_row;
 use crate::sync::redact::redact_payload;
 use crate::sync::smart::enqueue_tool_spans_for_session;
 use anyhow::{Context, Result};
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use std::path::Path;
 
 const MIGRATIONS: &[&str] = &[
@@ -142,6 +142,8 @@ const MIGRATIONS: &[&str] = &[
     )",
     // Speed workspace-scoped `insights` / `summary` (sessions filter before joining events)
     "CREATE INDEX IF NOT EXISTS sessions_workspace_idx ON sessions(workspace)",
+    // `ORDER BY started_at_ms` for a workspace (list_sessions, recent_sessions_3)
+    "CREATE INDEX IF NOT EXISTS sessions_workspace_started_idx ON sessions(workspace, started_at_ms)",
 ];
 
 /// Per-workspace activity dashboard stats.
@@ -176,6 +178,17 @@ pub struct SummaryStats {
     pub by_model: Vec<(String, u64)>,
     pub top_tools: Vec<(String, u64)>,
 }
+
+/// Result of [`Store::prune_sessions_started_before`].
+#[derive(Debug, Clone, Copy, Default, Eq, PartialEq)]
+pub struct PruneStats {
+    pub sessions_removed: u64,
+    pub events_removed: u64,
+}
+
+/// `sync_state` keys for agent rescan throttling and auto-prune.
+pub const SYNC_STATE_LAST_AGENT_SCAN_MS: &str = "last_agent_scan_ms";
+pub const SYNC_STATE_LAST_AUTO_PRUNE_MS: &str = "last_auto_prune_ms";
 
 pub struct ToolSpanSyncRow {
     pub span_id: String,
@@ -479,6 +492,93 @@ impl Store {
             last_error,
             consecutive_failures,
         })
+    }
+
+    pub fn sync_state_get_u64(&self, key: &str) -> Result<Option<u64>> {
+        let row: Option<String> = self
+            .conn
+            .query_row("SELECT v FROM sync_state WHERE k = ?1", params![key], |r| {
+                r.get::<_, String>(0)
+            })
+            .optional()?;
+        Ok(row.and_then(|s| s.parse().ok()))
+    }
+
+    pub fn sync_state_set_u64(&self, key: &str, v: u64) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO sync_state (k, v) VALUES (?1, ?2)
+             ON CONFLICT(k) DO UPDATE SET v = excluded.v",
+            params![key, v.to_string()],
+        )?;
+        Ok(())
+    }
+
+    /// Delete sessions with `started_at_ms` strictly before `cutoff_ms` and all dependent rows.
+    pub fn prune_sessions_started_before(&self, cutoff_ms: i64) -> Result<PruneStats> {
+        let tx = rusqlite::Transaction::new_unchecked(&self.conn, TransactionBehavior::Deferred)?;
+        let sessions_to_remove: i64 = tx.query_row(
+            "SELECT COUNT(*) FROM sessions WHERE started_at_ms < ?1",
+            params![cutoff_ms],
+            |r| r.get(0),
+        )?;
+        let events_to_remove: i64 = tx.query_row(
+            "SELECT COUNT(*) FROM events WHERE session_id IN \
+             (SELECT id FROM sessions WHERE started_at_ms < ?1)",
+            params![cutoff_ms],
+            |r| r.get(0),
+        )?;
+
+        let sub_old_sessions = "SELECT id FROM sessions WHERE started_at_ms < ?1";
+        tx.execute(
+            &format!(
+                "DELETE FROM tool_span_paths WHERE span_id IN \
+                 (SELECT span_id FROM tool_spans WHERE session_id IN ({sub_old_sessions}))"
+            ),
+            params![cutoff_ms],
+        )?;
+        tx.execute(
+            &format!("DELETE FROM tool_spans WHERE session_id IN ({sub_old_sessions})"),
+            params![cutoff_ms],
+        )?;
+        tx.execute(
+            &format!("DELETE FROM events WHERE session_id IN ({sub_old_sessions})"),
+            params![cutoff_ms],
+        )?;
+        tx.execute(
+            &format!("DELETE FROM files_touched WHERE session_id IN ({sub_old_sessions})"),
+            params![cutoff_ms],
+        )?;
+        tx.execute(
+            &format!("DELETE FROM skills_used WHERE session_id IN ({sub_old_sessions})"),
+            params![cutoff_ms],
+        )?;
+        tx.execute(
+            &format!("DELETE FROM sync_outbox WHERE session_id IN ({sub_old_sessions})"),
+            params![cutoff_ms],
+        )?;
+        tx.execute(
+            &format!("DELETE FROM session_repo_binding WHERE session_id IN ({sub_old_sessions})"),
+            params![cutoff_ms],
+        )?;
+        tx.execute(
+            &format!("DELETE FROM experiment_tags WHERE session_id IN ({sub_old_sessions})"),
+            params![cutoff_ms],
+        )?;
+        tx.execute(
+            "DELETE FROM sessions WHERE started_at_ms < ?1",
+            params![cutoff_ms],
+        )?;
+        tx.commit()?;
+        Ok(PruneStats {
+            sessions_removed: sessions_to_remove as u64,
+            events_removed: events_to_remove as u64,
+        })
+    }
+
+    /// Reclaim file space after large deletes (exclusive lock; can be slow).
+    pub fn vacuum(&self) -> Result<()> {
+        self.conn.execute_batch("VACUUM;").context("VACUUM")?;
+        Ok(())
     }
 
     pub fn list_sessions(&self, workspace: &str) -> Result<Vec<SessionRecord>> {
@@ -1456,5 +1556,32 @@ mod tests {
             .unwrap();
         let got = store.get_session("s6").unwrap().unwrap();
         assert_eq!(got.status, SessionStatus::Running);
+    }
+
+    #[test]
+    fn prune_sessions_removes_old_rows_and_keeps_recent() {
+        let dir = TempDir::new().unwrap();
+        let store = Store::open(&dir.path().join("kaizen.db")).unwrap();
+        let mut old = make_session("old");
+        old.started_at_ms = 1_000;
+        let mut new = make_session("new");
+        new.started_at_ms = 9_000_000_000_000;
+        store.upsert_session(&old).unwrap();
+        store.upsert_session(&new).unwrap();
+        store.append_event(&make_event("old", 0)).unwrap();
+
+        let stats = store.prune_sessions_started_before(5_000).unwrap();
+        assert_eq!(
+            stats,
+            PruneStats {
+                sessions_removed: 1,
+                events_removed: 1,
+            }
+        );
+        assert!(store.get_session("old").unwrap().is_none());
+        assert!(store.get_session("new").unwrap().is_some());
+        let sessions = store.list_sessions("/ws").unwrap();
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].id, "new");
     }
 }

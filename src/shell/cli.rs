@@ -12,7 +12,7 @@ use crate::core::config;
 use crate::core::event::{Event, SessionRecord};
 use crate::metrics::{index, report};
 use crate::shell::fmt::fmt_ts;
-use crate::store::Store;
+use crate::store::{SYNC_STATE_LAST_AGENT_SCAN_MS, SYNC_STATE_LAST_AUTO_PRUNE_MS, Store};
 use anyhow::Result;
 use serde::Serialize;
 use std::io::IsTerminal;
@@ -61,15 +61,67 @@ impl Drop for ScanSpinner {
     }
 }
 
+fn now_ms_u64() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
+}
+
+/// Minimum interval between automatic local DB prunes after a successful rescan (24h).
+const AUTO_PRUNE_INTERVAL_MS: u64 = 86_400_000;
+
+pub(crate) fn maybe_auto_prune_after_scan(store: &Store, cfg: &config::Config) -> Result<()> {
+    if cfg.retention.hot_days == 0 {
+        return Ok(());
+    }
+    let now = now_ms_u64();
+    if let Some(last) = store.sync_state_get_u64(SYNC_STATE_LAST_AUTO_PRUNE_MS)?
+        && now.saturating_sub(last) < AUTO_PRUNE_INTERVAL_MS
+    {
+        return Ok(());
+    }
+    let cutoff = now.saturating_sub((cfg.retention.hot_days as u64).saturating_mul(86_400_000));
+    store.prune_sessions_started_before(cutoff as i64)?;
+    store.sync_state_set_u64(SYNC_STATE_LAST_AUTO_PRUNE_MS, now)?;
+    Ok(())
+}
+
+/// Full transcript rescan unless throttled by `[scan].min_rescan_seconds` or `refresh` is true.
+pub(crate) fn maybe_scan_all_agents(
+    ws: &Path,
+    cfg: &config::Config,
+    ws_str: &str,
+    store: &Store,
+    refresh: bool,
+) -> Result<()> {
+    let interval_ms = cfg.scan.min_rescan_seconds.saturating_mul(1000);
+    let now = now_ms_u64();
+    if !refresh
+        && interval_ms > 0
+        && let Some(last) = store.sync_state_get_u64(SYNC_STATE_LAST_AGENT_SCAN_MS)?
+        && now.saturating_sub(last) < interval_ms
+    {
+        return Ok(());
+    }
+    scan_all_agents(ws, cfg, ws_str, store)?;
+    store.sync_state_set_u64(SYNC_STATE_LAST_AGENT_SCAN_MS, now_ms_u64())?;
+    Ok(())
+}
+
 /// `kaizen sessions list` — same output as CLI stdout.
-pub fn sessions_list_text(workspace: Option<&Path>, json_out: bool) -> Result<String> {
+pub fn sessions_list_text(
+    workspace: Option<&Path>,
+    json_out: bool,
+    refresh: bool,
+) -> Result<String> {
     let ws = workspace_path(workspace)?;
     let cfg = config::load(&ws)?;
     let db_path = ws.join(".kaizen/kaizen.db");
     let store = Store::open(&db_path)?;
     let ws_str = ws.to_string_lossy().to_string();
 
-    scan_all_agents(&ws, &cfg, &ws_str, &store)?;
+    maybe_scan_all_agents(&ws, &cfg, &ws_str, &store, refresh)?;
 
     let sessions = store.list_sessions(&ws_str)?;
     if json_out {
@@ -122,8 +174,8 @@ fn sessions_empty_state_hints(out: &mut String) {
 }
 
 /// `kaizen sessions list` — scan all agent transcripts, upsert sessions, print table.
-pub fn cmd_sessions_list(workspace: Option<&Path>, json_out: bool) -> Result<()> {
-    print!("{}", sessions_list_text(workspace, json_out)?);
+pub fn cmd_sessions_list(workspace: Option<&Path>, json_out: bool, refresh: bool) -> Result<()> {
+    print!("{}", sessions_list_text(workspace, json_out, refresh)?);
     Ok(())
 }
 
@@ -167,14 +219,14 @@ pub fn cmd_session_show(id: &str, workspace: Option<&Path>) -> Result<()> {
 }
 
 /// `kaizen summary` — same output as CLI stdout.
-pub fn summary_text(workspace: Option<&Path>, json_out: bool) -> Result<String> {
+pub fn summary_text(workspace: Option<&Path>, json_out: bool, refresh: bool) -> Result<String> {
     let ws = workspace_path(workspace)?;
     let cfg = config::load(&ws)?;
     let db_path = ws.join(".kaizen/kaizen.db");
     let store = Store::open(&db_path)?;
     let ws_str = ws.to_string_lossy().to_string();
 
-    scan_all_agents(&ws, &cfg, &ws_str, &store)?;
+    maybe_scan_all_agents(&ws, &cfg, &ws_str, &store, refresh)?;
 
     let stats = store.summary_stats(&ws_str)?;
     let cost_dollars = stats.total_cost_usd_e6 as f64 / 1_000_000.0;
@@ -265,8 +317,8 @@ pub fn summary_text(workspace: Option<&Path>, json_out: bool) -> Result<String> 
 }
 
 /// `kaizen summary` — aggregate session + cost stats across all agents.
-pub fn cmd_summary(workspace: Option<&Path>, json_out: bool) -> Result<()> {
-    print!("{}", summary_text(workspace, json_out)?);
+pub fn cmd_summary(workspace: Option<&Path>, json_out: bool, refresh: bool) -> Result<()> {
+    print!("{}", summary_text(workspace, json_out, refresh)?);
     Ok(())
 }
 
@@ -353,6 +405,7 @@ pub(crate) fn scan_all_agents(
         persist_session_batch(store, sessions, sync_ctx.as_ref())?;
     }
 
+    maybe_auto_prune_after_scan(store, cfg)?;
     Ok(())
 }
 

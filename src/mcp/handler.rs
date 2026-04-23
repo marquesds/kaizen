@@ -20,6 +20,7 @@ const MCP_CAPABILITIES: &str = r#"Kaizen MCP maps 1:1 to the `kaizen` CLI.
 - kaizen_metrics — Code hotspots, slow tools (p95), token-heavy tools, churn. Use for **repository** and tool latency. Optional json.
 - kaizen_sessions_list / kaizen_session_show — Raw session list and one session. Optional json on list.
 - kaizen_insights — Activity dashboard (7d). kaizen_retro — weekly bets. kaizen_exp_* — experiments.
+- List/summary/insights/metrics/retro support refresh=true to force a full transcript rescan (matches CLI --refresh).
 - kaizen_ingest_hook — same as `kaizen ingest hook` (rare; hooks call this).
 - kaizen_init — idempotent .kaizen/ + hook patches. kaizen_sync_* — outbox. kaizen_tui — not available (returns JSON stub).
 
@@ -64,6 +65,9 @@ struct WorkspaceJsonArg {
     /// When true, return the same pretty JSON as `kaizen sessions list --json` or `kaizen summary --json`.
     #[serde(default)]
     json: bool,
+    /// When true, run a full agent transcript rescan (matches `kaizen ... --refresh`).
+    #[serde(default)]
+    refresh: bool,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -93,6 +97,9 @@ struct MetricsArg {
     json: bool,
     #[serde(default)]
     force: bool,
+    /// When true, run a full agent transcript rescan (matches `kaizen metrics --refresh`).
+    #[serde(default)]
+    refresh: bool,
 }
 
 fn default_days() -> u32 {
@@ -132,6 +139,18 @@ struct RetroArg {
     json: bool,
     #[serde(default)]
     force: bool,
+    /// When true, run a full agent transcript rescan (matches `kaizen retro --refresh`).
+    #[serde(default)]
+    refresh: bool,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct InsightsArg {
+    #[serde(flatten)]
+    ws: WorkspaceArg,
+    /// When true, run a full agent transcript rescan (matches `kaizen insights --refresh`).
+    #[serde(default)]
+    refresh: bool,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -229,10 +248,14 @@ impl KaizenMcp {
     )]
     async fn kaizen_sessions_list(
         &self,
-        Parameters(WorkspaceJsonArg { workspace, json }): Parameters<WorkspaceJsonArg>,
+        Parameters(WorkspaceJsonArg {
+            workspace,
+            json,
+            refresh,
+        }): Parameters<WorkspaceJsonArg>,
     ) -> Result<CallToolResult, ErrorData> {
         let w = opt_path(&workspace);
-        let t = run_blocking(move || cli::sessions_list_text(w.as_deref(), json)).await?;
+        let t = run_blocking(move || cli::sessions_list_text(w.as_deref(), json, refresh)).await?;
         ok_str(t)
     }
 
@@ -255,10 +278,14 @@ impl KaizenMcp {
     )]
     async fn kaizen_summary(
         &self,
-        Parameters(WorkspaceJsonArg { workspace, json }): Parameters<WorkspaceJsonArg>,
+        Parameters(WorkspaceJsonArg {
+            workspace,
+            json,
+            refresh,
+        }): Parameters<WorkspaceJsonArg>,
     ) -> Result<CallToolResult, ErrorData> {
         let w = opt_path(&workspace);
-        let t = run_blocking(move || cli::summary_text(w.as_deref(), json)).await?;
+        let t = run_blocking(move || cli::summary_text(w.as_deref(), json, refresh)).await?;
         ok_str(t)
     }
 
@@ -296,10 +323,10 @@ impl KaizenMcp {
     )]
     async fn kaizen_insights(
         &self,
-        Parameters(WorkspaceArg { workspace }): Parameters<WorkspaceArg>,
+        Parameters(InsightsArg { ws, refresh }): Parameters<InsightsArg>,
     ) -> Result<CallToolResult, ErrorData> {
-        let w = opt_path(&workspace);
-        let t = run_blocking(move || insights::insights_text(w.as_deref())).await?;
+        let w = opt_path(&ws.workspace);
+        let t = run_blocking(move || insights::insights_text(w.as_deref(), refresh)).await?;
         ok_str(t)
     }
 
@@ -314,11 +341,13 @@ impl KaizenMcp {
             days,
             json,
             force,
+            refresh,
         }): Parameters<MetricsArg>,
     ) -> Result<CallToolResult, ErrorData> {
         let w = opt_path(&ws.workspace);
         let t =
-            run_blocking(move || metrics::metrics_text(w.as_deref(), days, json, force)).await?;
+            run_blocking(move || metrics::metrics_text(w.as_deref(), days, json, force, refresh))
+                .await?;
         ok_str(t)
     }
 
@@ -484,11 +513,14 @@ impl KaizenMcp {
             dry_run,
             json,
             force,
+            refresh,
         }): Parameters<RetroArg>,
     ) -> Result<CallToolResult, ErrorData> {
         let w = opt_path(&ws.workspace);
-        let t = run_blocking(move || retro::retro_stdout(w.as_deref(), days, dry_run, json, force))
-            .await?;
+        let t = run_blocking(move || {
+            retro::retro_stdout(w.as_deref(), days, dry_run, json, force, refresh)
+        })
+        .await?;
         ok_str(t)
     }
 }

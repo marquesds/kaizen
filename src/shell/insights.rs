@@ -3,7 +3,7 @@
 
 use crate::core::config;
 use crate::metrics::{index, report};
-use crate::shell::cli::{scan_all_agents, workspace_path};
+use crate::shell::cli::{maybe_scan_all_agents, workspace_path};
 use crate::shell::fmt::fmt_ts;
 use crate::store::InsightsStats;
 use crate::store::Store;
@@ -12,13 +12,13 @@ use std::fmt::Write;
 use std::path::Path;
 
 /// Same output as `kaizen insights` stdout.
-pub fn insights_text(workspace: Option<&Path>) -> Result<String> {
+pub fn insights_text(workspace: Option<&Path>, refresh: bool) -> Result<String> {
     let ws = workspace_path(workspace)?;
     let cfg = config::load(&ws)?;
     let ws_str = ws.to_string_lossy().to_string();
     let db_path = ws.join(".kaizen/kaizen.db");
     let store = Store::open(&db_path)?;
-    scan_all_agents(&ws, &cfg, &ws_str, &store)?;
+    maybe_scan_all_agents(&ws, &cfg, &ws_str, &store, refresh)?;
     let stats = store.insights(&ws_str)?;
     let metrics = index::ensure_indexed(&store, &ws, false)
         .ok()
@@ -34,8 +34,8 @@ pub fn insights_text(workspace: Option<&Path>) -> Result<String> {
 }
 
 /// Print workspace activity dashboard.
-pub fn cmd_insights(workspace: Option<&Path>) -> Result<()> {
-    print!("{}", insights_text(workspace)?);
+pub fn cmd_insights(workspace: Option<&Path>, refresh: bool) -> Result<()> {
+    print!("{}", insights_text(workspace, refresh)?);
     Ok(())
 }
 

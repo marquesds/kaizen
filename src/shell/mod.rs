@@ -3,6 +3,7 @@ pub mod cli;
 pub mod doctor;
 pub mod exp;
 pub mod fmt;
+pub mod gc;
 pub mod ingest;
 pub mod init;
 pub mod insights;

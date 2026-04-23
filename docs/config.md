@@ -10,8 +10,9 @@ Config is TOML. **Paths:**
 **Load order:** the workspace and user files are both read; `src/core/config.rs` merges them as follows.
 
 - **`[sync]`, `[proxy]`, `[telemetry]`:** field-by-field merge. Workspace is applied first, then the user file overwrites (non-empty strings, set numbers, and so on).
-- **`[scan].roots`:** if the user file sets a non-default `roots` list, that wins; otherwise the workspace’s `[scan].roots` is used.
-- **`[sources]`, `[retention]`:** the merged value comes only from the user file (`~/.kaizen/config.toml`); if that file is missing, schema defaults are used. Per-repo `[sources]` / `[retention]` in the workspace `config.toml` are **not** applied today — put `sources` and `retention` in `~/.kaizen/config.toml` when you need to change them.
+- **`[scan]`:** `roots` — if the user file sets a non-default `roots` list, that wins; otherwise the workspace’s `[scan].roots` is used. `min_rescan_seconds` merges the same way (user non-default wins, else workspace).
+- **`[retention]`:** field-by-field merge: for each of `hot_days` and `warm_days`, if the user file value differs from the schema default, the user value wins; otherwise the workspace value is kept.
+- **`[sources]`:** the merged value still comes only from the user file (`~/.kaizen/config.toml`); workspace `[sources]` is not applied. Put tail toggles and Cursor options in the user file when you need to change them.
 
 LLM HTTP proxy: [llm-proxy.md](llm-proxy.md).
 
@@ -27,13 +28,14 @@ LLM HTTP proxy: [llm-proxy.md](llm-proxy.md).
 | Key | Default | Purpose |
 |-----|---------|--------|
 | `roots` | `["~/.cursor/projects"]` | Transcript index roots (Cursor projects layout) |
+| `min_rescan_seconds` | `300` | Minimum seconds between full transcript rescans unless you pass `--refresh` (CLI) or `refresh=true` (MCP) |
 
 ## `[retention]`
 
 | Key | Default | Purpose |
 |-----|---------|--------|
-| `hot_days` | `30` | Hot tier days |
-| `warm_days` | `90` | Warm tier days |
+| `hot_days` | `30` | Local SQLite keeps sessions started within the last **hot_days** days. Older sessions and dependent rows are removed when auto-prune runs (after a rescan, at most once per 24h) or when you run `kaizen gc`. **`0`** disables automatic pruning. |
+| `warm_days` | `90` | Reserved for future tiered retention; not used for local purge today. |
 
 ## `[sources]`
 

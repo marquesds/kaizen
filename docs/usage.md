@@ -4,6 +4,8 @@ CLI reference. All commands accept `--workspace <path>` (default: cwd).
 
 Run `kaizen --help` for grouped subcommands (Trust & observe, Operate, Improve, Integrations, Shell).
 
+**Rescan throttling:** `sessions list`, `summary`, `insights`, `metrics`, and `retro` reuse the last full transcript scan when it is newer than `[scan].min_rescan_seconds` (default 300). Pass **`--refresh`** (`-r`) to force a full rescan. See [config.md](config.md).
+
 ## `kaizen doctor`
 
 Health check: version, config paths, store open, optional Cursor/Claude hook wiring. Exit `1` if the local store cannot be opened or `.kaizen/` is not writable (useful in CI). Does not write files.
@@ -19,6 +21,7 @@ under `.kaizen/backup/`.
 ```bash
 kaizen sessions list           # all sessions in workspace
 kaizen sessions list --json   # machine-readable
+kaizen sessions list --refresh
 kaizen sessions show <id>      # full detail: events, tools, cost
 ```
 
@@ -29,6 +32,17 @@ sessions.
 
 ```bash
 kaizen summary --json         # same shape as the MCP `kaizen_summary` tool with json=true
+kaizen summary --refresh
+```
+
+## `kaizen gc`
+
+Drop sessions (and dependent rows) older than `[retention].hot_days`, or override the window with `--days`. **`hot_days = 0`** disables automatic pruning; `kaizen gc` still needs an explicit positive `--days`.
+
+```bash
+kaizen gc
+kaizen gc --days 14
+kaizen gc --vacuum            # VACUUM after delete (slow; shrinks the DB file)
 ```
 
 ## `kaizen completions`

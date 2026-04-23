@@ -20,7 +20,13 @@ cd kaizen
 cargo install --path .
 ```
 
-Artifacts land in `~/.cargo/bin/kaizen`.
+**From a checkout (reinstall current tree):**
+
+```bash
+./scripts/install-local.sh
+```
+
+Same as `cargo install --path . --locked --force` from the repo root. Artifacts land in `~/.cargo/bin/kaizen` (or `$CARGO_HOME/bin`).
 
 ## First run
 

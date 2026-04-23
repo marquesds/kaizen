@@ -3,7 +3,7 @@
 
 use crate::core::config;
 use crate::metrics::{index, report};
-use crate::shell::cli::{scan_all_agents, workspace_path};
+use crate::shell::cli::{maybe_scan_all_agents, workspace_path};
 use crate::store::Store;
 use crate::sync::{ingest_ctx, smart};
 use anyhow::Result;
@@ -15,13 +15,14 @@ pub fn metrics_text(
     days: u32,
     json_out: bool,
     force: bool,
+    refresh: bool,
 ) -> Result<String> {
     let ws = workspace_path(workspace)?;
     let cfg = config::load(&ws)?;
     let db_path = ws.join(".kaizen/kaizen.db");
     let store = Store::open(&db_path)?;
     let ws_str = ws.to_string_lossy().to_string();
-    scan_all_agents(&ws, &cfg, &ws_str, &store)?;
+    maybe_scan_all_agents(&ws, &cfg, &ws_str, &store, refresh)?;
     let snapshot = index::ensure_indexed(&store, &ws, force)?;
     maybe_enqueue_snapshot(&store, &cfg, &ws, &snapshot)?;
     let metrics = report::build_report(&store, &ws_str, days)?;
@@ -31,8 +32,17 @@ pub fn metrics_text(
     Ok(format_human(&metrics))
 }
 
-pub fn cmd_metrics(workspace: Option<&Path>, days: u32, json_out: bool, force: bool) -> Result<()> {
-    print!("{}", metrics_text(workspace, days, json_out, force)?);
+pub fn cmd_metrics(
+    workspace: Option<&Path>,
+    days: u32,
+    json_out: bool,
+    force: bool,
+    refresh: bool,
+) -> Result<()> {
+    print!(
+        "{}",
+        metrics_text(workspace, days, json_out, force, refresh)?
+    );
     Ok(())
 }
 

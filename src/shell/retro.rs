@@ -6,17 +6,17 @@ use crate::metrics::index;
 use crate::report::{ReportsDirLock, iso_week_label_utc, to_json, to_markdown, write_atomic};
 use crate::retro::types::Report;
 use crate::retro::{engine, inputs};
-use crate::shell::cli::{scan_all_agents, workspace_path};
+use crate::shell::cli::{maybe_scan_all_agents, workspace_path};
 use crate::store::Store;
 use anyhow::Result;
 use std::path::{Path, PathBuf};
 
-fn compute_retro(workspace: &Path, days: u32) -> Result<(PathBuf, Report)> {
+fn compute_retro(workspace: &Path, days: u32, refresh: bool) -> Result<(PathBuf, Report)> {
     let cfg = config::load(workspace)?;
     let db_path = workspace.join(".kaizen/kaizen.db");
     let store = Store::open(&db_path)?;
     let ws_str = workspace.to_string_lossy().to_string();
-    scan_all_agents(workspace, &cfg, &ws_str, &store)?;
+    maybe_scan_all_agents(workspace, &cfg, &ws_str, &store, refresh)?;
     if let Ok(snapshot) = index::ensure_indexed(&store, workspace, false)
         && let Some(ctx) = crate::sync::ingest_ctx(&cfg, workspace.to_path_buf())
         && let Ok(facts) = store.file_facts_for_snapshot(&snapshot.id)
@@ -41,9 +41,9 @@ fn compute_retro(workspace: &Path, days: u32) -> Result<(PathBuf, Report)> {
 }
 
 /// Build retro report (shared by CLI and MCP; no report file I/O).
-pub fn run_retro_report(workspace: Option<&Path>, days: u32) -> Result<Report> {
+pub fn run_retro_report(workspace: Option<&Path>, days: u32, refresh: bool) -> Result<Report> {
     let ws = workspace_path(workspace)?;
-    let (_reports_dir, report) = compute_retro(&ws, days)?;
+    let (_reports_dir, report) = compute_retro(&ws, days, refresh)?;
     Ok(report)
 }
 
@@ -54,9 +54,10 @@ pub fn retro_stdout(
     dry_run: bool,
     json_out: bool,
     force: bool,
+    refresh: bool,
 ) -> Result<String> {
     let ws = workspace_path(workspace)?;
-    let (reports_dir, report) = compute_retro(&ws, days)?;
+    let (reports_dir, report) = compute_retro(&ws, days, refresh)?;
     let week_label = report.meta.week_label.clone();
     let out_path = reports_dir.join(format!("{week_label}.md"));
 
@@ -88,10 +89,11 @@ pub fn cmd_retro(
     dry_run: bool,
     json_out: bool,
     force: bool,
+    refresh: bool,
 ) -> Result<()> {
     print!(
         "{}",
-        retro_stdout(workspace, days, dry_run, json_out, force)?
+        retro_stdout(workspace, days, dry_run, json_out, force, refresh)?
     );
     Ok(())
 }

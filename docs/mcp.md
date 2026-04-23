@@ -113,13 +113,13 @@ Set any value to `false` to skip that agent’s local scan (useful if a VS Code 
 |------|----------------|--------|
 | `kaizen_capabilities` | (no CLI; static text) | Read first: which tool to use for cost rollups vs repo metrics, sessions, retro, etc. |
 | `kaizen_ingest_hook` | `kaizen ingest hook` | Pass hook JSON in `payload` (not stdin). `source`: `cursor` or `claude`. |
-| `kaizen_sessions_list` | `kaizen sessions list` | Optional `json: true` matches `kaizen sessions list --json`. |
+| `kaizen_sessions_list` | `kaizen sessions list` | Optional `json: true`, `refresh: true` (full transcript rescan; matches `--refresh`). |
 | `kaizen_session_show` | `kaizen sessions show` | `id` + optional `workspace`. |
-| `kaizen_summary` | `kaizen summary` | Optional `json: true` matches `kaizen summary --json`. |
+| `kaizen_summary` | `kaizen summary` | Optional `json: true`, `refresh: true`. |
 | `kaizen_tui` | `kaizen tui` | Not runnable over MCP; returns a structured “use CLI” payload with `is_error` semantics. |
 | `kaizen_init` | `kaizen init` | Writes/updates workspace files, same as CLI. |
-| `kaizen_insights` | `kaizen insights` | |
-| `kaizen_metrics` | `kaizen metrics` | `days`, `json`, `force`, `workspace`. |
+| `kaizen_insights` | `kaizen insights` | Optional `refresh: true`. |
+| `kaizen_metrics` | `kaizen metrics` | `days`, `json`, `force`, `workspace`, optional `refresh`. |
 | `kaizen_metrics_index` | `kaizen metrics index` | |
 | `kaizen_sync_run` | `kaizen sync run` | **Only `once: true` is supported** (default). Continuous sync must use a real shell / service. |
 | `kaizen_sync_status` | `kaizen sync status` | |
@@ -129,10 +129,11 @@ Set any value to `false` to skip that agent’s local scan (useful if a VS Code 
 | `kaizen_exp_tag` | `kaizen exp tag` | |
 | `kaizen_exp_report` | `kaizen exp report` | `json` flag supported. |
 | `kaizen_exp_conclude` | `kaizen exp conclude` | |
-| `kaizen_retro` | `kaizen retro` | Set `json: true` for the same `Report` JSON as `kaizen retro --json`. |
+| `kaizen_retro` | `kaizen retro` | `json`, `refresh`, etc. Set `json: true` for the same `Report` JSON as `kaizen retro --json`. |
 
 ## Behavior notes
 
 - **Workspace**: most tools accept optional `workspace` (string path). If omitted, the server uses the process current directory, matching CLI defaults.
+- **Rescan**: list/summary/insights/metrics/retro honor `[scan].min_rescan_seconds` unless you pass `refresh: true` (same as CLI `--refresh`).
 - **Blocking work** is run on a blocking thread pool so the async MCP runtime is not starved; long `retro` or metrics runs may take time.
 - **Version** in the MCP `initialize` response is the built-in string configured for the server (keep in sync with releases when using strict client checks).

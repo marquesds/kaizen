@@ -3,5 +3,8 @@ pub mod event_index;
 pub mod sqlite;
 pub mod tool_span_index;
 pub use sqlite::InsightsStats;
+pub use sqlite::PruneStats;
+pub use sqlite::SYNC_STATE_LAST_AGENT_SCAN_MS;
+pub use sqlite::SYNC_STATE_LAST_AUTO_PRUNE_MS;
 pub use sqlite::Store;
 pub use sqlite::SummaryStats;
