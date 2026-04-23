@@ -78,7 +78,7 @@ jobs:
           ( cd dist && shasum -a 256 "${NAME}.tar.gz" > "${NAME}.tar.gz.sha256" )
           echo "archive=dist/${NAME}.tar.gz" >> "$GITHUB_OUTPUT"
           echo "sha=dist/${NAME}.tar.gz.sha256" >> "$GITHUB_OUTPUT"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: kaizen-${{ matrix.target }}
           path: |
