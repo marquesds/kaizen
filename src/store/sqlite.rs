@@ -140,6 +140,8 @@ const MIGRATIONS: &[&str] = &[
         weight INTEGER NOT NULL,
         PRIMARY KEY (snapshot_id, from_id, to_id, kind)
     )",
+    // Speed workspace-scoped `insights` / `summary` (sessions filter before joining events)
+    "CREATE INDEX IF NOT EXISTS sessions_workspace_idx ON sessions(workspace)",
 ];
 
 /// Per-workspace activity dashboard stats.
@@ -166,6 +168,7 @@ pub struct SyncStatusSnapshot {
 }
 
 /// Aggregate stats across sessions + events for a workspace.
+#[derive(serde::Serialize)]
 pub struct SummaryStats {
     pub session_count: u64,
     pub total_cost_usd_e6: i64,

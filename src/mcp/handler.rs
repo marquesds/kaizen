@@ -13,6 +13,19 @@ use rmcp::tool_handler;
 use rmcp::tool_router;
 use serde::Deserialize;
 
+/// Static help for model routing (keep in sync with `kaizen --help` groups).
+const MCP_CAPABILITIES: &str = r#"Kaizen MCP maps 1:1 to the `kaizen` CLI.
+
+- kaizen_summary — Session counts, USD cost, by-agent/model, top tools. Use for spend and volume. Optional json=true.
+- kaizen_metrics — Code hotspots, slow tools (p95), token-heavy tools, churn. Use for **repository** and tool latency. Optional json.
+- kaizen_sessions_list / kaizen_session_show — Raw session list and one session. Optional json on list.
+- kaizen_insights — Activity dashboard (7d). kaizen_retro — weekly bets. kaizen_exp_* — experiments.
+- kaizen_ingest_hook — same as `kaizen ingest hook` (rare; hooks call this).
+- kaizen_init — idempotent .kaizen/ + hook patches. kaizen_sync_* — outbox. kaizen_tui — not available (returns JSON stub).
+
+Docs: https://github.com/lucasmarqs/kaizen/blob/main/docs/mcp.md
+"#;
+
 fn ok_str(s: String) -> Result<CallToolResult, ErrorData> {
     Ok(CallToolResult::success(vec![Content::text(s)]))
 }
@@ -41,6 +54,16 @@ fn opt_path(ws: &Option<String>) -> Option<std::path::PathBuf> {
 struct WorkspaceArg {
     /// Workspace root (repository path). If omitted, uses the process current directory.
     workspace: Option<String>,
+}
+
+/// Workspace + optional machine-readable JSON (matches CLI `--json` on list/summary).
+#[derive(Debug, Default, Deserialize, schemars::JsonSchema)]
+struct WorkspaceJsonArg {
+    /// Workspace root (repository path). If omitted, uses the process current directory.
+    workspace: Option<String>,
+    /// When true, return the same pretty JSON as `kaizen sessions list --json` or `kaizen summary --json`.
+    #[serde(default)]
+    json: bool,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -171,6 +194,17 @@ pub struct KaizenMcp;
 #[tool_router]
 impl KaizenMcp {
     #[tool(
+        name = "kaizen_capabilities",
+        description = "Read first: when to use summary vs metrics, sessions, retro, and other tools. No DB access; static help text only."
+    )]
+    async fn kaizen_capabilities(
+        &self,
+        Parameters(_): Parameters<WorkspaceArg>,
+    ) -> Result<CallToolResult, ErrorData> {
+        ok_str(MCP_CAPABILITIES.to_string())
+    }
+
+    #[tool(
         name = "kaizen_ingest_hook",
         description = "Ingest a hook event (same as `kaizen ingest hook`). Pass payload JSON, not stdin."
     )]
@@ -191,14 +225,14 @@ impl KaizenMcp {
 
     #[tool(
         name = "kaizen_sessions_list",
-        description = "List sessions (kaizen sessions list)"
+        description = "List agent sessions in the workspace. Set json=true for the same array object as `kaizen sessions list --json`. Default text table."
     )]
     async fn kaizen_sessions_list(
         &self,
-        Parameters(WorkspaceArg { workspace }): Parameters<WorkspaceArg>,
+        Parameters(WorkspaceJsonArg { workspace, json }): Parameters<WorkspaceJsonArg>,
     ) -> Result<CallToolResult, ErrorData> {
         let w = opt_path(&workspace);
-        let t = run_blocking(move || cli::sessions_list_text(w.as_deref())).await?;
+        let t = run_blocking(move || cli::sessions_list_text(w.as_deref(), json)).await?;
         ok_str(t)
     }
 
@@ -217,14 +251,14 @@ impl KaizenMcp {
 
     #[tool(
         name = "kaizen_summary",
-        description = "Aggregate session + cost stats (kaizen summary)"
+        description = "Roll up session counts, USD cost, top tools, by-agent/model. For **code** hotspots and slow tool p95, use `kaizen_metrics` instead. Set json=true to match `kaizen summary --json`."
     )]
     async fn kaizen_summary(
         &self,
-        Parameters(WorkspaceArg { workspace }): Parameters<WorkspaceArg>,
+        Parameters(WorkspaceJsonArg { workspace, json }): Parameters<WorkspaceJsonArg>,
     ) -> Result<CallToolResult, ErrorData> {
         let w = opt_path(&workspace);
-        let t = run_blocking(move || cli::summary_text(w.as_deref())).await?;
+        let t = run_blocking(move || cli::summary_text(w.as_deref(), json)).await?;
         ok_str(t)
     }
 
@@ -271,7 +305,7 @@ impl KaizenMcp {
 
     #[tool(
         name = "kaizen_metrics",
-        description = "Smart metrics (kaizen metrics)"
+        description = "Repo + tool intelligence: hottest files, slow tools (p95), token/reasoning sinks, agent pain. Not for simple cost rollups — use `kaizen_summary` first."
     )]
     async fn kaizen_metrics(
         &self,
@@ -462,6 +496,6 @@ impl KaizenMcp {
 #[tool_handler(
     name = "kaizen",
     version = "0.1.0",
-    instructions = "kaizen: local agent telemetry. Tools mirror the `kaizen` CLI (see `kaizen --help`). Workspace defaults to the server process cwd if omitted. Use `kaizen_tui` for why the terminal UI is CLI-only. Use `kaizen_sync_run` with once=true only."
+    instructions = "kaizen: local agent telemetry. Call `kaizen_capabilities` first if unsure. Cost/volume: `kaizen_summary`. Code hotspots and slow tools: `kaizen_metrics`. Tools mirror the CLI. Workspace defaults to the server cwd. `kaizen_tui` is CLI-only. `kaizen_sync_run` supports once=true only."
 )]
 impl ServerHandler for KaizenMcp {}

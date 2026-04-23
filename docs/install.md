@@ -48,8 +48,19 @@ backs up originals under `.kaizen/backup/`.
 
 ```bash
 kaizen --version
+kaizen doctor
 kaizen sessions list
 ```
+
+`kaizen doctor` checks the local store, config paths, and optional hook wiring.
+
+## Shell completions (optional)
+
+```bash
+kaizen completions zsh
+```
+
+Redirect or eval per [docs/usage.md](usage.md) (`kaizen completions` section).
 
 ## Troubleshooting
 

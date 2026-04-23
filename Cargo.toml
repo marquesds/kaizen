@@ -69,6 +69,10 @@ name = "retro_pipeline"
 path = "tests/spec/retro_pipeline.rs"
 
 [[test]]
+name = "doctor_cmd"
+path = "tests/spec/doctor_cmd.rs"
+
+[[test]]
 name = "init_setup"
 path = "tests/spec/init_setup.rs"
 
@@ -118,6 +122,9 @@ telemetry-all = [
 serde_json = "1"
 serde = { version = "1", features = ["derive"] }
 clap = { version = "4", features = ["derive"] }
+clap_complete = "4"
+indicatif = "0.17"
+arboard = "3"
 anyhow = "1"
 rusqlite = { version = "0.39", features = ["bundled"] }
 rand = { version = "0.10", features = ["std_rng"] }

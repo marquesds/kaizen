@@ -58,6 +58,49 @@ fn format_dashboard(
         writeln!(&mut s).unwrap();
         format_tool_spans(&mut s, metrics);
     }
+    writeln!(&mut s).unwrap();
+    s.push_str(&takeaway_block(ws, stats, metrics));
+    s
+}
+
+fn takeaway_block(
+    _ws: &str,
+    stats: &InsightsStats,
+    metrics: Option<&crate::metrics::types::MetricsReport>,
+) -> String {
+    use std::fmt::Write;
+    let mut s = String::new();
+    let _ = writeln!(&mut s, "Takeaway");
+    if let Some(m) = metrics {
+        if let Some(f) = m.hottest_files.first() {
+            let _ = writeln!(
+                &mut s,
+                "  · Hottest file (agent × churn signal): {} — value {}",
+                f.path, f.value
+            );
+        }
+        if let Some(t) = m.slowest_tools.first() {
+            let p95 = t
+                .p95_ms
+                .map(|v| format!("{v}ms"))
+                .unwrap_or_else(|| "n/a".into());
+            let _ = writeln!(&mut s, "  · Slowest tool (p95): {} @ {}", t.tool, p95);
+        }
+    }
+    if let Some((rec, _n)) = stats.recent.first() {
+        let _ = writeln!(&mut s, "  · Recent session agent: {}", rec.agent);
+    }
+    if !stats.top_tools.is_empty() {
+        let _ = writeln!(
+            &mut s,
+            "  · Next: `kaizen retro --days 7` for ranked bets, or `kaizen exp new` to A/B a change"
+        );
+    } else {
+        let _ = writeln!(
+            &mut s,
+            "  · Next: `kaizen metrics` or run more agent sessions to populate tools"
+        );
+    }
     s
 }
 

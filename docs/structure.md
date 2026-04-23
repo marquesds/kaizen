@@ -43,4 +43,7 @@ kaizen/
 
 ## Notes
 
-<!-- Add stack details, key crates, and layout as they evolve -->
+- Full dependency set and version pins: [`Cargo.toml`](../Cargo.toml). The table above is a
+  map, not a full graph.
+- Long-form user documentation in `docs/` is maintained on **GitHub**; the crate published to
+  crates.io excludes that folder in `Cargo.toml` for a smaller package tarball.

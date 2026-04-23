@@ -134,5 +134,37 @@ fn format_human(metrics: &crate::metrics::types::MetricsReport) -> String {
         "Agent pain hotspots",
         &metrics.agent_pain_hotspots,
     ));
+    use std::fmt::Write;
+    let _ = writeln!(&mut out);
+    let _ = writeln!(&mut out, "Takeaway");
+    if let Some(f) = metrics.hottest_files.first() {
+        let _ = writeln!(
+            &mut out,
+            "  · Review {} first (heat {}); pair with `kaizen insights` for session context",
+            f.path, f.value
+        );
+    }
+    if let Some(t) = metrics.slowest_tools.first() {
+        let p95 = t
+            .p95_ms
+            .map(|v| format!("{v}ms"))
+            .unwrap_or_else(|| "n/a".into());
+        let _ = writeln!(
+            &mut out,
+            "  · Latency focus: {} p95 {} — tune or cache this tool path if it recurs",
+            t.tool, p95
+        );
+    }
+    if let Some(t) = metrics.highest_token_tools.first() {
+        let _ = writeln!(
+            &mut out,
+            "  · Token sink: {} ({} total tok) — compare week over week with `kaizen metrics --days 30`",
+            t.tool, t.total_tokens
+        );
+    }
+    let _ = writeln!(
+        &mut out,
+        "  · Next: `kaizen retro --days 7` for team-level bets"
+    );
     out
 }

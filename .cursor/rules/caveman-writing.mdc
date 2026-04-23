@@ -5,11 +5,21 @@ alwaysApply: false
 
 # Caveman Writing Style
 
-Applies everywhere humans write prose:
-- `docs/`, `.cursor/skills/`, `.cursor/rules/`, `AGENTS.md`, `CLAUDE.md`, any `.md`/`.mdc`
-- Code doc comments (`///`, `//!`)
+**Default** — applies in:
+- `.cursor/skills/`, `.cursor/rules/`, `AGENTS.md` (where not reader-facing), `CLAUDE.md`
+- `specs/`, internal notes, any `.md`/`.mdc` not under the exception below
+- Code doc comments (`///`, `//!`) when contract-style
 - Inline comments (`//`, `#`, `--`, etc.)
-- Plans, specs, ADRs, task breakdowns, epic PRDs
+- Plans, ADRs, task breakdowns, epic PRDs (unless publishing as public docs)
+
+**Reader-facing exception** — use full sentences and normal technical clarity (no article-dropping), same bar as a good engineering post:
+
+- `README.md` (repo root)
+- `docs/**/*.md` (published user and contributor reference in `docs/`)
+- `CONTRIBUTING.md`
+- User-facing `CHANGELOG.md` entries (what changed, not internal commit noise)
+
+Caveman stays default for skills, rules, Quint specs, and agent-to-agent brevity.
 
 ## Rules
 
