@@ -50,6 +50,24 @@ enum Command {
         #[command(subcommand)]
         subcmd: SyncCommand,
     },
+    /// Weekly-style heuristic retro report.
+    Retro {
+        /// Trailing window in days (default 7).
+        #[arg(long, default_value_t = 7)]
+        days: u32,
+        /// Print Markdown to stdout; do not write a file.
+        #[arg(long)]
+        dry_run: bool,
+        /// Emit JSON report on stdout (no file write).
+        #[arg(long)]
+        json: bool,
+        /// Overwrite this ISO week's report if it exists.
+        #[arg(long)]
+        force: bool,
+        /// workspace root (default: cwd)
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -132,6 +150,13 @@ fn main() -> anyhow::Result<()> {
         Command::Sync {
             subcmd: SyncCommand::Status { workspace },
         } => kaizen::shell::sync::cmd_sync_status(workspace.as_deref()),
+        Command::Retro {
+            days,
+            dry_run,
+            json,
+            force,
+            workspace,
+        } => kaizen::shell::retro::cmd_retro(workspace.as_deref(), days, dry_run, json, force),
     }
 }
 

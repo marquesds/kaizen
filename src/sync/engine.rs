@@ -52,6 +52,7 @@ pub struct FlushStats {
     pub events_sent: u64,
 }
 
+#[derive(Default)]
 struct Sent {
     batches: u64,
     events: u64,
@@ -109,7 +110,9 @@ fn post_batch_resilient(
             PostBatchOutcome::TooLarge => {
                 if body.events.len() <= 1 {
                     store.set_sync_state_error("413: single event too large for server")?;
-                    anyhow::bail!("413: single event too large; tighten redaction or max_body_bytes");
+                    anyhow::bail!(
+                        "413: single event too large; tighten redaction or max_body_bytes"
+                    );
                 }
                 let mid = body.events.len() / 2;
                 let left_ids = ids[..mid].to_vec();
@@ -154,15 +157,6 @@ fn post_batch_resilient(
                 thread::sleep(backoff);
                 backoff = (backoff * 2).min(max_backoff);
             }
-        }
-    }
-}
-
-impl Default for Sent {
-    fn default() -> Self {
-        Self {
-            batches: 0,
-            events: 0,
         }
     }
 }

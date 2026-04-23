@@ -1,0 +1,113 @@
+//! H1 — Dead skill: on-disk skill unused in lookback window, not edited recently.
+
+use crate::retro::types::{Bet, Inputs};
+
+const STALE_EDIT_MS: u64 = 60 * 86_400_000;
+const MIN_EVENTS_FOR_CREDIBLE: usize = 24;
+
+pub fn run(inputs: &Inputs) -> Vec<Bet> {
+    if inputs.events.len() < MIN_EVENTS_FOR_CREDIBLE {
+        return vec![];
+    }
+    let mut out = Vec::new();
+    let now = inputs.window_end_ms;
+    for sf in &inputs.skill_files_on_disk {
+        if inputs.skills_used_recent_slugs.contains(&sf.slug) {
+            continue;
+        }
+        // Skip skills touched on disk within the last 60 days.
+        if sf.mtime_ms > now.saturating_sub(STALE_EDIT_MS) {
+            continue;
+        }
+        let est_tokens_week = (sf.size_bytes as f64 / 4.0) * 10.0;
+        let id = format!("H1:{}", sf.slug);
+        out.push(Bet {
+            id,
+            heuristic_id: "H1".into(),
+            title: format!("Remove or archive unused skill `{}`", sf.slug),
+            hypothesis: format!(
+                "Skill `.cursor/skills/{}/` has not been referenced in tracked sessions for the lookback window and was last modified more than 60 days ago.",
+                sf.slug
+            ),
+            expected_tokens_saved_per_week: est_tokens_week,
+            effort_minutes: 5,
+            evidence: vec![format!(
+                "On-disk size ~{} bytes; not in recent `skills_used` index.",
+                sf.size_bytes
+            )],
+            apply_step: format!("rm -rf .cursor/skills/{}", sf.slug),
+            evidence_recency_ms: sf.mtime_ms,
+        });
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::event::{Event, EventKind, EventSource, SessionRecord, SessionStatus};
+    use crate::retro::types::{RetroAggregates, SkillFileOnDisk};
+    use serde_json::json;
+    use std::collections::HashSet;
+
+    fn base_inputs() -> Inputs {
+        let mut agg = RetroAggregates::default();
+        agg.unique_session_ids.insert("s1".into());
+        Inputs {
+            window_start_ms: 0,
+            window_end_ms: 100_000_000,
+            events: (0..30)
+                .map(|i| {
+                    (
+                        SessionRecord {
+                            id: "s1".into(),
+                            agent: "cursor".into(),
+                            model: None,
+                            workspace: "/w".into(),
+                            started_at_ms: 0,
+                            ended_at_ms: None,
+                            status: SessionStatus::Done,
+                            trace_path: "".into(),
+                        },
+                        Event {
+                            session_id: "s1".into(),
+                            seq: i,
+                            ts_ms: i * 1000,
+                            kind: EventKind::ToolCall,
+                            source: EventSource::Tail,
+                            tool: Some("read_file".into()),
+                            tokens_in: None,
+                            tokens_out: None,
+                            cost_usd_e6: None,
+                            payload: json!({}),
+                        },
+                    )
+                })
+                .collect(),
+            files_touched: vec![],
+            skills_used: vec![],
+            skills_used_recent_slugs: HashSet::new(),
+            usage_lookback_ms: 30 * 86_400_000,
+            skill_files_on_disk: vec![SkillFileOnDisk {
+                slug: "dead".into(),
+                size_bytes: 400,
+                mtime_ms: 0,
+            }],
+            aggregates: agg,
+        }
+    }
+
+    #[test]
+    fn finds_dead_skill_when_stale() {
+        let bets = run(&base_inputs());
+        assert_eq!(bets.len(), 1);
+        assert_eq!(bets[0].heuristic_id, "H1");
+    }
+
+    #[test]
+    fn skips_recently_used_slug() {
+        let mut i = base_inputs();
+        i.skills_used_recent_slugs.insert("dead".into());
+        assert!(run(&i).is_empty());
+    }
+}

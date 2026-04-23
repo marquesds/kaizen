@@ -2,6 +2,7 @@
 
 use crate::core::config::try_team_salt;
 use crate::core::event::{Event, EventKind, EventSource, SessionRecord, SessionStatus};
+use crate::store::event_index::index_event_derived;
 use crate::sync::context::SyncIngestContext;
 use crate::sync::outbound::outbound_event_from_row;
 use crate::sync::redact::redact_payload;
@@ -61,6 +62,8 @@ const MIGRATIONS: &[&str] = &[
         k TEXT PRIMARY KEY,
         v TEXT NOT NULL
     )",
+    "CREATE UNIQUE INDEX IF NOT EXISTS files_touched_session_path_idx ON files_touched(session_id, path)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS skills_used_session_skill_idx ON skills_used(session_id, skill)",
 ];
 
 /// Per-workspace activity dashboard stats.
@@ -140,11 +143,7 @@ impl Store {
     }
 
     /// Append event; when `ctx` is set and sync is configured, enqueue one redacted outbox row.
-    pub fn append_event_with_sync(
-        &self,
-        e: &Event,
-        ctx: Option<&SyncIngestContext>,
-    ) -> Result<()> {
+    pub fn append_event_with_sync(&self, e: &Event, ctx: Option<&SyncIngestContext>) -> Result<()> {
         let payload = serde_json::to_string(&e.payload)?;
         self.conn.execute(
             "INSERT OR IGNORE INTO events (session_id, seq, ts_ms, kind, source, tool, tokens_in, tokens_out, cost_usd_e6, payload)
@@ -165,18 +164,18 @@ impl Store {
         if self.conn.changes() == 0 {
             return Ok(());
         }
+        index_event_derived(&self.conn, e)?;
         let Some(ctx) = ctx else {
             return Ok(());
         };
         let sync = &ctx.sync;
-        if sync.endpoint.is_empty()
-            || sync.team_token.is_empty()
-            || sync.team_id.is_empty()
-        {
+        if sync.endpoint.is_empty() || sync.team_token.is_empty() || sync.team_id.is_empty() {
             return Ok(());
         }
         let Some(salt) = try_team_salt(sync) else {
-            tracing::warn!("sync outbox skipped: set sync.team_salt_hex (64 hex chars) in ~/.kaizen/config.toml");
+            tracing::warn!(
+                "sync outbox skipped: set sync.team_salt_hex (64 hex chars) in ~/.kaizen/config.toml"
+            );
             return Ok(());
         };
         if sync.sample_rate < 1.0 {
@@ -215,20 +214,18 @@ impl Store {
 
     pub fn mark_outbox_sent(&self, ids: &[i64]) -> Result<()> {
         for id in ids {
-            self.conn.execute(
-                "UPDATE sync_outbox SET sent = 1 WHERE id = ?1",
-                params![id],
-            )?;
+            self.conn
+                .execute("UPDATE sync_outbox SET sent = 1 WHERE id = ?1", params![id])?;
         }
         Ok(())
     }
 
     pub fn outbox_pending_count(&self) -> Result<u64> {
-        let c: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM sync_outbox WHERE sent = 0",
-            [],
-            |r| r.get(0),
-        )?;
+        let c: i64 =
+            self.conn
+                .query_row("SELECT COUNT(*) FROM sync_outbox WHERE sent = 0", [], |r| {
+                    r.get(0)
+                })?;
         Ok(c as u64)
     }
 
@@ -289,11 +286,9 @@ impl Store {
             .and_then(|s| s.parse().ok());
         let last_error = self
             .conn
-            .query_row(
-                "SELECT v FROM sync_state WHERE k = 'last_error'",
-                [],
-                |r| r.get::<_, String>(0),
-            )
+            .query_row("SELECT v FROM sync_state WHERE k = 'last_error'", [], |r| {
+                r.get::<_, String>(0)
+            })
             .optional()?;
         let consecutive_failures = self
             .conn
@@ -487,6 +482,134 @@ impl Store {
             total_cost_usd_e6,
             sessions_with_cost,
         })
+    }
+
+    /// Events in `[start_ms, end_ms]` for a workspace, with session metadata per row.
+    pub fn retro_events_in_window(
+        &self,
+        workspace: &str,
+        start_ms: u64,
+        end_ms: u64,
+    ) -> Result<Vec<(SessionRecord, Event)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT e.session_id, e.seq, e.ts_ms, e.kind, e.source, e.tool, e.tokens_in, e.tokens_out, e.cost_usd_e6, e.payload,
+                    s.id, s.agent, s.model, s.workspace, s.started_at_ms, s.ended_at_ms, s.status, s.trace_path
+             FROM events e
+             JOIN sessions s ON s.id = e.session_id
+             WHERE s.workspace = ?1 AND e.ts_ms >= ?2 AND e.ts_ms <= ?3
+             ORDER BY e.ts_ms ASC, e.session_id ASC, e.seq ASC",
+        )?;
+        let rows = stmt.query_map(params![workspace, start_ms as i64, end_ms as i64], |row| {
+            let payload_str: String = row.get(9)?;
+            let status_str: String = row.get(16)?;
+            Ok((
+                SessionRecord {
+                    id: row.get(10)?,
+                    agent: row.get(11)?,
+                    model: row.get(12)?,
+                    workspace: row.get(13)?,
+                    started_at_ms: row.get::<_, i64>(14)? as u64,
+                    ended_at_ms: row.get::<_, Option<i64>>(15)?.map(|v| v as u64),
+                    status: status_from_str(&status_str),
+                    trace_path: row.get(17)?,
+                },
+                Event {
+                    session_id: row.get(0)?,
+                    seq: row.get::<_, i64>(1)? as u64,
+                    ts_ms: row.get::<_, i64>(2)? as u64,
+                    kind: kind_from_str(&row.get::<_, String>(3)?),
+                    source: source_from_str(&row.get::<_, String>(4)?),
+                    tool: row.get(5)?,
+                    tokens_in: row.get::<_, Option<i64>>(6)?.map(|v| v as u32),
+                    tokens_out: row.get::<_, Option<i64>>(7)?.map(|v| v as u32),
+                    cost_usd_e6: row.get(8)?,
+                    payload: serde_json::from_str(&payload_str).unwrap_or(serde_json::Value::Null),
+                },
+            ))
+        })?;
+
+        let mut out = Vec::new();
+        for r in rows {
+            out.push(r?);
+        }
+        Ok(out)
+    }
+
+    /// Distinct `(session_id, path)` for sessions with activity in the time window.
+    pub fn files_touched_in_window(
+        &self,
+        workspace: &str,
+        start_ms: u64,
+        end_ms: u64,
+    ) -> Result<Vec<(String, String)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT DISTINCT ft.session_id, ft.path
+             FROM files_touched ft
+             JOIN sessions s ON s.id = ft.session_id
+             WHERE s.workspace = ?1
+               AND EXISTS (
+                 SELECT 1 FROM events e
+                 WHERE e.session_id = ft.session_id
+                   AND e.ts_ms >= ?2 AND e.ts_ms <= ?3
+               )
+             ORDER BY ft.session_id, ft.path",
+        )?;
+        let out: Vec<(String, String)> = stmt
+            .query_map(params![workspace, start_ms as i64, end_ms as i64], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+        Ok(out)
+    }
+
+    /// Distinct skill slugs referenced in `skills_used` for a workspace since `since_ms`
+    /// (any session with an indexed skill row; join events optional — use row existence).
+    pub fn skills_used_since(&self, workspace: &str, since_ms: u64) -> Result<Vec<String>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT DISTINCT su.skill
+             FROM skills_used su
+             JOIN sessions s ON s.id = su.session_id
+             WHERE s.workspace = ?1
+               AND EXISTS (
+                 SELECT 1 FROM events e
+                 WHERE e.session_id = su.session_id AND e.ts_ms >= ?2
+               )
+             ORDER BY su.skill",
+        )?;
+        let out: Vec<String> = stmt
+            .query_map(params![workspace, since_ms as i64], |r| r.get(0))?
+            .filter_map(|r| r.ok())
+            .collect();
+        Ok(out)
+    }
+
+    /// Distinct `(session_id, skill)` for sessions with activity in the time window.
+    pub fn skills_used_in_window(
+        &self,
+        workspace: &str,
+        start_ms: u64,
+        end_ms: u64,
+    ) -> Result<Vec<(String, String)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT DISTINCT su.session_id, su.skill
+             FROM skills_used su
+             JOIN sessions s ON s.id = su.session_id
+             WHERE s.workspace = ?1
+               AND EXISTS (
+                 SELECT 1 FROM events e
+                 WHERE e.session_id = su.session_id
+                   AND e.ts_ms >= ?2 AND e.ts_ms <= ?3
+               )
+             ORDER BY su.session_id, su.skill",
+        )?;
+        let out: Vec<(String, String)> = stmt
+            .query_map(params![workspace, start_ms as i64, end_ms as i64], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+        Ok(out)
     }
 
     pub fn get_session(&self, id: &str) -> Result<Option<SessionRecord>> {
@@ -772,6 +895,18 @@ mod tests {
 
         let got = store.get_session("s3").unwrap().unwrap();
         assert_eq!(got.status, SessionStatus::Running);
+    }
+
+    #[test]
+    fn append_event_indexes_path_from_payload() {
+        let dir = TempDir::new().unwrap();
+        let store = Store::open(&dir.path().join("kaizen.db")).unwrap();
+        store.upsert_session(&make_session("sx")).unwrap();
+        let mut ev = make_event("sx", 0);
+        ev.payload = json!({"input": {"path": "src/lib.rs"}});
+        store.append_event(&ev).unwrap();
+        let ft = store.files_touched_in_window("/ws", 0, 10_000).unwrap();
+        assert_eq!(ft, vec![("sx".to_string(), "src/lib.rs".to_string())]);
     }
 
     #[test]

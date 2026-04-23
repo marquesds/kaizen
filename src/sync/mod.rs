@@ -7,8 +7,8 @@ pub mod outbound;
 pub mod redact;
 
 pub use context::SyncIngestContext;
-pub use engine::{flush_outbox_once, FlushStats};
-pub use outbound::{hash_with_salt, workspace_hash, EventsBatchBody, OutboundEvent};
+pub use engine::{FlushStats, flush_outbox_once};
+pub use outbound::{EventsBatchBody, OutboundEvent, hash_with_salt, workspace_hash};
 
 use crate::core::config::Config;
 use std::path::PathBuf;

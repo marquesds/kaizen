@@ -17,9 +17,8 @@ pub fn cmd_sync_run(workspace: Option<&Path>, once: bool) -> Result<()> {
         tracing::info!("sync disabled (sync.endpoint empty)");
         return Ok(());
     }
-    let salt = try_team_salt(&cfg.sync).context(
-        "sync requires team_salt_hex (64 hex chars), usually in ~/.kaizen/config.toml",
-    )?;
+    let salt = try_team_salt(&cfg.sync)
+        .context("sync requires team_salt_hex (64 hex chars), usually in ~/.kaizen/config.toml")?;
     let db_path = ws.join(".kaizen/kaizen.db");
     let store = Store::open(&db_path)?;
     let interval = cfg.sync.flush_interval_ms.max(100);
@@ -60,9 +59,8 @@ pub fn cmd_sync_status(workspace: Option<&Path>) -> Result<()> {
         None => println!("last flush ok: (never)"),
     }
     println!("consecutive failures: {}", st.consecutive_failures);
-    match &st.last_error {
-        Some(e) => println!("last error: {e}"),
-        None => {}
+    if let Some(e) = &st.last_error {
+        println!("last error: {e}");
     }
     let cfg = config::load(&ws)?;
     if cfg.sync.endpoint.is_empty() {

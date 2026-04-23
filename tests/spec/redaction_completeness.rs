@@ -56,7 +56,11 @@ impl Driver for RedactionDriver {
     }
 }
 
-#[quint_run(spec = "specs/redaction-completeness.qnt", max_samples = 12, max_steps = 8)]
+#[quint_run(
+    spec = "specs/redaction-completeness.qnt",
+    max_samples = 12,
+    max_steps = 8
+)]
 fn redaction_completeness_run() -> impl Driver {
     RedactionDriver::default()
 }

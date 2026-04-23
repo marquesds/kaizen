@@ -58,7 +58,10 @@ pub fn outbound_event_from_row(
         event_seq: e.seq,
         ts_ms: e.ts_ms,
         agent: session.agent.clone(),
-        model: session.model.clone().unwrap_or_else(|| "unknown".to_string()),
+        model: session
+            .model
+            .clone()
+            .unwrap_or_else(|| "unknown".to_string()),
         kind: kind_api(&e.kind),
         source: source_api(&e.source),
         tool: e.tool.clone(),

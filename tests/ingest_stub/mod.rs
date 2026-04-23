@@ -61,10 +61,7 @@ async fn ingest(State(st): State<IngestState>, headers: HeaderMap, body: Bytes) 
         .to_string();
 
     if !body.is_empty() {
-        let Some(auth) = headers
-            .get("Authorization")
-            .and_then(|v| v.to_str().ok())
-        else {
+        let Some(auth) = headers.get("Authorization").and_then(|v| v.to_str().ok()) else {
             return StatusCode::UNAUTHORIZED.into_response();
         };
         if !auth.starts_with("Bearer ") {
@@ -84,10 +81,7 @@ async fn ingest(State(st): State<IngestState>, headers: HeaderMap, body: Bytes) 
         } else {
             String::from_utf8_lossy(&body).into_owned()
         };
-        if raw.contains("/Users/")
-            || raw.contains("/home/")
-            || raw.contains(TEST_SECRET_MARKER)
-        {
+        if raw.contains("/Users/") || raw.contains("/home/") || raw.contains(TEST_SECRET_MARKER) {
             return StatusCode::BAD_REQUEST.into_response();
         }
         st.captured_bodies.lock().unwrap().push(raw);

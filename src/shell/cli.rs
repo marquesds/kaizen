@@ -123,17 +123,22 @@ pub(crate) fn scan_all_agents(
         let cursor_dir = PathBuf::from(&expanded)
             .join(&slug)
             .join("agent-transcripts");
-        scan_agent_dirs(&cursor_dir, store, |p| {
-            scan_session_dir_all(p).map(|sessions| {
-                sessions
-                    .into_iter()
-                    .map(|(mut r, evs)| {
-                        r.workspace = ws_str.to_string();
-                        (r, evs)
-                    })
-                    .collect()
-            })
-        }, sync_ctx.as_ref())?;
+        scan_agent_dirs(
+            &cursor_dir,
+            store,
+            |p| {
+                scan_session_dir_all(p).map(|sessions| {
+                    sessions
+                        .into_iter()
+                        .map(|(mut r, evs)| {
+                            r.workspace = ws_str.to_string();
+                            (r, evs)
+                        })
+                        .collect()
+                })
+            },
+            sync_ctx.as_ref(),
+        )?;
     }
 
     let home = std::env::var("HOME").unwrap_or_default();
@@ -142,20 +147,30 @@ pub(crate) fn scan_all_agents(
         .join(".claude/projects")
         .join(&slug)
         .join("sessions");
-    scan_agent_dirs(&claude_dir, store, |p| {
-        scan_claude_session_dir(p).map(|(mut r, evs)| {
-            r.workspace = ws_str.to_string();
-            vec![(r, evs)]
-        })
-    }, sync_ctx.as_ref())?;
+    scan_agent_dirs(
+        &claude_dir,
+        store,
+        |p| {
+            scan_claude_session_dir(p).map(|(mut r, evs)| {
+                r.workspace = ws_str.to_string();
+                vec![(r, evs)]
+            })
+        },
+        sync_ctx.as_ref(),
+    )?;
 
     let codex_dir = PathBuf::from(&home).join(".codex/sessions").join(&slug);
-    scan_agent_dirs(&codex_dir, store, |p| {
-        scan_codex_session_dir(p).map(|(mut r, evs)| {
-            r.workspace = ws_str.to_string();
-            vec![(r, evs)]
-        })
-    }, sync_ctx.as_ref())?;
+    scan_agent_dirs(
+        &codex_dir,
+        store,
+        |p| {
+            scan_codex_session_dir(p).map(|(mut r, evs)| {
+                r.workspace = ws_str.to_string();
+                vec![(r, evs)]
+            })
+        },
+        sync_ctx.as_ref(),
+    )?;
 
     Ok(())
 }

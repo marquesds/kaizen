@@ -43,6 +43,10 @@ path = "tests/spec/redaction_completeness.rs"
 name = "sync_backpressure"
 path = "tests/spec/sync_backpressure.rs"
 
+[[test]]
+name = "retro_pipeline"
+path = "tests/spec/retro_pipeline.rs"
+
 [dependencies]
 serde_json = "1"
 serde = { version = "1", features = ["derive"] }
@@ -64,6 +68,8 @@ blake3 = "1"
 aho-corasick = "1"
 regex = "1"
 hex = "0.4"
+time = { version = "0.3", features = ["formatting", "macros", "local-offset"] }
+fs4 = { version = "0.13", features = ["sync"] }
 
 [dev-dependencies]
 quint-connect = "0.1"

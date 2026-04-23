@@ -16,7 +16,7 @@ const CONFIG_TOML: &str = r#"[kaizen]
 # flush_interval_ms = 10000
 # sample_rate = 1.0
 "#;
-const SKILL_PLACEHOLDER: &str = "# kaizen-retro skill placeholder\n";
+const KAIZEN_RETRO_SKILL: &str = include_str!("../../assets/kaizen-retro-SKILL.md");
 
 const CURSOR_STOP_HOOK: &str =
     r#"{"matcher": "Stop", "command": "kaizen ingest hook --source cursor"}"#;
@@ -140,9 +140,15 @@ fn patch_claude_settings(ws: &Path) -> Result<()> {
 fn write_skill(ws: &Path) -> Result<()> {
     let path = ws.join(".cursor/skills/kaizen-retro/SKILL.md");
     std::fs::create_dir_all(path.parent().unwrap())?;
-    if !path.exists() {
-        std::fs::write(&path, SKILL_PLACEHOLDER)?;
+    if path.exists() {
+        let existing = std::fs::read_to_string(&path)?;
+        if !existing.contains("placeholder") && !existing.trim().is_empty() {
+            println!("  skipped  .cursor/skills/kaizen-retro/SKILL.md");
+            return Ok(());
+        }
     }
+    std::fs::write(&path, KAIZEN_RETRO_SKILL)?;
+    println!("  wrote  .cursor/skills/kaizen-retro/SKILL.md");
     Ok(())
 }
 

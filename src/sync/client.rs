@@ -2,8 +2,8 @@
 
 use crate::sync::outbound::EventsBatchBody;
 use anyhow::{Context, Result};
-use flate2::write::GzEncoder;
 use flate2::Compression;
+use flate2::write::GzEncoder;
 use reqwest::blocking::Client;
 use reqwest::header::{AUTHORIZATION, CONTENT_ENCODING, CONTENT_TYPE, RETRY_AFTER};
 use std::io::Write;

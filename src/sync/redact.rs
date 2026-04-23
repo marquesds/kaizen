@@ -8,9 +8,7 @@ use std::sync::OnceLock;
 
 fn email_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| {
-        Regex::new(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}").unwrap()
-    })
+    RE.get_or_init(|| Regex::new(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}").unwrap())
 }
 
 fn win_drive_re() -> &'static Regex {
@@ -82,10 +80,10 @@ fn redact_tool_args(v: &mut Value, workspace: &Path, team_salt: &[u8; 32]) {
             }
             let keys: Vec<String> = m.keys().cloned().collect();
             for k in keys {
-                if k != "command" {
-                    if let Some(val) = m.get_mut(&k) {
-                        redact_value(val, workspace, team_salt, false);
-                    }
+                if k != "command"
+                    && let Some(val) = m.get_mut(&k)
+                {
+                    redact_value(val, workspace, team_salt, false);
                 }
             }
         }
@@ -100,7 +98,7 @@ fn redact_shell_command(cmd: &str, workspace: &Path, team_salt: &[u8; 32]) -> St
     };
     let rest: Vec<&str> = parts.collect();
     if rest.is_empty() {
-        return redact_string(&first.to_string(), workspace, team_salt);
+        return redact_string(first, workspace, team_salt);
     }
     let redacted_rest: Vec<String> = rest
         .iter()
@@ -108,23 +106,31 @@ fn redact_shell_command(cmd: &str, workspace: &Path, team_salt: &[u8; 32]) -> St
             if looks_secret_token(t) {
                 "<REDACTED:arg>".to_string()
             } else {
-                redact_string(&t.to_string(), workspace, team_salt)
+                redact_string(t, workspace, team_salt)
             }
         })
         .collect();
-    format!("{} {}", redact_string(&first.to_string(), workspace, team_salt), redacted_rest.join(" "))
+    format!(
+        "{} {}",
+        redact_string(first, workspace, team_salt),
+        redacted_rest.join(" ")
+    )
 }
 
 fn looks_secret_token(s: &str) -> bool {
     s.contains('=') && (s.contains("TOKEN") || s.contains("KEY") || s.contains("SECRET"))
         || s.starts_with("sk-")
         || s.starts_with("ghp_")
-        || s.len() > 40 && s.chars().all(|c| c.is_alphanumeric() || "+/=_-".contains(c))
+        || s.len() > 40
+            && s.chars()
+                .all(|c| c.is_alphanumeric() || "+/=_-".contains(c))
 }
 
 pub fn redact_string(s: &str, workspace: &Path, team_salt: &[u8; 32]) -> String {
     let mut out = s.to_string();
-    out = email_re().replace_all(&out, "<REDACTED:email>").into_owned();
+    out = email_re()
+        .replace_all(&out, "<REDACTED:email>")
+        .into_owned();
     out = replace_path_prefixes(&out, workspace, team_salt);
     scrub_secrets(&mut out);
     out
@@ -171,19 +177,12 @@ fn file_placeholder(workspace: &Path, team_salt: &[u8; 32], abs_tail: &str) -> S
 }
 
 fn basename_class(name: &str) -> &'static str {
-    if name.contains('.') {
-        "file"
-    } else {
-        "path"
-    }
+    if name.contains('.') { "file" } else { "path" }
 }
 
 fn rel_path_hash(workspace: &Path, team_salt: &[u8; 32], tail_after_prefix: &str) -> String {
-    let synthetic = workspace
-        .to_string_lossy()
-        .into_owned()
-        + "/"
-        + tail_after_prefix.trim_start_matches('/');
+    let synthetic =
+        workspace.to_string_lossy().into_owned() + "/" + tail_after_prefix.trim_start_matches('/');
     let full = crate::sync::outbound::hash_with_salt(team_salt, synthetic.as_bytes());
     full.strip_prefix("blake3:")
         .map(|h| h[..8.min(h.len())].to_string())
