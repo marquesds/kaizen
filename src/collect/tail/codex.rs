@@ -32,7 +32,22 @@ pub fn parse_codex_line(
         .and_then(|v| v.as_u64())
         .map(|v| v as u32);
 
-    let ts_ms = base_ts + seq * 100;
+    let reasoning_tokens = obj
+        .get("usage")
+        .and_then(|u| u.get("completion_tokens_details"))
+        .and_then(|d| d.get("reasoning_tokens"))
+        .and_then(|v| v.as_u64())
+        .map(|v| v as u32)
+        .or_else(|| {
+            obj.get("usage")
+                .and_then(|u| u.get("output_tokens_details"))
+                .and_then(|d| d.get("reasoning_tokens"))
+                .and_then(|v| v.as_u64())
+                .map(|v| v as u32)
+        });
+
+    let ts_ms = line_ts_ms(obj).unwrap_or(base_ts + seq * 100);
+    let ts_exact = line_ts_ms(obj).is_some();
 
     // Tool calls are in top-level `tool_calls` array
     if let Some(first) = obj
@@ -50,17 +65,29 @@ pub fn parse_codex_line(
             session_id: session_id.to_string(),
             seq,
             ts_ms,
+            ts_exact,
             kind: EventKind::ToolCall,
             source: EventSource::Tail,
             tool: Some(tool_name),
+            tool_call_id: first
+                .get("id")
+                .and_then(|v| v.as_str())
+                .map(ToOwned::to_owned),
             tokens_in,
             tokens_out,
+            reasoning_tokens,
             cost_usd_e6: None,
             payload: first.clone(),
         }));
     }
 
     Ok(None)
+}
+
+fn line_ts_ms(obj: &serde_json::Map<String, Value>) -> Option<u64> {
+    ["timestamp_ms", "ts_ms", "created_at_ms"]
+        .iter()
+        .find_map(|k| obj.get(*k).and_then(|v| v.as_u64()))
 }
 
 /// Walk all `.jsonl` files under `dir`; return inferred `SessionRecord` + events.
@@ -87,6 +114,12 @@ pub fn scan_codex_session_dir(dir: &Path) -> Result<(SessionRecord, Vec<Event>)>
         ended_at_ms: None,
         status: SessionStatus::Done,
         trace_path: dir.to_string_lossy().to_string(),
+        start_commit: None,
+        end_commit: None,
+        branch: None,
+        dirty_start: None,
+        dirty_end: None,
+        repo_binding_source: None,
     };
 
     let mut events = Vec::new();
@@ -129,6 +162,7 @@ mod tests {
             .unwrap();
         assert_eq!(ev.kind, EventKind::ToolCall);
         assert_eq!(ev.tool.as_deref(), Some("shell"));
+        assert_eq!(ev.tool_call_id.as_deref(), Some("call_01"));
         assert_eq!(ev.session_id, "s1");
     }
 

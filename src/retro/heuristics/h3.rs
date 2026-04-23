@@ -41,6 +41,16 @@ pub fn run(inputs: &Inputs) -> Vec<Bet> {
         if n < MIN_TOUCHES as u64 {
             continue;
         }
+        let complexity = inputs
+            .file_facts
+            .get(&path)
+            .map(|f| f.complexity_total)
+            .unwrap_or(0);
+        let churn = inputs
+            .file_facts
+            .get(&path)
+            .map(|f| f.churn_30d)
+            .unwrap_or(0);
         let id = format!("H3:{}:{}", sid, path);
         out.push(Bet {
             id,
@@ -50,9 +60,12 @@ pub fn run(inputs: &Inputs) -> Vec<Bet> {
                 "Session `{}` issued {} tool calls targeting the same path — likely a failure loop.",
                 sid, n
             ),
-            expected_tokens_saved_per_week: (n as f64) * 800.0,
+            expected_tokens_saved_per_week: (n as f64) * (800.0 + complexity as f64 * 20.0),
             effort_minutes: 45,
-            evidence: vec![format!("Touches in single session: {}", n)],
+            evidence: vec![
+                format!("Touches in single session: {}", n),
+                format!("Complexity: {} · churn30: {}", complexity, churn),
+            ],
             apply_step: format!(
                 "Add regression test or invariant near `{}` so agents stop spinning.",
                 path

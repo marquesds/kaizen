@@ -1,6 +1,7 @@
 //! `kaizen insights` — workspace activity dashboard.
 
 use crate::core::config;
+use crate::metrics::{index, report};
 use crate::shell::cli::{scan_all_agents, workspace_path};
 use crate::shell::fmt::fmt_ts;
 use crate::store::InsightsStats;
@@ -17,11 +18,25 @@ pub fn cmd_insights(workspace: Option<&Path>) -> Result<()> {
     let store = Store::open(&db_path)?;
     scan_all_agents(&ws, &cfg, &ws_str, &store)?;
     let stats = store.insights(&ws_str)?;
-    print_dashboard(&ws_str, &stats);
+    let metrics = index::ensure_indexed(&store, &ws, false)
+        .ok()
+        .and_then(|_| report::build_report(&store, &ws_str, 7).ok());
+    if let Some(ctx) = crate::sync::ingest_ctx(&cfg, ws.clone())
+        && let Some(snapshot) = metrics.as_ref().and_then(|report| report.snapshot.as_ref())
+        && let Ok(facts) = store.file_facts_for_snapshot(&snapshot.id)
+        && let Ok(edges) = store.repo_edges_for_snapshot(&snapshot.id)
+    {
+        let _ = crate::sync::smart::enqueue_repo_snapshot(&store, snapshot, &facts, &edges, &ctx);
+    }
+    print_dashboard(&ws_str, &stats, metrics.as_ref());
     Ok(())
 }
 
-fn print_dashboard(ws: &str, stats: &InsightsStats) {
+fn print_dashboard(
+    ws: &str,
+    stats: &InsightsStats,
+    metrics: Option<&crate::metrics::types::MetricsReport>,
+) {
     println!("kaizen — {ws}");
     println!();
     print_sessions(stats);
@@ -29,6 +44,12 @@ fn print_dashboard(ws: &str, stats: &InsightsStats) {
     print_tools(stats);
     println!();
     print_cost(stats);
+    if let Some(metrics) = metrics {
+        println!();
+        print_code(metrics);
+        println!();
+        print_tool_spans(metrics);
+    }
 }
 
 fn print_sessions(stats: &InsightsStats) {
@@ -76,4 +97,34 @@ fn print_cost(stats: &InsightsStats) {
         "Cost:  ${cost:.2}  ({} sessions with cost data)",
         stats.sessions_with_cost
     );
+}
+
+fn print_code(metrics: &crate::metrics::types::MetricsReport) {
+    println!("Code");
+    for row in metrics.hottest_files.iter().take(5) {
+        println!("  hot {:>8}  {}", row.value, row.path);
+    }
+    for row in metrics.agent_pain_hotspots.iter().take(5) {
+        println!("  pain {:>7}  {}", row.value, row.path);
+    }
+    if metrics.hottest_files.is_empty() && metrics.agent_pain_hotspots.is_empty() {
+        println!("  (no file metrics)");
+    }
+}
+
+fn print_tool_spans(metrics: &crate::metrics::types::MetricsReport) {
+    println!("Tool Spans");
+    for row in metrics.slowest_tools.iter().take(5) {
+        let p95 = row
+            .p95_ms
+            .map(|v| format!("{v}ms"))
+            .unwrap_or_else(|| "-".into());
+        println!(
+            "  {:<14} p95={} tok={} rtok={}",
+            row.tool, p95, row.total_tokens, row.total_reasoning_tokens
+        );
+    }
+    if metrics.slowest_tools.is_empty() {
+        println!("  (no span metrics)");
+    }
 }

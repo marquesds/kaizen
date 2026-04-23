@@ -4,7 +4,7 @@ use crate::core::event::SessionRecord;
 use crate::retro::types::{Inputs, RetroAggregates, SkillFileOnDisk};
 use crate::store::Store;
 use anyhow::Result;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 
@@ -22,12 +22,14 @@ pub fn load_inputs(
     let files_touched =
         store.files_touched_in_window(workspace_key, window_start_ms, window_end_ms)?;
     let skills_used = store.skills_used_in_window(workspace_key, window_start_ms, window_end_ms)?;
+    let tool_spans = store.tool_spans_in_window(workspace_key, window_start_ms, window_end_ms)?;
 
     let lookback_start = window_end_ms.saturating_sub(USAGE_LOOKBACK_MIN_DAYS * 86_400_000);
     let recent_slugs_list = store.skills_used_since(workspace_key, lookback_start)?;
     let skills_used_recent_slugs: HashSet<String> = recent_slugs_list.into_iter().collect();
 
     let skill_files_on_disk = scan_skill_files(workspace_root, window_end_ms)?;
+    let file_facts = latest_file_facts(store, workspace_key)?;
 
     let aggregates = build_aggregates(&events);
 
@@ -37,11 +39,27 @@ pub fn load_inputs(
         events,
         files_touched,
         skills_used,
+        tool_spans,
         skills_used_recent_slugs,
         usage_lookback_ms: USAGE_LOOKBACK_MIN_DAYS * 86_400_000,
         skill_files_on_disk,
+        file_facts,
         aggregates,
     })
+}
+
+fn latest_file_facts(
+    store: &Store,
+    workspace: &str,
+) -> Result<HashMap<String, crate::metrics::types::FileFact>> {
+    let Some(snapshot) = store.latest_repo_snapshot(workspace)? else {
+        return Ok(HashMap::new());
+    };
+    let facts = store.file_facts_for_snapshot(&snapshot.id)?;
+    Ok(facts
+        .into_iter()
+        .map(|fact| (fact.path.clone(), fact))
+        .collect())
 }
 
 fn scan_skill_files(workspace_root: &Path, now_ms: u64) -> Result<Vec<SkillFileOnDisk>> {

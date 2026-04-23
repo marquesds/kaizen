@@ -1,6 +1,8 @@
 //! Two-pane TUI: session list (left) + events (right).
 
 use crate::core::event::{Event, SessionRecord};
+use crate::metrics::types::MetricsReport;
+use crate::metrics::{index, report};
 use crate::store::Store;
 use crate::ui::theme;
 use anyhow::Result;
@@ -28,6 +30,8 @@ struct App {
     left_focus: bool,
     show_help: bool,
     detail: bool,
+    show_metrics: bool,
+    metrics: Option<MetricsReport>,
     pulse: bool,
     store: Store,
     workspace: String,
@@ -39,6 +43,8 @@ impl App {
         let store = Store::open(&db)?;
         let ws = workspace.to_string_lossy().to_string();
         let sessions = store.list_sessions(&ws)?;
+        let _ = index::ensure_indexed(&store, workspace, false);
+        let metrics = report::build_report(&store, &ws, 7).ok();
         Ok(Self {
             sessions,
             events: vec![],
@@ -46,6 +52,8 @@ impl App {
             left_focus: true,
             show_help: false,
             detail: false,
+            show_metrics: false,
+            metrics,
             pulse: false,
             store,
             workspace: ws,
@@ -58,6 +66,7 @@ impl App {
         if let Some(s) = self.sessions.get(self.sel_session) {
             self.events = self.store.list_events_for_session(&s.id)?;
         }
+        self.metrics = report::build_report(&self.store, &self.workspace, 7).ok();
         Ok(())
     }
 
@@ -139,6 +148,10 @@ fn draw_sessions(f: &mut ratatui::Frame, app: &App, area: ratatui::layout::Rect)
 }
 
 fn draw_events(f: &mut ratatui::Frame, app: &App, area: ratatui::layout::Rect) {
+    if app.show_metrics {
+        draw_metrics(f, app, area);
+        return;
+    }
     let id = app.selected_id().unwrap_or("-");
     let border_color = if !app.left_focus {
         theme::BORDER_ACTIVE
@@ -162,9 +175,33 @@ fn draw_events(f: &mut ratatui::Frame, app: &App, area: ratatui::layout::Rect) {
     f.render_widget(List::new(items).block(block), area);
 }
 
+fn draw_metrics(f: &mut ratatui::Frame, app: &App, area: ratatui::layout::Rect) {
+    let block = Block::default()
+        .title("Metrics")
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme::BORDER_ACTIVE));
+    let mut lines = vec!["Slow tools".to_string()];
+    if let Some(metrics) = &app.metrics {
+        for row in metrics.slowest_tools.iter().take(4) {
+            let p95 = row
+                .p95_ms
+                .map(|v| format!("{v}ms"))
+                .unwrap_or_else(|| "-".into());
+            lines.push(format!("{} p95={} tok={}", row.tool, p95, row.total_tokens));
+        }
+        lines.push(String::new());
+        lines.push("Hot files".into());
+        for row in metrics.hottest_files.iter().take(4) {
+            lines.push(format!("{} {}", row.value, row.path));
+        }
+    }
+    f.render_widget(Paragraph::new(lines.join("\n")).block(block), area);
+}
+
 fn draw_statusbar(f: &mut ratatui::Frame, app: &App, area: ratatui::layout::Rect) {
     let pulse = if app.pulse { "●" } else { "○" };
-    let text = format!("LIVE {pulse}  j/k move · Tab pane · Enter detail · ? help · q quit");
+    let text =
+        format!("LIVE {pulse}  j/k move · Tab pane · m metrics · Enter detail · ? help · q quit");
     f.render_widget(Paragraph::new(text), area);
 }
 
@@ -214,6 +251,7 @@ pub async fn run(workspace: &Path) -> Result<()> {
                         KeyCode::Char('q') => { app.detail = false; app.show_help = false; }
                         KeyCode::Esc | KeyCode::Backspace => { app.detail = false; app.show_help = false; }
                         KeyCode::Char('?') => app.show_help = !app.show_help,
+                        KeyCode::Char('m') => app.show_metrics = !app.show_metrics,
                         KeyCode::Tab => app.left_focus = !app.left_focus,
                         KeyCode::Char('r') => { let _ = app.refresh(); }
                         KeyCode::Char('j') | KeyCode::Down

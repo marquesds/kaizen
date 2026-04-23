@@ -45,6 +45,23 @@ enum Command {
         #[arg(long)]
         workspace: Option<PathBuf>,
     },
+    /// Smart metrics: code hotspots, slow tools, token sinks.
+    Metrics {
+        #[command(subcommand)]
+        subcmd: Option<MetricsCommand>,
+        /// Trailing window in days (default 7).
+        #[arg(long, default_value_t = 7)]
+        days: u32,
+        /// Emit JSON report.
+        #[arg(long)]
+        json: bool,
+        /// Rebuild repo snapshot even if fingerprint unchanged.
+        #[arg(long)]
+        force: bool,
+        /// workspace root (default: cwd)
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+    },
     /// Flush local outbox to the configured ingest endpoint.
     Sync {
         #[command(subcommand)]
@@ -86,6 +103,19 @@ enum SyncCommand {
         /// workspace root (default: cwd)
         #[arg(long)]
         workspace: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand)]
+enum MetricsCommand {
+    /// Rebuild repo snapshot and Ladybug sidecar.
+    Index {
+        /// workspace root (default: cwd)
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        /// Rebuild even when fingerprint unchanged.
+        #[arg(long)]
+        force: bool,
     },
 }
 
@@ -144,6 +174,18 @@ fn main() -> anyhow::Result<()> {
         ),
         Command::Init { workspace } => kaizen::shell::cli::cmd_init(workspace.as_deref()),
         Command::Insights { workspace } => kaizen::shell::cli::cmd_insights(workspace.as_deref()),
+        Command::Metrics {
+            subcmd,
+            days,
+            json,
+            force,
+            workspace,
+        } => match subcmd {
+            Some(MetricsCommand::Index { workspace, force }) => {
+                kaizen::shell::metrics::cmd_metrics_index(workspace.as_deref(), force)
+            }
+            None => kaizen::shell::metrics::cmd_metrics(workspace.as_deref(), days, json, force),
+        },
         Command::Sync {
             subcmd: SyncCommand::Run { workspace, once },
         } => kaizen::shell::sync::cmd_sync_run(workspace.as_deref(), once),
@@ -184,6 +226,12 @@ fn ingest_hook(source: Source, workspace: Option<PathBuf>) -> anyhow::Result<()>
                 ended_at_ms: None,
                 status: status.clone(),
                 trace_path: String::new(),
+                start_commit: None,
+                end_commit: None,
+                branch: None,
+                dirty_start: None,
+                dirty_end: None,
+                repo_binding_source: None,
             };
             store.upsert_session(&record)?;
         } else {

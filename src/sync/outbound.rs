@@ -28,9 +28,13 @@ pub struct OutboundEvent {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_call_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub tokens_in: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tokens_out: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cost_usd_e6: Option<i64>,
     pub payload: serde_json::Value,
@@ -65,8 +69,10 @@ pub fn outbound_event_from_row(
         kind: kind_api(&e.kind),
         source: source_api(&e.source),
         tool: e.tool.clone(),
+        tool_call_id: e.tool_call_id.clone(),
         tokens_in: e.tokens_in,
         tokens_out: e.tokens_out,
+        reasoning_tokens: e.reasoning_tokens,
         cost_usd_e6: e.cost_usd_e6,
         payload: e.payload.clone(),
     }
@@ -120,16 +126,25 @@ mod tests {
             ended_at_ms: None,
             status: crate::core::event::SessionStatus::Running,
             trace_path: "".into(),
+            start_commit: None,
+            end_commit: None,
+            branch: None,
+            dirty_start: None,
+            dirty_end: None,
+            repo_binding_source: None,
         };
         let ev = Event {
             session_id: "sid".into(),
             seq: 3,
             ts_ms: 99,
+            ts_exact: false,
             kind: EventKind::ToolCall,
             source: EventSource::Hook,
             tool: Some("Edit".into()),
+            tool_call_id: Some("call_1".into()),
             tokens_in: None,
             tokens_out: None,
+            reasoning_tokens: None,
             cost_usd_e6: None,
             payload: json!({}),
         };

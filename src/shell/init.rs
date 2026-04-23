@@ -18,10 +18,8 @@ const CONFIG_TOML: &str = r#"[kaizen]
 "#;
 const KAIZEN_RETRO_SKILL: &str = include_str!("../../assets/kaizen-retro-SKILL.md");
 
-const CURSOR_STOP_HOOK: &str =
-    r#"{"matcher": "Stop", "command": "kaizen ingest hook --source cursor"}"#;
-const CLAUDE_STOP_HOOK: &str =
-    r#"{"type": "command", "command": "kaizen ingest hook --source claude"}"#;
+const CURSOR_HOOK_EVENTS: &[&str] = &["SessionStart", "PreToolUse", "PostToolUse", "Stop"];
+const CLAUDE_HOOK_EVENTS: &[&str] = &["SessionStart", "PreToolUse", "PostToolUse", "Stop"];
 
 fn ts_ms() -> u64 {
     SystemTime::now()
@@ -46,20 +44,29 @@ fn ensure_config(ws: &Path) -> Result<()> {
     Ok(())
 }
 
-const KAIZEN_HOOK_CMD: &str = "kaizen ingest hook --source cursor";
+const KAIZEN_CURSOR_HOOK_CMD: &str = "kaizen ingest hook --source cursor";
+const KAIZEN_CLAUDE_HOOK_CMD: &str = "kaizen ingest hook --source claude";
 
-fn cursor_stop_already(root: &serde_json::Value) -> bool {
-    // object format: {"hooks": {"Stop": [...]}}
-    if let Some(arr) = root.pointer("/hooks/Stop").and_then(|v| v.as_array()) {
+fn cursor_hooks_done(root: &serde_json::Value) -> bool {
+    CURSOR_HOOK_EVENTS
+        .iter()
+        .all(|event| cursor_hook_exists(root, event))
+}
+
+fn cursor_hook_exists(root: &serde_json::Value, event: &str) -> bool {
+    if let Some(arr) = root
+        .pointer(&format!("/hooks/{event}"))
+        .and_then(|v| v.as_array())
+    {
         return arr
             .iter()
-            .any(|v| v.get("command").and_then(|c| c.as_str()) == Some(KAIZEN_HOOK_CMD));
+            .any(|v| v.get("command").and_then(|c| c.as_str()) == Some(KAIZEN_CURSOR_HOOK_CMD));
     }
-    // legacy array format: [{matcher: "Stop", ...}]
     if let Some(arr) = root.as_array() {
-        return arr
-            .iter()
-            .any(|v| v.get("matcher").and_then(|m| m.as_str()) == Some("Stop"));
+        return arr.iter().any(|v| {
+            v.get("matcher").and_then(|m| m.as_str()) == Some(event)
+                && v.get("command").and_then(|c| c.as_str()) == Some(KAIZEN_CURSOR_HOOK_CMD)
+        });
     }
     false
 }
@@ -77,26 +84,35 @@ fn patch_cursor_hooks(ws: &Path) -> Result<()> {
             anyhow::bail!("malformed .cursor/hooks.json: {e}");
         }
     };
-    if cursor_stop_already(&root) {
+    if cursor_hooks_done(&root) {
         println!("  skipped  .cursor/hooks.json");
         return Ok(());
     }
     let bak = backup_path(ws, "cursor_hooks");
     std::fs::create_dir_all(bak.parent().unwrap())?;
     std::fs::copy(&path, &bak)?;
-    let entry = serde_json::json!({"command": KAIZEN_HOOK_CMD});
-    if let Some(hooks) = root
-        .pointer_mut("/hooks/Stop")
-        .and_then(|v| v.as_array_mut())
-    {
-        hooks.push(entry);
-    } else if let Some(obj) = root.pointer_mut("/hooks").and_then(|v| v.as_object_mut()) {
-        obj.insert("Stop".into(), serde_json::json!([entry]));
+    if let Some(obj) = root.pointer_mut("/hooks").and_then(|v| v.as_object_mut()) {
+        for event in CURSOR_HOOK_EVENTS {
+            let arr = obj
+                .entry((*event).to_string())
+                .or_insert_with(|| serde_json::json!([]));
+            if let Some(hooks) = arr.as_array_mut()
+                && !hooks.iter().any(|v| {
+                    v.get("command").and_then(|c| c.as_str()) == Some(KAIZEN_CURSOR_HOOK_CMD)
+                })
+            {
+                hooks.push(serde_json::json!({"command": KAIZEN_CURSOR_HOOK_CMD}));
+            }
+        }
     } else if let Some(arr) = root.as_array_mut() {
-        arr.push(serde_json::from_str(CURSOR_STOP_HOOK)?);
+        for event in CURSOR_HOOK_EVENTS {
+            if !cursor_hook_exists(&serde_json::Value::Array(arr.clone()), event) {
+                arr.push(serde_json::json!({"matcher": event, "command": KAIZEN_CURSOR_HOOK_CMD}));
+            }
+        }
     }
     std::fs::write(&path, serde_json::to_string_pretty(&root)?)?;
-    println!("  patched  .cursor/hooks.json  (+Stop hook)");
+    println!("  patched  .cursor/hooks.json  (+session/tool hooks)");
     Ok(())
 }
 
@@ -114,13 +130,15 @@ fn patch_claude_settings(ws: &Path) -> Result<()> {
         }
     };
     let hooks = obj.entry("hooks").or_insert_with(|| serde_json::json!({}));
-    let stop = hooks
-        .as_object_mut()
-        .unwrap()
-        .entry("Stop")
-        .or_insert_with(|| serde_json::json!([]));
-    let already = stop.as_array().unwrap_or(&vec![]).iter().any(|v| {
-        v.get("command").and_then(|c| c.as_str()) == Some("kaizen ingest hook --source claude")
+    let already = CLAUDE_HOOK_EVENTS.iter().all(|event| {
+        hooks
+            .get(*event)
+            .and_then(|v| v.as_array())
+            .is_some_and(|arr| {
+                arr.iter().any(|v| {
+                    v.get("command").and_then(|c| c.as_str()) == Some(KAIZEN_CLAUDE_HOOK_CMD)
+                })
+            })
     });
     if already {
         println!("  skipped  .claude/settings.json  (already configured)");
@@ -129,11 +147,21 @@ fn patch_claude_settings(ws: &Path) -> Result<()> {
     let bak = backup_path(ws, "claude_settings");
     std::fs::create_dir_all(bak.parent().unwrap())?;
     std::fs::copy(&path, &bak)?;
-    stop.as_array_mut()
-        .unwrap()
-        .push(serde_json::from_str(CLAUDE_STOP_HOOK)?);
+    let hooks_obj = hooks.as_object_mut().unwrap();
+    for event in CLAUDE_HOOK_EVENTS {
+        let arr = hooks_obj
+            .entry((*event).to_string())
+            .or_insert_with(|| serde_json::json!([]));
+        if let Some(values) = arr.as_array_mut()
+            && !values
+                .iter()
+                .any(|v| v.get("command").and_then(|c| c.as_str()) == Some(KAIZEN_CLAUDE_HOOK_CMD))
+        {
+            values.push(serde_json::json!({"type": "command", "command": KAIZEN_CLAUDE_HOOK_CMD}));
+        }
+    }
     std::fs::write(&path, serde_json::to_string_pretty(&obj)?)?;
-    println!("  patched  .claude/settings.json  (+Stop hook)");
+    println!("  patched  .claude/settings.json  (+session/tool hooks)");
     Ok(())
 }
 

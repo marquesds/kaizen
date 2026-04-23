@@ -12,6 +12,9 @@ Collects, stores, and analyzes agent session data.
 | Language | Rust (edition 2024) |
 | Async runtime | tokio |
 | Observability | tracing |
+| Local store | SQLite WAL |
+| Code graph sidecar | LadybugDB (`.kaizen/codegraph.lbug`) |
+| Code parsers | tree-sitter + language grammars |
 | Tests | #[test] / #[tokio::test] |
 
 ## Directory Layout
@@ -19,7 +22,10 @@ Collects, stores, and analyzes agent session data.
 ```
 kaizen/
 ├── src/
-│   └── main.rs          # binary entry point
+│   ├── main.rs          # binary entry point
+│   ├── metrics/         # repo indexing + smart metric report
+│   ├── sync/            # event/span/snapshot sync
+│   └── retro/           # heuristic report engine
 ├── tests/               # integration tests
 ├── docs/                # architecture + design docs
 ├── Cargo.toml           # dependencies, metadata

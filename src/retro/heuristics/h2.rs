@@ -43,7 +43,17 @@ pub fn run(inputs: &Inputs) -> Vec<Bet> {
             continue;
         }
         let id = format!("H2:{}|{}", a, b);
-        let est = (n as f64) * 500.0;
+        let complexity = inputs
+            .file_facts
+            .get(&a)
+            .map(|f| f.complexity_total)
+            .unwrap_or(0)
+            + inputs
+                .file_facts
+                .get(&b)
+                .map(|f| f.complexity_total)
+                .unwrap_or(0);
+        let est = (n as f64) * (500.0 + complexity as f64 * 15.0);
         out.push(Bet {
             id,
             heuristic_id: "H2".into(),
@@ -54,7 +64,10 @@ pub fn run(inputs: &Inputs) -> Vec<Bet> {
             ),
             expected_tokens_saved_per_week: est,
             effort_minutes: 120,
-            evidence: vec![format!("Co-edit count: {} (cross-module).", n)],
+            evidence: vec![
+                format!("Co-edit count: {} (cross-module).", n),
+                format!("Combined complexity: {}", complexity),
+            ],
             apply_step: format!(
                 "Extract shared logic or add a facade so agents touch one module instead of `{}` + `{}`.",
                 a, b
@@ -92,9 +105,11 @@ mod tests {
             events: vec![],
             files_touched: ft,
             skills_used: vec![],
+            tool_spans: vec![],
             skills_used_recent_slugs: HashSet::new(),
             usage_lookback_ms: 0,
             skill_files_on_disk: vec![],
+            file_facts: HashMap::new(),
             aggregates: agg,
         };
         let bets = run(&inputs);

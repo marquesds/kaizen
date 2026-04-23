@@ -1,6 +1,7 @@
 //! Pure data for the retro engine (`Report`, `Bet`, `Inputs`).
 
 use crate::core::event::{Event, SessionRecord};
+use crate::metrics::types::{FileFact, ToolSpanView};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
@@ -13,10 +14,12 @@ pub struct Inputs {
     pub events: Vec<(SessionRecord, Event)>,
     pub files_touched: Vec<(String, String)>,
     pub skills_used: Vec<(String, String)>,
+    pub tool_spans: Vec<ToolSpanView>,
     /// Skills referenced in the last `usage_lookback_ms` window (for H1).
     pub skills_used_recent_slugs: HashSet<String>,
     pub usage_lookback_ms: u64,
     pub skill_files_on_disk: Vec<SkillFileOnDisk>,
+    pub file_facts: HashMap<String, FileFact>,
     pub aggregates: RetroAggregates,
 }
 

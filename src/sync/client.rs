@@ -1,6 +1,7 @@
 //! HTTP sync client: gzip JSON, retries, batch split on 413.
 
 use crate::sync::outbound::EventsBatchBody;
+use crate::sync::smart::{RepoSnapshotsBatchBody, ToolSpansBatchBody};
 use anyhow::{Context, Result};
 use flate2::Compression;
 use flate2::write::GzEncoder;
@@ -47,12 +48,37 @@ impl SyncHttpClient {
         body: &EventsBatchBody,
         idempotency_key: &Uuid,
     ) -> Result<PostBatchOutcome> {
+        self.post_json_gzip("/v1/events", body, idempotency_key)
+    }
+
+    pub fn post_tool_spans_batch(
+        &self,
+        body: &ToolSpansBatchBody,
+        idempotency_key: &Uuid,
+    ) -> Result<PostBatchOutcome> {
+        self.post_json_gzip("/v1/tool-spans", body, idempotency_key)
+    }
+
+    pub fn post_repo_snapshots_batch(
+        &self,
+        body: &RepoSnapshotsBatchBody,
+        idempotency_key: &Uuid,
+    ) -> Result<PostBatchOutcome> {
+        self.post_json_gzip("/v1/repo-snapshots", body, idempotency_key)
+    }
+
+    fn post_json_gzip<T: serde::Serialize>(
+        &self,
+        path: &str,
+        body: &T,
+        idempotency_key: &Uuid,
+    ) -> Result<PostBatchOutcome> {
         let json = serde_json::to_vec(body).context("serialize batch")?;
         let mut enc = GzEncoder::new(Vec::new(), Compression::default());
         enc.write_all(&json).context("gzip write")?;
         let gz = enc.finish().context("gzip finish")?;
 
-        let url = format!("{}/v1/events", self.endpoint);
+        let url = format!("{}{}", self.endpoint, path);
         let resp = self
             .http
             .post(&url)
@@ -63,7 +89,7 @@ impl SyncHttpClient {
             .header("X-Kaizen-Client", CLIENT_HEADER_VALUE)
             .body(gz)
             .send()
-            .context("POST /v1/events")?;
+            .with_context(|| format!("POST {path}"))?;
 
         let status = resp.status();
         if status.as_u16() == 202 {
@@ -73,10 +99,7 @@ impl SyncHttpClient {
             } else {
                 serde_json::from_slice(&bytes).unwrap_or(serde_json::json!({}))
             };
-            let received = v
-                .get("received")
-                .and_then(|x| x.as_u64())
-                .unwrap_or(body.events.len() as u64);
+            let received = v.get("received").and_then(|x| x.as_u64()).unwrap_or(0);
             let deduped = v.get("deduped").and_then(|x| x.as_u64()).unwrap_or(0);
             return Ok(PostBatchOutcome::Accepted { received, deduped });
         }

@@ -92,6 +92,12 @@ team_salt_hex = "{salt_hex}"
         ended_at_ms: None,
         status: SessionStatus::Running,
         trace_path: "".into(),
+        start_commit: None,
+        end_commit: None,
+        branch: None,
+        dirty_start: None,
+        dirty_end: None,
+        repo_binding_source: None,
     };
     store.upsert_session(&session).unwrap();
 
@@ -99,11 +105,14 @@ team_salt_hex = "{salt_hex}"
         session_id: "sess-1".into(),
         seq: 0,
         ts_ms: 99,
+        ts_exact: true,
         kind: EventKind::ToolCall,
         source: EventSource::Hook,
         tool: Some("bash".into()),
+        tool_call_id: Some("call-1".into()),
         tokens_in: None,
         tokens_out: None,
+        reasoning_tokens: None,
         cost_usd_e6: None,
         payload: serde_json::json!({
             "path": "/Users/alice/proj/secret.txt",
@@ -123,9 +132,23 @@ team_salt_hex = "{salt_hex}"
     .unwrap();
 
     let bodies = state.captured_bodies.lock().unwrap();
-    assert_eq!(bodies.len(), 1, "expected one POST body");
-    let v: serde_json::Value = serde_json::from_str(&bodies[0]).unwrap();
-    let events = v["events"].as_array().expect("events array");
+    assert_eq!(bodies.len(), 2, "expected event + tool-span POST bodies");
+
+    let parsed = bodies
+        .iter()
+        .map(|body| serde_json::from_str::<serde_json::Value>(body).unwrap())
+        .collect::<Vec<_>>();
+
+    let event_body = parsed
+        .iter()
+        .find(|body| body.get("events").is_some())
+        .expect("events batch");
+    let tool_body = parsed
+        .iter()
+        .find(|body| body.get("spans").is_some())
+        .expect("tool spans batch");
+
+    let events = event_body["events"].as_array().expect("events array");
     assert_eq!(events.len(), 1);
     let payload_str = events[0]["payload"].to_string();
     assert!(
@@ -135,5 +158,17 @@ team_salt_hex = "{salt_hex}"
     assert!(
         !payload_str.contains("sk-super-secret"),
         "payload leaked secret: {payload_str}"
+    );
+
+    let spans = tool_body["spans"].as_array().expect("spans array");
+    assert_eq!(spans.len(), 1);
+    let span_str = spans[0].to_string();
+    assert!(
+        !span_str.contains("/Users/"),
+        "span leaked path: {span_str}"
+    );
+    assert!(
+        !span_str.contains("sk-super-secret"),
+        "span leaked secret: {span_str}"
     );
 }

@@ -1,6 +1,7 @@
 //! `kaizen retro` command.
 
 use crate::core::config;
+use crate::metrics::index;
 use crate::report::{ReportsDirLock, iso_week_label_utc, to_json, to_markdown, write_atomic};
 use crate::retro::{engine, inputs};
 use crate::shell::cli::{scan_all_agents, workspace_path};
@@ -22,6 +23,13 @@ pub fn cmd_retro(
     let store = Store::open(&db_path)?;
     let ws_str = ws.to_string_lossy().to_string();
     scan_all_agents(&ws, &cfg, &ws_str, &store)?;
+    if let Ok(snapshot) = index::ensure_indexed(&store, &ws, false)
+        && let Some(ctx) = crate::sync::ingest_ctx(&cfg, ws.clone())
+        && let Ok(facts) = store.file_facts_for_snapshot(&snapshot.id)
+        && let Ok(edges) = store.repo_edges_for_snapshot(&snapshot.id)
+    {
+        let _ = crate::sync::smart::enqueue_repo_snapshot(&store, &snapshot, &facts, &edges, &ctx);
+    }
 
     let end_ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

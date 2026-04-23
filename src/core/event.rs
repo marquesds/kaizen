@@ -24,11 +24,14 @@ pub struct Event {
     pub session_id: String,
     pub seq: u64,
     pub ts_ms: u64,
+    pub ts_exact: bool,
     pub kind: EventKind,
     pub source: EventSource,
     pub tool: Option<String>,
+    pub tool_call_id: Option<String>,
     pub tokens_in: Option<u32>,
     pub tokens_out: Option<u32>,
+    pub reasoning_tokens: Option<u32>,
     pub cost_usd_e6: Option<i64>,
     pub payload: serde_json::Value,
 }
@@ -51,6 +54,12 @@ pub struct SessionRecord {
     pub ended_at_ms: Option<u64>,
     pub status: SessionStatus,
     pub trace_path: String,
+    pub start_commit: Option<String>,
+    pub end_commit: Option<String>,
+    pub branch: Option<String>,
+    pub dirty_start: Option<bool>,
+    pub dirty_end: Option<bool>,
+    pub repo_binding_source: Option<String>,
 }
 
 #[cfg(test)]
@@ -64,11 +73,14 @@ mod tests {
             session_id: "s1".to_string(),
             seq: 0,
             ts_ms: 1000,
+            ts_exact: false,
             kind: EventKind::ToolCall,
             source: EventSource::Tail,
             tool: Some("read_file".to_string()),
+            tool_call_id: Some("call_1".to_string()),
             tokens_in: None,
             tokens_out: None,
+            reasoning_tokens: None,
             cost_usd_e6: None,
             payload: json!({"path": "src/main.rs"}),
         };
@@ -90,6 +102,12 @@ mod tests {
             ended_at_ms: Some(9999),
             status: SessionStatus::Done,
             trace_path: "/tmp/abc".to_string(),
+            start_commit: Some("abc".to_string()),
+            end_commit: Some("def".to_string()),
+            branch: Some("main".to_string()),
+            dirty_start: Some(false),
+            dirty_end: Some(true),
+            repo_binding_source: Some("git".to_string()),
         };
         let s = serde_json::to_string(&r).unwrap();
         let r2: SessionRecord = serde_json::from_str(&s).unwrap();

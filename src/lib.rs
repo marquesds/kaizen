@@ -1,5 +1,6 @@
 pub mod collect;
 pub mod core;
+pub mod metrics;
 pub mod report;
 pub mod retro;
 pub mod shell;

@@ -18,6 +18,8 @@ idempotent, project-scoped.
 | Method | Path | Purpose |
 |---|---|---|
 | `POST` | `/v1/events` | Batched event ingestion (primary) |
+| `POST` | `/v1/tool-spans` | Batched per-tool latency + token spans |
+| `POST` | `/v1/repo-snapshots` | Batched code-fact snapshot chunks |
 | `POST` | `/v1/sessions` | Upsert session metadata (lifecycle pings) |
 | `POST` | `/v1/experiments/:id/observation` | Variant assignment ping |
 | `GET`  | `/v1/health` | Liveness; returns server version + accepted schema versions |
@@ -51,8 +53,10 @@ Body:
       "kind": "tool_call",
       "source": "hook",
       "tool": "Edit",
+      "tool_call_id": "toolu_01",
       "tokens_in": 1402,
       "tokens_out": 312,
+      "reasoning_tokens": 91,
       "cost_usd_e6": 8400,
       "payload": { "files_in_context": 3, "tool_args_size": 412 }
     }
@@ -90,6 +94,82 @@ Client-side defaults:
 
 Server `GET /v1/config` may override these (e.g. `events_per_batch_max:
 1000`).
+
+## `POST /v1/tool-spans`
+
+Derived client-side from `tool_call` + `tool_result` + hook timing.
+Exact-or-null only. No estimated token or lead-time backfill.
+
+```json
+{
+  "team_id": "kaizen-eng",
+  "workspace_hash": "blake3:5f3c...",
+  "spans": [
+    {
+      "session_id_hash": "blake3:9a2b...",
+      "span_id_hash": "blake3:ab12...",
+      "tool": "shell",
+      "status": "done",
+      "started_at_ms": 1745344800000,
+      "ended_at_ms": 1745344801200,
+      "lead_time_ms": 1200,
+      "tokens_in": 1402,
+      "tokens_out": 312,
+      "reasoning_tokens": 91,
+      "cost_usd_e6": 8400,
+      "path_hashes": ["blake3:77aa..."]
+    }
+  ]
+}
+```
+
+## `POST /v1/repo-snapshots`
+
+Chunked code facts. No raw paths, symbols, commits, or file contents.
+
+```json
+{
+  "team_id": "kaizen-eng",
+  "workspace_hash": "blake3:5f3c...",
+  "snapshots": [
+    {
+      "snapshot_id_hash": "blake3:de91...",
+      "commit_hash": "blake3:f0aa...",
+      "indexed_at_ms": 1745344800000,
+      "dirty": false,
+      "chunk_index": 0,
+      "chunk_total": 2,
+      "file_facts": [
+        {
+          "path_hash": "blake3:aa11...",
+          "language": "rust",
+          "bytes": 4200,
+          "loc": 130,
+          "sloc": 108,
+          "complexity_total": 18,
+          "max_fn_complexity": 6,
+          "symbol_count": 12,
+          "import_count": 4,
+          "fan_in": 3,
+          "fan_out": 4,
+          "churn_30d": 5,
+          "churn_90d": 9,
+          "authors_90d": 2,
+          "last_changed_ms": 1745000000000
+        }
+      ],
+      "edges": [
+        {
+          "from_hash": "blake3:1a1a...",
+          "to_hash": "blake3:2b2b...",
+          "kind": "DEPENDS_ON",
+          "weight": 1
+        }
+      ]
+    }
+  ]
+}
+```
 
 ## `POST /v1/sessions`
 
@@ -138,8 +218,11 @@ Raw kept local in SQLite. Only the redacted projection is POSTed.
 | `workspace_path` | `blake3(team_salt + abs_path)` → `workspace_hash` |
 | `git_remote_url` | normalized + hashed with same salt |
 | `session_id` | `blake3(team_salt + session_id)` |
+| `tool_span_id`, `snapshot_id`, `commit` | hashed with same salt |
 | `user`, `git_email` | dropped entirely |
 | `file_path` (in payload) | replaced with `<repo-relative-hash>:<basename-class>` |
+| `tool span path list` | `path_hashes[]` only |
+| `repo edges / symbols` | hashed ids only |
 | `tool_args.command` (shell) | command name kept, args matched against secret regex set, tokens replaced with `<REDACTED:type>` |
 | `env vars`, `Authorization`, `*_TOKEN`, `*_KEY` | scrubbed by `aho-corasick` set + regex |
 | `prompt_text`, `completion_text` | dropped in v0.1; opt-in field for v0.2 with extra redaction pass |

@@ -42,7 +42,14 @@ pub fn parse_claude_line(
         .and_then(|v| v.as_u64())
         .map(|v| v as u32);
 
-    let ts_ms = base_ts + seq * 100;
+    let reasoning_tokens = obj
+        .get("tokens")
+        .and_then(|t| t.get("reasoningTokens"))
+        .and_then(|v| v.as_u64())
+        .map(|v| v as u32);
+
+    let ts_ms = line_ts_ms(obj).unwrap_or(base_ts + seq * 100);
+    let ts_exact = line_ts_ms(obj).is_some();
 
     for block in content {
         let block_type = block.get("type").and_then(|t| t.as_str()).unwrap_or("");
@@ -57,11 +64,17 @@ pub fn parse_claude_line(
                     session_id: session_id.to_string(),
                     seq,
                     ts_ms,
+                    ts_exact,
                     kind: EventKind::ToolCall,
                     source: EventSource::Tail,
                     tool: Some(tool_name),
+                    tool_call_id: block
+                        .get("id")
+                        .and_then(|v| v.as_str())
+                        .map(ToOwned::to_owned),
                     tokens_in,
                     tokens_out,
+                    reasoning_tokens,
                     cost_usd_e6: None,
                     payload: block.clone(),
                 }));
@@ -71,11 +84,17 @@ pub fn parse_claude_line(
                     session_id: session_id.to_string(),
                     seq,
                     ts_ms,
+                    ts_exact,
                     kind: EventKind::ToolResult,
                     source: EventSource::Tail,
                     tool: None,
+                    tool_call_id: block
+                        .get("tool_use_id")
+                        .and_then(|v| v.as_str())
+                        .map(ToOwned::to_owned),
                     tokens_in,
                     tokens_out,
+                    reasoning_tokens,
                     cost_usd_e6: None,
                     payload: block.clone(),
                 }));
@@ -84,6 +103,12 @@ pub fn parse_claude_line(
         }
     }
     Ok(None)
+}
+
+fn line_ts_ms(obj: &serde_json::Map<String, Value>) -> Option<u64> {
+    ["timestamp_ms", "ts_ms", "created_at_ms"]
+        .iter()
+        .find_map(|k| obj.get(*k).and_then(|v| v.as_u64()))
 }
 
 /// Walk all `.jsonl` files under `dir`; return inferred `SessionRecord` + events.
@@ -110,6 +135,12 @@ pub fn scan_claude_session_dir(dir: &Path) -> Result<(SessionRecord, Vec<Event>)
         ended_at_ms: None,
         status: SessionStatus::Done,
         trace_path: dir.to_string_lossy().to_string(),
+        start_commit: None,
+        end_commit: None,
+        branch: None,
+        dirty_start: None,
+        dirty_end: None,
+        repo_binding_source: None,
     };
 
     let mut events = Vec::new();
@@ -155,6 +186,7 @@ mod tests {
             .unwrap();
         assert_eq!(ev.kind, EventKind::ToolCall);
         assert_eq!(ev.tool.as_deref(), Some("read_file"));
+        assert_eq!(ev.tool_call_id.as_deref(), Some("toolu_01"));
         assert_eq!(ev.session_id, "s1");
     }
 
@@ -165,6 +197,7 @@ mod tests {
             .unwrap();
         assert_eq!(ev.kind, EventKind::ToolResult);
         assert_eq!(ev.seq, 1);
+        assert_eq!(ev.tool_call_id.as_deref(), Some("toolu_01"));
     }
 
     #[test]

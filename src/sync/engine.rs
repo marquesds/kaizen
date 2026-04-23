@@ -4,6 +4,9 @@ use crate::core::config::SyncConfig;
 use crate::store::Store;
 use crate::sync::client::{PostBatchOutcome, SyncHttpClient};
 use crate::sync::outbound::{EventsBatchBody, OutboundEvent};
+use crate::sync::smart::{
+    OutboundRepoSnapshotChunk, OutboundToolSpan, RepoSnapshotsBatchBody, ToolSpansBatchBody,
+};
 use anyhow::{Context, Result};
 use std::path::Path;
 use std::thread;
@@ -29,16 +32,13 @@ pub fn flush_outbox_once(
         if rows.is_empty() {
             break;
         }
-        let (ids, events) = pack_batch_events(&rows, cfg)?;
-        if ids.is_empty() {
+        let Some(kind) = rows.first().map(|(_, kind, _)| kind.clone()) else {
             break;
-        }
-        let body = EventsBatchBody {
-            team_id: cfg.team_id.clone(),
-            workspace_hash: workspace_hash.clone(),
-            events,
         };
-        let sent = post_batch_resilient(&client, store, body, &ids)?;
+        let sent = match build_batch(&rows, cfg, &cfg.team_id, &workspace_hash, &kind)? {
+            Some((ids, batch)) => post_batch_resilient(&client, store, batch, &ids)?,
+            None => break,
+        };
         stats.batches += sent.batches;
         stats.events_sent += sent.events;
     }
@@ -58,34 +58,102 @@ struct Sent {
     events: u64,
 }
 
-fn pack_batch_events(
-    rows: &[(i64, String)],
+fn build_batch(
+    rows: &[(i64, String, String)],
     cfg: &SyncConfig,
-) -> Result<(Vec<i64>, Vec<OutboundEvent>)> {
+    team_id: &str,
+    workspace_hash: &str,
+    kind: &str,
+) -> Result<Option<(Vec<i64>, PendingBatch)>> {
+    match kind {
+        "events" => {
+            let (ids, events) = pack_batch_payloads::<OutboundEvent>(rows, cfg, kind)?;
+            if ids.is_empty() {
+                return Ok(None);
+            }
+            Ok(Some((
+                ids,
+                PendingBatch::Events(EventsBatchBody {
+                    team_id: team_id.into(),
+                    workspace_hash: workspace_hash.into(),
+                    events,
+                }),
+            )))
+        }
+        "tool_spans" => {
+            let (ids, spans) = pack_batch_payloads::<OutboundToolSpan>(rows, cfg, kind)?;
+            if ids.is_empty() {
+                return Ok(None);
+            }
+            Ok(Some((
+                ids,
+                PendingBatch::ToolSpans(ToolSpansBatchBody {
+                    team_id: team_id.into(),
+                    workspace_hash: workspace_hash.into(),
+                    spans,
+                }),
+            )))
+        }
+        "repo_snapshots" => {
+            let (ids, snapshots) =
+                pack_batch_payloads::<OutboundRepoSnapshotChunk>(rows, cfg, kind)?;
+            if ids.is_empty() {
+                return Ok(None);
+            }
+            Ok(Some((
+                ids,
+                PendingBatch::RepoSnapshots(RepoSnapshotsBatchBody {
+                    team_id: team_id.into(),
+                    workspace_hash: workspace_hash.into(),
+                    snapshots,
+                }),
+            )))
+        }
+        _ => Ok(None),
+    }
+}
+
+fn pack_batch_payloads<T>(
+    rows: &[(i64, String, String)],
+    cfg: &SyncConfig,
+    kind: &str,
+) -> Result<(Vec<i64>, Vec<T>)>
+where
+    T: serde::de::DeserializeOwned + serde::Serialize,
+{
     let mut ids = Vec::new();
-    let mut events = Vec::new();
+    let mut out = Vec::new();
     let mut bytes = 0usize;
     let max_ev = cfg.events_per_batch_max.max(1);
-    for (id, raw) in rows {
-        let ev: OutboundEvent = serde_json::from_str(raw).context("parse outbox payload")?;
-        let inc = serde_json::to_vec(&ev)?.len();
-        if events.len() >= max_ev {
+    for (id, row_kind, raw) in rows {
+        if row_kind != kind {
             break;
         }
-        if bytes + inc > cfg.max_body_bytes && !events.is_empty() {
+        let item: T = serde_json::from_str(raw).context("parse outbox payload")?;
+        let inc = serde_json::to_vec(&item)?.len();
+        if out.len() >= max_ev {
+            break;
+        }
+        if bytes + inc > cfg.max_body_bytes && !out.is_empty() {
             break;
         }
         bytes += inc;
         ids.push(*id);
-        events.push(ev);
+        out.push(item);
     }
-    Ok((ids, events))
+    Ok((ids, out))
+}
+
+enum PendingBatch {
+    Events(EventsBatchBody),
+    ToolSpans(ToolSpansBatchBody),
+    RepoSnapshots(RepoSnapshotsBatchBody),
 }
 
 fn post_batch_resilient(
     client: &SyncHttpClient,
     store: &Store,
-    body: EventsBatchBody,
+    body: PendingBatch,
     ids: &[i64],
 ) -> Result<Sent> {
     let mut backoff = Duration::from_millis(200);
@@ -93,12 +161,17 @@ fn post_batch_resilient(
     let mut server_failures = 0u32;
 
     loop {
-        if body.events.is_empty() {
+        if batch_len(&body) == 0 {
             return Ok(Sent::default());
         }
 
         let key = Uuid::now_v7();
-        match client.post_events_batch(&body, &key)? {
+        let outcome = match &body {
+            PendingBatch::Events(body) => client.post_events_batch(body, &key)?,
+            PendingBatch::ToolSpans(body) => client.post_tool_spans_batch(body, &key)?,
+            PendingBatch::RepoSnapshots(body) => client.post_repo_snapshots_batch(body, &key)?,
+        };
+        match outcome {
             PostBatchOutcome::Accepted { .. } | PostBatchOutcome::Conflict => {
                 store.mark_outbox_sent(ids)?;
                 store.set_sync_state_ok()?;
@@ -108,25 +181,16 @@ fn post_batch_resilient(
                 });
             }
             PostBatchOutcome::TooLarge => {
-                if body.events.len() <= 1 {
+                if batch_len(&body) <= 1 {
                     store.set_sync_state_error("413: single event too large for server")?;
                     anyhow::bail!(
                         "413: single event too large; tighten redaction or max_body_bytes"
                     );
                 }
-                let mid = body.events.len() / 2;
+                let mid = batch_len(&body) / 2;
                 let left_ids = ids[..mid].to_vec();
                 let right_ids = ids[mid..].to_vec();
-                let left_body = EventsBatchBody {
-                    team_id: body.team_id.clone(),
-                    workspace_hash: body.workspace_hash.clone(),
-                    events: body.events[..mid].to_vec(),
-                };
-                let right_body = EventsBatchBody {
-                    team_id: body.team_id.clone(),
-                    workspace_hash: body.workspace_hash.clone(),
-                    events: body.events[mid..].to_vec(),
-                };
+                let (left_body, right_body) = split_batch(body, mid);
                 let a = post_batch_resilient(client, store, left_body, &left_ids)?;
                 let b = post_batch_resilient(client, store, right_body, &right_ids)?;
                 return Ok(Sent {
@@ -158,5 +222,54 @@ fn post_batch_resilient(
                 backoff = (backoff * 2).min(max_backoff);
             }
         }
+    }
+}
+
+fn batch_len(body: &PendingBatch) -> usize {
+    match body {
+        PendingBatch::Events(body) => body.events.len(),
+        PendingBatch::ToolSpans(body) => body.spans.len(),
+        PendingBatch::RepoSnapshots(body) => body.snapshots.len(),
+    }
+}
+
+fn split_batch(body: PendingBatch, mid: usize) -> (PendingBatch, PendingBatch) {
+    match body {
+        PendingBatch::Events(body) => (
+            PendingBatch::Events(EventsBatchBody {
+                team_id: body.team_id.clone(),
+                workspace_hash: body.workspace_hash.clone(),
+                events: body.events[..mid].to_vec(),
+            }),
+            PendingBatch::Events(EventsBatchBody {
+                team_id: body.team_id,
+                workspace_hash: body.workspace_hash,
+                events: body.events[mid..].to_vec(),
+            }),
+        ),
+        PendingBatch::ToolSpans(body) => (
+            PendingBatch::ToolSpans(ToolSpansBatchBody {
+                team_id: body.team_id.clone(),
+                workspace_hash: body.workspace_hash.clone(),
+                spans: body.spans[..mid].to_vec(),
+            }),
+            PendingBatch::ToolSpans(ToolSpansBatchBody {
+                team_id: body.team_id,
+                workspace_hash: body.workspace_hash,
+                spans: body.spans[mid..].to_vec(),
+            }),
+        ),
+        PendingBatch::RepoSnapshots(body) => (
+            PendingBatch::RepoSnapshots(RepoSnapshotsBatchBody {
+                team_id: body.team_id.clone(),
+                workspace_hash: body.workspace_hash.clone(),
+                snapshots: body.snapshots[..mid].to_vec(),
+            }),
+            PendingBatch::RepoSnapshots(RepoSnapshotsBatchBody {
+                team_id: body.team_id,
+                workspace_hash: body.workspace_hash,
+                snapshots: body.snapshots[mid..].to_vec(),
+            }),
+        ),
     }
 }

@@ -32,7 +32,27 @@ pub fn run(inputs: &Inputs) -> Vec<Bet> {
     if share < TOP_SHARE {
         return vec![];
     }
-    let est_tokens = (*count as f64) * 200.0 + (*cost_e6 as f64 / 10_000.0);
+    let span_rows: Vec<_> = inputs
+        .tool_spans
+        .iter()
+        .filter(|span| span.tool == *tool)
+        .collect();
+    let mut lats: Vec<u64> = span_rows
+        .iter()
+        .filter_map(|span| span.lead_time_ms)
+        .collect();
+    lats.sort_unstable();
+    let p95 = if lats.is_empty() {
+        None
+    } else {
+        Some(lats[((lats.len() - 1) * 95) / 100])
+    };
+    let reasoning = span_rows
+        .iter()
+        .map(|span| span.reasoning_tokens.unwrap_or(0) as u64)
+        .sum::<u64>();
+    let est_tokens =
+        (*count as f64) * 200.0 + (*cost_e6 as f64 / 10_000.0) + reasoning as f64 * 0.5;
     let id = format!("H4:{tool}");
     vec![Bet {
         id,
@@ -48,6 +68,12 @@ pub fn run(inputs: &Inputs) -> Vec<Bet> {
         evidence: vec![
             format!("Calls: {} / {} total.", count, total_events),
             format!("Attributed cost (micro-USD sum): {}", cost_e6),
+            format!(
+                "Tool spans: {} · p95 lead time: {} · reasoning tokens: {}",
+                span_rows.len(),
+                p95.map(|v| format!("{v}ms")).unwrap_or_else(|| "-".into()),
+                reasoning
+            ),
         ],
         apply_step: format!(
             "Review read/search patterns involving `{}`; add project-specific rules or smaller entrypoint files.",
@@ -61,7 +87,7 @@ pub fn run(inputs: &Inputs) -> Vec<Bet> {
 mod tests {
     use super::*;
     use crate::retro::types::RetroAggregates;
-    use std::collections::HashSet;
+    use std::collections::{HashMap, HashSet};
 
     #[test]
     fn flags_dominant_tool() {
@@ -74,9 +100,11 @@ mod tests {
             events: vec![],
             files_touched: vec![],
             skills_used: vec![],
+            tool_spans: vec![],
             skills_used_recent_slugs: HashSet::new(),
             usage_lookback_ms: 0,
             skill_files_on_disk: vec![],
+            file_facts: HashMap::new(),
             aggregates: agg,
         };
         let bets = run(&inputs);

@@ -48,7 +48,7 @@ mod tests {
     use crate::core::event::{Event, EventKind, EventSource, SessionRecord, SessionStatus};
     use crate::retro::types::{RetroAggregates, SkillFileOnDisk};
     use serde_json::json;
-    use std::collections::HashSet;
+    use std::collections::{HashMap, HashSet};
 
     fn base_inputs() -> Inputs {
         let mut agg = RetroAggregates::default();
@@ -68,16 +68,25 @@ mod tests {
                             ended_at_ms: None,
                             status: SessionStatus::Done,
                             trace_path: "".into(),
+                            start_commit: None,
+                            end_commit: None,
+                            branch: None,
+                            dirty_start: None,
+                            dirty_end: None,
+                            repo_binding_source: None,
                         },
                         Event {
                             session_id: "s1".into(),
                             seq: i,
                             ts_ms: i * 1000,
+                            ts_exact: false,
                             kind: EventKind::ToolCall,
                             source: EventSource::Tail,
                             tool: Some("read_file".into()),
+                            tool_call_id: None,
                             tokens_in: None,
                             tokens_out: None,
+                            reasoning_tokens: None,
                             cost_usd_e6: None,
                             payload: json!({}),
                         },
@@ -86,6 +95,7 @@ mod tests {
                 .collect(),
             files_touched: vec![],
             skills_used: vec![],
+            tool_spans: vec![],
             skills_used_recent_slugs: HashSet::new(),
             usage_lookback_ms: 30 * 86_400_000,
             skill_files_on_disk: vec![SkillFileOnDisk {
@@ -93,6 +103,7 @@ mod tests {
                 size_bytes: 400,
                 mtime_ms: 0,
             }],
+            file_facts: HashMap::new(),
             aggregates: agg,
         }
     }

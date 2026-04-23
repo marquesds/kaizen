@@ -3,6 +3,8 @@
 //! Routes:
 //! - `GET  /v1/health`  → 200
 //! - `POST /v1/events`  → 202 (new key) | 409 (duplicate)
+//! - `POST /v1/tool-spans` → 202 (new key) | 409 (duplicate)
+//! - `POST /v1/repo-snapshots` → 202 (new key) | 409 (duplicate)
 //!
 //! Idempotency key read from `X-Kaizen-Idempotency-Key` header.
 //! When a gzip JSON body is present, optionally checks Bearer token and
@@ -43,6 +45,8 @@ pub fn router() -> (Router, IngestState) {
     let app = Router::new()
         .route("/v1/health", get(health))
         .route("/v1/events", post(ingest))
+        .route("/v1/tool-spans", post(ingest))
+        .route("/v1/repo-snapshots", post(ingest))
         .with_state(state.clone());
     (app, state)
 }

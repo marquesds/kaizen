@@ -14,14 +14,24 @@ pub fn hook_to_event(h: &HookEvent, seq: u64) -> Event {
         session_id: h.session_id.clone(),
         seq,
         ts_ms: h.ts_ms,
+        ts_exact: true,
         kind: EventKind::Hook,
         source: EventSource::Hook,
         tool: None,
+        tool_call_id: hook_tool_id(&h.payload),
         tokens_in: None,
         tokens_out: None,
+        reasoning_tokens: None,
         cost_usd_e6,
         payload: h.payload.clone(),
     }
+}
+
+fn hook_tool_id(payload: &serde_json::Value) -> Option<String> {
+    ["tool_call_id", "tool_use_id", "call_id", "id"]
+        .iter()
+        .find_map(|k| payload.get(k).and_then(|v| v.as_str()))
+        .map(ToOwned::to_owned)
 }
 
 /// Derive target SessionStatus from hook kind.

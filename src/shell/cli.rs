@@ -5,6 +5,7 @@ use crate::collect::tail::codex::scan_codex_session_dir;
 use crate::collect::tail::cursor::scan_session_dir_all;
 use crate::core::config;
 use crate::core::event::{Event, SessionRecord};
+use crate::metrics::{index, report};
 use crate::shell::fmt::fmt_ts;
 use crate::store::Store;
 use anyhow::Result;
@@ -106,6 +107,28 @@ pub fn cmd_summary(workspace: Option<&Path>) -> Result<()> {
             .collect();
         println!("Top tools: {}", parts.join(" · "));
     }
+    if let Ok(_snapshot) = index::ensure_indexed(&store, &ws, false)
+        && let Ok(metrics) = report::build_report(&store, &ws_str, 7)
+    {
+        if let Some(ctx) = crate::sync::ingest_ctx(&cfg, ws.clone())
+            && let Some(snapshot) = metrics.snapshot.as_ref()
+            && let Ok(facts) = store.file_facts_for_snapshot(&snapshot.id)
+            && let Ok(edges) = store.repo_edges_for_snapshot(&snapshot.id)
+        {
+            let _ =
+                crate::sync::smart::enqueue_repo_snapshot(&store, snapshot, &facts, &edges, &ctx);
+        }
+        if let Some(file) = metrics.hottest_files.first() {
+            println!("Hotspot:   {} ({})", file.path, file.value);
+        }
+        if let Some(tool) = metrics.slowest_tools.first() {
+            let p95 = tool
+                .p95_ms
+                .map(|v| format!("{v}ms"))
+                .unwrap_or_else(|| "-".into());
+            println!("Slowest:   {} p95 {}", tool.tool, p95);
+        }
+    }
     Ok(())
 }
 
@@ -193,7 +216,20 @@ where
         }
         match scanner(&entry.path()) {
             Ok(sessions) => {
-                for (record, events) in sessions {
+                for (mut record, events) in sessions {
+                    if record.start_commit.is_none() && !record.workspace.is_empty() {
+                        let binding = crate::core::repo::binding_for_session(
+                            Path::new(&record.workspace),
+                            record.started_at_ms,
+                            record.ended_at_ms,
+                        );
+                        record.start_commit = binding.start_commit;
+                        record.end_commit = binding.end_commit;
+                        record.branch = binding.branch;
+                        record.dirty_start = binding.dirty_start;
+                        record.dirty_end = binding.dirty_end;
+                        record.repo_binding_source = binding.source;
+                    }
                     store.upsert_session(&record)?;
                     for ev in events {
                         store.append_event_with_sync(&ev, sync_ctx)?;

@@ -5,6 +5,7 @@ pub mod context;
 pub mod engine;
 pub mod outbound;
 pub mod redact;
+pub mod smart;
 
 pub use context::SyncIngestContext;
 pub use engine::{FlushStats, flush_outbox_once};
