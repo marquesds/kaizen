@@ -52,13 +52,13 @@ Full CLI reference: [docs/usage.md](docs/usage.md).
 | [docs/architecture.md](docs/architecture.md) | Module graph, data flow |
 | [docs/config.md](docs/config.md) | Config file + env vars |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Dev setup, tests, PR flow |
-| [ROADMAP.md](ROADMAP.md) | Milestone status |
 | [CHANGELOG.md](CHANGELOG.md) | Release notes |
 
 ## Status
 
-Pre–v0.1. APIs evolve. See [ROADMAP.md](ROADMAP.md) and
-[CHANGELOG.md](CHANGELOG.md).
+Pre–1.0: breaking changes may appear in minor versions (see
+[CHANGELOG.md](CHANGELOG.md)). Feature set for the initial public line is
+shipped; follow the changelog for new work.
 
 ## License
 

@@ -23,9 +23,16 @@ Collects, stores, and analyzes agent session data.
 kaizen/
 ├── src/
 │   ├── main.rs          # binary entry point
-│   ├── proxy/            # local LLM API forwarder + `EventSource::Proxy` (see `docs/llm-proxy.md`)
+│   ├── collect/         # transcript tail, hooks, parsers
+│   ├── core/            # config, shared types
+│   ├── mcp/              # stdio MCP server (see `docs/mcp.md`)
+│   ├── proxy/            # local LLM API forwarder + `EventSource::Proxy` (`docs/llm-proxy.md`)
+│   ├── telemetry/        # optional exporter fan-out
 │   ├── metrics/         # repo indexing + smart metric report
-│   ├── sync/            # event/span/snapshot sync
+│   ├── shell/           # CLI command implementations
+│   ├── store/            # SQLite
+│   ├── sync/            # outbox + HTTP flush
+│   ├── ui/              # TUI
 │   └── retro/           # heuristic report engine
 ├── tests/               # integration tests (+ `quint-connect` under `tests/spec/`)
 ├── specs/               # Quint specs (`quint` CLI — version in CONTRIBUTING.md)
