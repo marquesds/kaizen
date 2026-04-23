@@ -35,7 +35,7 @@ kaizen/
 │   ├── ui/              # TUI
 │   └── retro/           # heuristic report engine
 ├── tests/               # integration tests (+ `quint-connect` under `tests/spec/`)
-├── specs/               # Quint specs (`quint` CLI — version in CONTRIBUTING.md)
+├── specs/               # Quint specs — see docs/quint-coverage.md
 ├── docs/                # architecture + design docs
 ├── Cargo.toml           # dependencies, metadata
 └── .cursor/             # agent config (rules, skills, hooks)

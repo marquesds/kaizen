@@ -29,7 +29,11 @@ pub fn load_inputs(
     let recent_slugs_list = store.skills_used_since(workspace_key, lookback_start)?;
     let skills_used_recent_slugs: HashSet<String> = recent_slugs_list.into_iter().collect();
 
+    let rules_recent_list = store.rules_used_since(workspace_key, lookback_start)?;
+    let rules_used_recent_slugs: HashSet<String> = rules_recent_list.into_iter().collect();
+
     let skill_files_on_disk = scan_skill_files(workspace_root, window_end_ms)?;
+    let rule_files_on_disk = scan_rule_files(workspace_root, window_end_ms)?;
     let file_facts = latest_file_facts(store, workspace_key)?;
 
     let aggregates = build_aggregates(&events);
@@ -44,6 +48,8 @@ pub fn load_inputs(
         skills_used_recent_slugs,
         usage_lookback_ms: USAGE_LOOKBACK_MIN_DAYS * 86_400_000,
         skill_files_on_disk,
+        rule_files_on_disk,
+        rules_used_recent_slugs,
         file_facts,
         aggregates,
     })
@@ -63,7 +69,8 @@ fn latest_file_facts(
         .collect())
 }
 
-fn scan_skill_files(workspace_root: &Path, now_ms: u64) -> Result<Vec<SkillFileOnDisk>> {
+/// `.cursor/skills/<slug>/SKILL.md` on disk.
+pub fn scan_skill_files(workspace_root: &Path, now_ms: u64) -> Result<Vec<SkillFileOnDisk>> {
     let skills_dir = workspace_root.join(".cursor/skills");
     if !skills_dir.is_dir() {
         return Ok(vec![]);
@@ -80,6 +87,47 @@ fn scan_skill_files(workspace_root: &Path, now_ms: u64) -> Result<Vec<SkillFileO
             continue;
         }
         let meta = fs::metadata(&skill_md)?;
+        let mtime_ms = meta
+            .modified()
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(now_ms);
+        out.push(SkillFileOnDisk {
+            slug,
+            size_bytes: meta.len(),
+            mtime_ms,
+        });
+    }
+    out.sort_by(|a, b| a.slug.cmp(&b.slug));
+    Ok(out)
+}
+
+/// `.cursor/rules/*.mdc` files (stem = rule id).
+pub fn scan_rule_files(workspace_root: &Path, now_ms: u64) -> Result<Vec<SkillFileOnDisk>> {
+    let rules_dir = workspace_root.join(".cursor/rules");
+    if !rules_dir.is_dir() {
+        return Ok(vec![]);
+    }
+    let mut out = Vec::new();
+    for entry in fs::read_dir(&rules_dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        if !path
+            .extension()
+            .and_then(|x| x.to_str())
+            .is_some_and(|e| e.eq_ignore_ascii_case("mdc"))
+        {
+            continue;
+        }
+        let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
+            continue;
+        };
+        let slug = stem.to_string();
+        let meta = fs::metadata(&path)?;
         let mtime_ms = meta
             .modified()
             .ok()

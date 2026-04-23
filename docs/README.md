@@ -29,6 +29,7 @@ glossary.
 | Doc | Purpose |
 |---|---|
 | [structure.md](structure.md) | Purpose, stack, directory layout |
+| [quint-coverage.md](quint-coverage.md) | Which features have `specs/*.qnt` vs CLI-only tests |
 | [architecture.md](architecture.md) | Module graph, data flow, boundaries |
 | [datamodel.md](datamodel.md) | Data structs, relationships, invariants |
 | [patterns.md](patterns.md) | Conventions, design patterns |
@@ -50,6 +51,7 @@ glossary.
 | Ingest / sync contract | `ingest-contract.md` |
 | Retro / experiments product spec | `retro.md` / `experiments.md` |
 | New CLI command or flag | `usage.md` |
+| New Quint spec or change to spec/test pairing | [quint-coverage.md](quint-coverage.md) |
 | User-facing learning story or pipeline change | [telemetry-journey.md](telemetry-journey.md), [architecture.md](architecture.md) |
 
 Stale docs worse than no docs — keep current or delete.
