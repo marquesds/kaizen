@@ -4,6 +4,7 @@ pub mod doctor;
 pub mod exp;
 pub mod fmt;
 pub mod gc;
+pub mod guidance;
 pub mod ingest;
 pub mod init;
 pub mod insights;

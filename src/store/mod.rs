@@ -2,6 +2,9 @@
 pub mod event_index;
 pub mod sqlite;
 pub mod tool_span_index;
+pub use sqlite::GuidanceKind;
+pub use sqlite::GuidancePerfRow;
+pub use sqlite::GuidanceReport;
 pub use sqlite::InsightsStats;
 pub use sqlite::PruneStats;
 pub use sqlite::SYNC_STATE_LAST_AGENT_SCAN_MS;

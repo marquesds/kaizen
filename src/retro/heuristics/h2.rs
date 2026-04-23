@@ -110,6 +110,8 @@ mod tests {
             skills_used_recent_slugs: HashSet::new(),
             usage_lookback_ms: 0,
             skill_files_on_disk: vec![],
+            rule_files_on_disk: vec![],
+            rules_used_recent_slugs: HashSet::new(),
             file_facts: HashMap::new(),
             aggregates: agg,
         };

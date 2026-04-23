@@ -73,6 +73,34 @@ name = "doctor_cmd"
 path = "tests/spec/doctor_cmd.rs"
 
 [[test]]
+name = "doctor_diagnostic"
+path = "tests/spec/doctor_diagnostic.rs"
+
+[[test]]
+name = "gc_prune"
+path = "tests/spec/gc_prune.rs"
+
+[[test]]
+name = "observe_pipeline"
+path = "tests/spec/observe_pipeline.rs"
+
+[[test]]
+name = "session_lookup"
+path = "tests/spec/session_lookup.rs"
+
+[[test]]
+name = "metrics_pipeline"
+path = "tests/spec/metrics_pipeline.rs"
+
+[[test]]
+name = "tui_app"
+path = "tests/spec/tui_app.rs"
+
+[[test]]
+name = "guidance_cmd"
+path = "tests/spec/guidance_cmd.rs"
+
+[[test]]
 name = "init_setup"
 path = "tests/spec/init_setup.rs"
 

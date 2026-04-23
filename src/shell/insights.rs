@@ -30,7 +30,14 @@ pub fn insights_text(workspace: Option<&Path>, refresh: bool) -> Result<String> 
     {
         let _ = crate::sync::smart::enqueue_repo_snapshot(&store, snapshot, &facts, &edges, &ctx);
     }
-    Ok(format_dashboard(&ws_str, &stats, metrics.as_ref()))
+    let guidance = crate::shell::guidance::format_guidance_teaser(&store, &ws, &ws_str, 7)
+        .unwrap_or_else(|_| String::new());
+    Ok(format_dashboard(
+        &ws_str,
+        &stats,
+        metrics.as_ref(),
+        &guidance,
+    ))
 }
 
 /// Print workspace activity dashboard.
@@ -43,6 +50,7 @@ fn format_dashboard(
     ws: &str,
     stats: &InsightsStats,
     metrics: Option<&crate::metrics::types::MetricsReport>,
+    guidance_teaser: &str,
 ) -> String {
     let mut s = String::new();
     writeln!(&mut s, "kaizen — {ws}").unwrap();
@@ -52,6 +60,10 @@ fn format_dashboard(
     format_tools(&mut s, stats);
     writeln!(&mut s).unwrap();
     format_cost(&mut s, stats);
+    if !guidance_teaser.is_empty() {
+        writeln!(&mut s).unwrap();
+        s.push_str(guidance_teaser);
+    }
     if let Some(metrics) = metrics {
         writeln!(&mut s).unwrap();
         format_code(&mut s, metrics);

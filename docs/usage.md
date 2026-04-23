@@ -4,7 +4,7 @@ CLI reference. All commands accept `--workspace <path>` (default: cwd).
 
 Run `kaizen --help` for grouped subcommands (Trust & observe, Operate, Improve, Integrations, Shell).
 
-**Rescan throttling:** `sessions list`, `summary`, `insights`, `metrics`, and `retro` reuse the last full transcript scan when it is newer than `[scan].min_rescan_seconds` (default 300). Pass **`--refresh`** (`-r`) to force a full rescan. See [config.md](config.md).
+**Rescan throttling:** `sessions list`, `summary`, `insights`, `guidance`, `metrics`, and `retro` reuse the last full transcript scan when it is newer than `[scan].min_rescan_seconds` (default 300). Pass **`--refresh`** (`-r`) to force a full rescan. See [config.md](config.md).
 
 ## `kaizen doctor`
 
@@ -59,7 +59,18 @@ Restart the shell or `source` your profile as appropriate for your platform.
 
 ## `kaizen insights`
 
-Activity by day, top tools, recent sessions.
+Activity by day, top tools, recent sessions, and a short **Guidance** teaser (top skills/rules by observed path references in payloads).
+
+## `kaizen guidance`
+
+Per-skill and per–Cursor-rule stats over a trailing window: how many sessions referenced `.cursor/skills/...` or `.cursor/rules/*.mdc` in ingested tool payloads, share of active sessions, average cost per session vs workspace average, and on-disk inventory (including unused rules/skills). Silent Cursor injection without path mentions is not counted.
+
+```bash
+kaizen guidance
+kaizen guidance --days 14
+kaizen guidance --json
+kaizen guidance --refresh
+```
 
 ## `kaizen metrics`
 

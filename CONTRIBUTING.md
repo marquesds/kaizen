@@ -76,7 +76,8 @@ runs on a PR first.
 - Unit tests live next to the code.
 - Integration tests in `tests/`.
 - Spec tests in `tests/spec/` drive Quint state machines from
-  `specs/*.qnt` via `quint-connect`.
+  `specs/*.qnt` via `quint-connect`. Coverage map:
+  [docs/quint-coverage.md](docs/quint-coverage.md).
 - Fixtures in `tests/fixtures/`.
 
 ## Docs

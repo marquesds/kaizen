@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Derive `files_touched` / `skills_used` rows from ingested events.
+//! Derive `files_touched` / `skills_used` / `rules_used` rows from ingested events.
 
 use crate::core::event::Event;
 use anyhow::Result;
@@ -10,6 +10,10 @@ use std::sync::LazyLock;
 
 static SKILL_PATH_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#"(?i)\.cursor/skills/([^/\s"'<>]+)"#).expect("skill path regex"));
+
+static RULE_PATH_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(?i)\.cursor/rules/([^/\s"'<>]+\.mdc)"#).expect("rule path regex")
+});
 
 /// Collect likely file paths from tool payload JSON (read_file, write, patch, etc.).
 pub fn paths_from_event_payload(payload: &Value) -> Vec<String> {
@@ -60,6 +64,27 @@ pub fn skills_from_event_json(payload: &Value) -> Vec<String> {
     out
 }
 
+fn normalize_rule_id(raw: &str) -> String {
+    let raw = raw.trim();
+    if raw.len() > 4 && raw[raw.len() - 4..].eq_ignore_ascii_case(".mdc") {
+        raw[..raw.len() - 4].to_string()
+    } else {
+        raw.to_string()
+    }
+}
+
+/// Cursor rule stems referenced via `.cursor/rules/<name>.mdc` in stringified payload.
+pub fn rules_from_event_json(payload: &Value) -> Vec<String> {
+    let raw = payload.to_string();
+    let mut out: Vec<String> = RULE_PATH_RE
+        .captures_iter(&raw)
+        .filter_map(|c| c.get(1).map(|m| normalize_rule_id(m.as_str())))
+        .collect();
+    out.sort();
+    out.dedup();
+    out
+}
+
 /// Insert derived rows after a new event was appended (`INSERT` succeeded).
 pub fn index_event_derived(conn: &Connection, e: &Event) -> Result<()> {
     for path in paths_from_event_payload(&e.payload) {
@@ -72,6 +97,12 @@ pub fn index_event_derived(conn: &Connection, e: &Event) -> Result<()> {
         conn.execute(
             "INSERT OR IGNORE INTO skills_used (session_id, skill) VALUES (?1, ?2)",
             params![e.session_id, skill],
+        )?;
+    }
+    for rule in rules_from_event_json(&e.payload) {
+        conn.execute(
+            "INSERT OR IGNORE INTO rules_used (session_id, rule) VALUES (?1, ?2)",
+            params![e.session_id, rule],
         )?;
     }
     Ok(())
@@ -94,5 +125,19 @@ mod tests {
         let v = json!({"text": "read /.cursor/skills/foo/SKILL.md"});
         let s = skills_from_event_json(&v);
         assert_eq!(s, vec!["foo".to_string()]);
+    }
+
+    #[test]
+    fn rules_from_cursor_rules_path() {
+        let v = json!({"path": ".cursor/rules/agent-parity.mdc"});
+        let r = rules_from_event_json(&v);
+        assert_eq!(r, vec!["agent-parity".to_string()]);
+    }
+
+    #[test]
+    fn rules_case_insensitive_mdc_suffix() {
+        let v = json!({"text": "See .cursor/rules/Foo.MDC for details"});
+        let r = rules_from_event_json(&v);
+        assert_eq!(r, vec!["Foo".to_string()]);
     }
 }

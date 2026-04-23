@@ -20,6 +20,9 @@ pub struct Inputs {
     pub skills_used_recent_slugs: HashSet<String>,
     pub usage_lookback_ms: u64,
     pub skill_files_on_disk: Vec<SkillFileOnDisk>,
+    /// `.cursor/rules/*.mdc` stems (same shape as [`SkillFileOnDisk`]).
+    pub rule_files_on_disk: Vec<SkillFileOnDisk>,
+    pub rules_used_recent_slugs: HashSet<String>,
     pub file_facts: HashMap<String, FileFact>,
     pub aggregates: RetroAggregates,
 }

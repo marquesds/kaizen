@@ -161,6 +161,8 @@ mod tests {
                 size_bytes: 100,
                 mtime_ms: 0,
             }],
+            rule_files_on_disk: vec![],
+            rules_used_recent_slugs: HashSet::new(),
             file_facts: HashMap::new(),
             aggregates: agg,
         }

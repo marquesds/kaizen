@@ -91,6 +91,22 @@ enum Command {
         #[arg(short, long)]
         refresh: bool,
     },
+    /// Skill and Cursor rule adoption from observed path refs in payloads (not silent injection).
+    #[command(next_help_heading = "Trust & observe")]
+    Guidance {
+        /// Trailing window in days (default 7).
+        #[arg(long, default_value_t = 7)]
+        days: u32,
+        /// Emit JSON report.
+        #[arg(long)]
+        json: bool,
+        /// workspace root (default: cwd)
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        /// Force a full agent transcript rescan (ignore `[scan].min_rescan_seconds`).
+        #[arg(short, long)]
+        refresh: bool,
+    },
     /// Smart metrics: code hotspots, slow tools, token sinks.
     #[command(next_help_heading = "Trust & observe")]
     Metrics {
@@ -405,6 +421,12 @@ fn main() -> anyhow::Result<()> {
         Command::Insights { workspace, refresh } => {
             kaizen::shell::cli::cmd_insights(workspace.as_deref(), refresh)
         }
+        Command::Guidance {
+            days,
+            json,
+            workspace,
+            refresh,
+        } => kaizen::shell::guidance::cmd_guidance(workspace.as_deref(), days, json, refresh),
         Command::Metrics {
             subcmd,
             days,

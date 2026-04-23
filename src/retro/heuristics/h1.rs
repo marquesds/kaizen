@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! H1 — Dead skill: on-disk skill unused in lookback window, not edited recently.
+//! H1 — Dead skill or Cursor rule: on-disk file unused in lookback window, not edited recently.
 
 use crate::retro::types::{Bet, Inputs};
 
@@ -38,6 +38,33 @@ pub fn run(inputs: &Inputs) -> Vec<Bet> {
             )],
             apply_step: format!("rm -rf .cursor/skills/{}", sf.slug),
             evidence_recency_ms: sf.mtime_ms,
+        });
+    }
+    for rf in &inputs.rule_files_on_disk {
+        if inputs.rules_used_recent_slugs.contains(&rf.slug) {
+            continue;
+        }
+        if rf.mtime_ms > now.saturating_sub(STALE_EDIT_MS) {
+            continue;
+        }
+        let est_tokens_week = (rf.size_bytes as f64 / 4.0) * 10.0;
+        let id = format!("H1r:{}", rf.slug);
+        out.push(Bet {
+            id,
+            heuristic_id: "H1".into(),
+            title: format!("Remove or archive unused rule `{}`", rf.slug),
+            hypothesis: format!(
+                "Rule `.cursor/rules/{}.mdc` has not been referenced in tracked sessions for the lookback window and was last modified more than 60 days ago.",
+                rf.slug
+            ),
+            expected_tokens_saved_per_week: est_tokens_week,
+            effort_minutes: 5,
+            evidence: vec![format!(
+                "On-disk size ~{} bytes; not in recent `rules_used` index.",
+                rf.size_bytes
+            )],
+            apply_step: format!("rm .cursor/rules/{}.mdc", rf.slug),
+            evidence_recency_ms: rf.mtime_ms,
         });
     }
     out
@@ -104,6 +131,8 @@ mod tests {
                 size_bytes: 400,
                 mtime_ms: 0,
             }],
+            rule_files_on_disk: vec![],
+            rules_used_recent_slugs: HashSet::new(),
             file_facts: HashMap::new(),
             aggregates: agg,
         }
