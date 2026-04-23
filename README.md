@@ -37,6 +37,13 @@ local SQLite; optional HTTP proxy logging adds another path. A metrics pass ties
 | A/B a rule or change against a metric | [docs/experiments.md](docs/experiments.md) |
 | The end-to-end data story (ingest → store → facts) | [docs/telemetry-journey.md](docs/telemetry-journey.md) |
 
+## Demo
+
+
+https://github.com/user-attachments/assets/3cf4ac40-cef7-480a-9bea-af69df06f3c6
+
+
+
 ## Install
 
 ```bash
