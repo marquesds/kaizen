@@ -840,42 +840,44 @@ impl Store {
                 SYNTHETIC_TS_CEILING_MS,
             ],
             |row| {
-            let payload_str: String = row.get(12)?;
-            let status_str: String = row.get(19)?;
-            Ok((
-                SessionRecord {
-                    id: row.get(13)?,
-                    agent: row.get(14)?,
-                    model: row.get(15)?,
-                    workspace: row.get(16)?,
-                    started_at_ms: row.get::<_, i64>(17)? as u64,
-                    ended_at_ms: row.get::<_, Option<i64>>(18)?.map(|v| v as u64),
-                    status: status_from_str(&status_str),
-                    trace_path: row.get(20)?,
-                    start_commit: row.get(21)?,
-                    end_commit: row.get(22)?,
-                    branch: row.get(23)?,
-                    dirty_start: row.get::<_, Option<i64>>(24)?.map(i64_to_bool),
-                    dirty_end: row.get::<_, Option<i64>>(25)?.map(i64_to_bool),
-                    repo_binding_source: empty_to_none(row.get::<_, String>(26)?),
-                },
-                Event {
-                    session_id: row.get(0)?,
-                    seq: row.get::<_, i64>(1)? as u64,
-                    ts_ms: row.get::<_, i64>(2)? as u64,
-                    ts_exact: row.get::<_, i64>(3)? != 0,
-                    kind: kind_from_str(&row.get::<_, String>(4)?),
-                    source: source_from_str(&row.get::<_, String>(5)?),
-                    tool: row.get(6)?,
-                    tool_call_id: row.get(7)?,
-                    tokens_in: row.get::<_, Option<i64>>(8)?.map(|v| v as u32),
-                    tokens_out: row.get::<_, Option<i64>>(9)?.map(|v| v as u32),
-                    reasoning_tokens: row.get::<_, Option<i64>>(10)?.map(|v| v as u32),
-                    cost_usd_e6: row.get(11)?,
-                    payload: serde_json::from_str(&payload_str).unwrap_or(serde_json::Value::Null),
-                },
-            ))
-        })?;
+                let payload_str: String = row.get(12)?;
+                let status_str: String = row.get(19)?;
+                Ok((
+                    SessionRecord {
+                        id: row.get(13)?,
+                        agent: row.get(14)?,
+                        model: row.get(15)?,
+                        workspace: row.get(16)?,
+                        started_at_ms: row.get::<_, i64>(17)? as u64,
+                        ended_at_ms: row.get::<_, Option<i64>>(18)?.map(|v| v as u64),
+                        status: status_from_str(&status_str),
+                        trace_path: row.get(20)?,
+                        start_commit: row.get(21)?,
+                        end_commit: row.get(22)?,
+                        branch: row.get(23)?,
+                        dirty_start: row.get::<_, Option<i64>>(24)?.map(i64_to_bool),
+                        dirty_end: row.get::<_, Option<i64>>(25)?.map(i64_to_bool),
+                        repo_binding_source: empty_to_none(row.get::<_, String>(26)?),
+                    },
+                    Event {
+                        session_id: row.get(0)?,
+                        seq: row.get::<_, i64>(1)? as u64,
+                        ts_ms: row.get::<_, i64>(2)? as u64,
+                        ts_exact: row.get::<_, i64>(3)? != 0,
+                        kind: kind_from_str(&row.get::<_, String>(4)?),
+                        source: source_from_str(&row.get::<_, String>(5)?),
+                        tool: row.get(6)?,
+                        tool_call_id: row.get(7)?,
+                        tokens_in: row.get::<_, Option<i64>>(8)?.map(|v| v as u32),
+                        tokens_out: row.get::<_, Option<i64>>(9)?.map(|v| v as u32),
+                        reasoning_tokens: row.get::<_, Option<i64>>(10)?.map(|v| v as u32),
+                        cost_usd_e6: row.get(11)?,
+                        payload: serde_json::from_str(&payload_str)
+                            .unwrap_or(serde_json::Value::Null),
+                    },
+                ))
+            },
+        )?;
 
         let mut out = Vec::new();
         for r in rows {
@@ -915,7 +917,7 @@ impl Store {
                     end_ms as i64,
                     SYNTHETIC_TS_CEILING_MS,
                 ],
-                |r| { Ok((r.get(0)?, r.get(1)?)) },
+                |r| Ok((r.get(0)?, r.get(1)?)),
             )?
             .filter_map(|r| r.ok())
             .collect();
@@ -979,7 +981,7 @@ impl Store {
                     end_ms as i64,
                     SYNTHETIC_TS_CEILING_MS,
                 ],
-                |r| { Ok((r.get(0)?, r.get(1)?)) },
+                |r| Ok((r.get(0)?, r.get(1)?)),
             )?
             .filter_map(|r| r.ok())
             .collect();

@@ -44,8 +44,19 @@ cargo test --all
 cargo deny --manifest-path Cargo.toml check --config .cargo/deny.toml
 ```
 
+After changing `specs/*.qnt`, run (same checks CI runs once Quint is installed):
+
+```bash
+scripts/check-quint-specs.sh
+```
+
 CI enforces all of the above on push and PR. See
 `.github/workflows/ci.yml`.
+
+On GitHub, protect `main`: require pull requests, and require every job in the
+CI workflow (including **test (macos-latest / stable)**) to pass before merge.
+That stops Linux-green / macOS-red changes from landing when someone bypasses
+local runs.
 
 ## Branch + PR flow
 
@@ -56,6 +67,9 @@ CI enforces all of the above on push and PR. See
    behavior changes.
 4. Open PR; fill in the template.
 5. A maintainer reviews and merges.
+
+Avoid pushing directly to `main`; branch protection should block it so CI always
+runs on a PR first.
 
 ## Tests
 

@@ -99,7 +99,11 @@ fn line_ts_ms(obj: &serde_json::Map<String, Value>) -> Option<u64> {
     }
     // Cursor often omits per-line times; `timestamp` may be seconds (≈1e9) or ms (≈1.7e12).
     if let Some(t) = obj.get("timestamp").and_then(|v| v.as_u64()) {
-        return Some(if t < 1_000_000_000_000 { t.saturating_mul(1000) } else { t });
+        return Some(if t < 1_000_000_000_000 {
+            t.saturating_mul(1000)
+        } else {
+            t
+        });
     }
     None
 }
