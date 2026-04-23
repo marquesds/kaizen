@@ -30,28 +30,26 @@ fn paths_equal(a: &Path, b: &Path) -> bool {
 
 fn session_workspace_path(session_dir: &Path) -> Option<PathBuf> {
     let wj = session_dir.join("workspace.json");
-    if let Ok(text) = std::fs::read_to_string(&wj) {
-        if let Ok(v) = serde_json::from_str::<Value>(&text) {
-            for key in ["workspaceFolder", "cwd", "workingDirectory", "folder"] {
-                if let Some(s) = v.get(key).and_then(|x| x.as_str()) {
-                    let p = s.strip_prefix("file://").unwrap_or(s);
-                    return Some(PathBuf::from(p));
-                }
-            }
-        }
-    }
-    let meta = session_dir.join("metadata.json");
-    if let Ok(text) = std::fs::read_to_string(&meta) {
-        if let Ok(v) = serde_json::from_str::<Value>(&text) {
-            if let Some(s) = v
-                .get("workspaceFolder")
-                .or_else(|| v.get("cwd"))
-                .and_then(|x| x.as_str())
-            {
+    if let Ok(text) = std::fs::read_to_string(&wj)
+        && let Ok(v) = serde_json::from_str::<Value>(&text)
+    {
+        for key in ["workspaceFolder", "cwd", "workingDirectory", "folder"] {
+            if let Some(s) = v.get(key).and_then(|x| x.as_str()) {
                 let p = s.strip_prefix("file://").unwrap_or(s);
                 return Some(PathBuf::from(p));
             }
         }
+    }
+    let meta = session_dir.join("metadata.json");
+    if let Ok(text) = std::fs::read_to_string(&meta)
+        && let Ok(v) = serde_json::from_str::<Value>(&text)
+        && let Some(s) = v
+            .get("workspaceFolder")
+            .or_else(|| v.get("cwd"))
+            .and_then(|x| x.as_str())
+    {
+        let p = s.strip_prefix("file://").unwrap_or(s);
+        return Some(PathBuf::from(p));
     }
     None
 }
@@ -75,42 +73,42 @@ pub fn parse_copilot_cli_line(
         .and_then(|t| t.as_u64())
         .unwrap_or(base_ts + seq);
 
-    if let Some(tool_calls) = obj.get("tool_calls").and_then(|t| t.as_array()) {
-        if let Some(first) = tool_calls.first() {
-            let tool_name = first
-                .get("function")
-                .and_then(|f| f.get("name"))
-                .or_else(|| first.get("name"))
-                .and_then(|n| n.as_str())
-                .unwrap_or("")
-                .to_string();
-            return Ok(Some(Event {
-                session_id: session_id.to_string(),
-                seq,
-                ts_ms,
-                ts_exact: true,
-                kind: EventKind::ToolCall,
-                source: EventSource::Tail,
-                tool: Some(tool_name),
-                tool_call_id: first
-                    .get("id")
-                    .and_then(|x| x.as_str())
-                    .map(ToOwned::to_owned),
-                tokens_in: obj
-                    .get("usage")
-                    .and_then(|u| u.get("prompt_tokens"))
-                    .and_then(|x| x.as_u64())
-                    .map(|x| x as u32),
-                tokens_out: obj
-                    .get("usage")
-                    .and_then(|u| u.get("completion_tokens"))
-                    .and_then(|x| x.as_u64())
-                    .map(|x| x as u32),
-                reasoning_tokens: None,
-                cost_usd_e6: None,
-                payload: v.clone(),
-            }));
-        }
+    if let Some(tool_calls) = obj.get("tool_calls").and_then(|t| t.as_array())
+        && let Some(first) = tool_calls.first()
+    {
+        let tool_name = first
+            .get("function")
+            .and_then(|f| f.get("name"))
+            .or_else(|| first.get("name"))
+            .and_then(|n| n.as_str())
+            .unwrap_or("")
+            .to_string();
+        return Ok(Some(Event {
+            session_id: session_id.to_string(),
+            seq,
+            ts_ms,
+            ts_exact: true,
+            kind: EventKind::ToolCall,
+            source: EventSource::Tail,
+            tool: Some(tool_name),
+            tool_call_id: first
+                .get("id")
+                .and_then(|x| x.as_str())
+                .map(ToOwned::to_owned),
+            tokens_in: obj
+                .get("usage")
+                .and_then(|u| u.get("prompt_tokens"))
+                .and_then(|x| x.as_u64())
+                .map(|x| x as u32),
+            tokens_out: obj
+                .get("usage")
+                .and_then(|u| u.get("completion_tokens"))
+                .and_then(|x| x.as_u64())
+                .map(|x| x as u32),
+            reasoning_tokens: None,
+            cost_usd_e6: None,
+            payload: v.clone(),
+        }));
     }
 
     if let Some(name) = obj
@@ -176,10 +174,10 @@ pub fn scan_copilot_cli_session_dir(
         if line.trim().is_empty() {
             continue;
         }
-        if model.is_none() {
-            if let Ok(v) = serde_json::from_str::<Value>(line) {
-                model = model_from_json::from_value(&v);
-            }
+        if model.is_none()
+            && let Ok(v) = serde_json::from_str::<Value>(line)
+        {
+            model = model_from_json::from_value(&v);
         }
         if let Some(ev) = parse_copilot_cli_line(&session_id, seq, 0, line)? {
             events.push(ev);

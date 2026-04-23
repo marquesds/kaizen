@@ -15,18 +15,17 @@ pub fn find_usage_in_body(bytes: &[u8], is_sse: bool) -> Usage3 {
             } else {
                 continue;
             };
-            if let Some(data) = s.strip_prefix("data: ") {
-                if let Ok(v) = serde_json::from_str::<Value>(data) {
-                    if let Some(t) = extract_usage(&v) {
-                        return t;
-                    }
-                }
+            if let Some(data) = s.strip_prefix("data: ")
+                && let Ok(v) = serde_json::from_str::<Value>(data)
+                && let Some(t) = extract_usage(&v)
+            {
+                return t;
             }
         }
-    } else if let Ok(v) = serde_json::from_slice::<Value>(bytes) {
-        if let Some(t) = extract_usage(&v) {
-            return t;
-        }
+    } else if let Ok(v) = serde_json::from_slice::<Value>(bytes)
+        && let Some(t) = extract_usage(&v)
+    {
+        return t;
     }
     (None, None, None)
 }

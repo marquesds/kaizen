@@ -138,7 +138,12 @@ impl Driver for AutoDriver {
     }
 }
 
-#[quint_run(spec = "specs/auto-update.qnt", max_samples = 16, max_steps = 18)]
+#[quint_run(
+    spec = "specs/auto-update.qnt",
+    max_samples = 16,
+    max_steps = 18,
+    seed = "0x1"
+)]
 fn auto_update_run() -> impl Driver {
     AutoDriver::default()
 }

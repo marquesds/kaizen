@@ -39,10 +39,10 @@ fn session_root_matches_workspace(session_file: &Path, workspace: &Path) -> bool
         if paths_equal(p, &ws) {
             return true;
         }
-        if let Ok(read) = std::fs::read_to_string(p.join("workspace.json")) {
-            if workspace_json_folder_matches(&read, workspace) {
-                return true;
-            }
+        if let Ok(read) = std::fs::read_to_string(p.join("workspace.json"))
+            && workspace_json_folder_matches(&read, workspace)
+        {
+            return true;
         }
         cur = p.parent();
         depth += 1;
@@ -89,10 +89,10 @@ fn session_json_directory_field(v: &Value, workspace: &Path) -> bool {
             }
         }
     }
-    if let Some(folder) = v.get("folder").and_then(|f| f.as_str()) {
-        if paths_equal(&path_from_uri_or_path(folder), workspace) {
-            return true;
-        }
+    if let Some(folder) = v.get("folder").and_then(|f| f.as_str())
+        && paths_equal(&path_from_uri_or_path(folder), workspace)
+    {
+        return true;
     }
     false
 }
@@ -346,12 +346,11 @@ fn walk_json_files(dir: &Path, out: &mut Vec<PathBuf>, depth: u8) {
         let p = e.path();
         if p.is_dir() {
             walk_json_files(&p, out, depth + 1);
-        } else if p.extension().and_then(|x| x.to_str()) == Some("json") {
-            if let Ok(m) = p.metadata() {
-                if m.len() > 32 {
-                    out.push(p);
-                }
-            }
+        } else if p.extension().and_then(|x| x.to_str()) == Some("json")
+            && let Ok(m) = p.metadata()
+            && m.len() > 32
+        {
+            out.push(p);
         }
     }
 }
