@@ -1,0 +1,65 @@
+---
+description: Design — functional core, sinks not pipes, AI-ready architecture, SOLID
+alwaysApply: true
+---
+
+# Design Principles
+
+## Functional Core / Imperative Shell
+
+Pure `fn` handle logic. Side effects pushed to boundary.
+Immutability, referential transparency, delay effects to last stage.
+
+```rust
+// GOOD — pure core, no side effects
+fn calculate_total(items: &[Item]) -> u64 {
+    items.iter().map(|i| i.price).sum()
+}
+
+// Imperative shell calls pure core at I/O boundary
+async fn handle_checkout(state: &State) -> Result<()> {
+    let total = calculate_total(&state.items);
+    db.save_order(total).await
+}
+
+// BAD — DB calls inside logic function
+async fn calculate_total(items: &[Item]) -> u64 {
+    let mut sum = 0;
+    for item in items {
+        let p = db.get_product(item.id).await.unwrap();
+        sum += p.price;
+    }
+    sum
+}
+```
+
+## Sinks, Not Pipes
+
+Components receive input, do work, stop. No cascading side effects. Contained blast radius.
+Ref: https://ianbull.com/posts/software-architecture/
+
+```rust
+// GOOD — contained, testable
+async fn send_welcome_email(user: &User) -> Result<()> {
+    mailer.deliver(welcome_email(user)).await
+}
+
+// BAD — triggers invisible chain
+async fn create_user(attrs: Attrs) -> Result<User> {
+    let user = db.insert(user_from(attrs)).await?;
+    // implicitly enqueues job, sends email, updates analytics
+    user
+}
+```
+
+## AI-Ready Architecture
+
+Module boundaries discoverable without reading internals.
+Public interfaces tell truth about what module does.
+Follow SOLID. Deep modules with honest interfaces.
+
+## Core Principles
+
+- **Simplicity First**: minimal code impact per change
+- **No Laziness**: find root causes, no workarounds
+- **Minimal Impact**: touch only necessary, avoid introducing bugs

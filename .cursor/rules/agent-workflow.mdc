@@ -1,0 +1,59 @@
+---
+description: Agent workflow — plan mode, subagents, verification, autonomous bug fixing
+alwaysApply: false
+---
+
+# Agent Workflow
+
+## Plan Mode Default
+
+ANY task with 3+ steps or architectural decisions → plan mode.
+Goes sideways → STOP, re-plan immediately. No pushing through.
+Write specs upfront to reduce ambiguity.
+
+```rust
+// GOOD — pause before touching multiple modules:
+// Switch to plan mode, map trait changes + module
+// impact before writing any code
+
+// BAD — jump straight into editing 5 files without
+// scoping the work first
+```
+
+## Subagent Strategy
+
+Use subagents liberally. Keep main context window clean.
+Offload research, exploration, parallel analysis. One task per subagent.
+
+```
+# GOOD — parallel, focused subagents
+spawn subagent A → explore telemetry pipeline
+spawn subagent B → trace session event flow
+
+# BAD — pile all exploration into main context,
+# bloating it before starting actual work
+```
+
+## Verification Before Done
+
+Never mark complete without proving it works.
+Run full test suite. Ask: "Would staff engineer approve this?"
+
+```bash
+# GOOD
+cargo test && cargo clippy -- -D warnings && cargo fmt --check
+
+# BAD — visual check + "looks good" without running tests
+```
+
+## Autonomous Bug Fixing
+
+Bug report → fix it. No hand-holding. Run tests to find root cause.
+
+```bash
+# GOOD — trace failure, fix root cause, re-run
+cargo test
+
+# BAD — "Should I change the schema or the query?"
+# Find and fix root cause yourself
+```

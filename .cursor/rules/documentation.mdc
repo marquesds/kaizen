@@ -1,0 +1,57 @@
+---
+description: Documentation — only document non-obvious intent, preconditions, and invariants
+alwaysApply: false
+---
+
+# Documentation
+
+Document only non-obvious APIs. Explain preconditions, invariants, postconditions.
+Never narrate obvious code.
+
+```rust
+// GOOD — explains contract
+/// Broadcast event to all subscribers on session topic.
+///
+/// # Preconditions
+/// `session_id` must be registered before call.
+///
+/// # Postconditions
+/// All connected subscribers receive `SessionEvent`.
+///
+/// # Errors
+/// Returns `Err(BroadcastError)` if channel is closed.
+pub fn broadcast(session_id: SessionId, event: SessionEvent) -> Result<()> {
+    ...
+}
+
+// BAD — narrates obvious
+/// Insert message into database
+pub fn create_message(attrs: Attrs) -> Result<Message> {
+    db.insert(attrs)
+}
+```
+
+## Architecture Docs
+
+`docs/` — keep each doc under 200 lines.
+
+### Core docs
+
+- `docs/structure.md` — purpose, stack, directory layout
+- `docs/architecture.md` — module graph, data flow, external boundaries
+- `docs/datamodel.md` — entities, relationships, key invariants
+- `docs/config.md` — crate roles, config split, env vars
+- `docs/patterns.md` — design patterns, conventions, unusual choices
+
+## Keep Docs Current
+
+| Change type | Update these docs |
+|---|---|
+| New dependency | `docs/config.md` |
+| New/changed data struct | `docs/datamodel.md` |
+| New module or crate | `docs/architecture.md` |
+| New env var | `docs/config.md` |
+| New pattern or decision | `docs/patterns.md` |
+| Directory layout change | `docs/structure.md` |
+
+Stale docs worse than no docs — keep current or delete.

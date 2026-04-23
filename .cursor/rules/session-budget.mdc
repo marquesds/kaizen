@@ -1,0 +1,23 @@
+---
+alwaysApply: true
+---
+# Session Budget
+
+Non-optional. Read `.cursor/skills/session-budget/SKILL.md` when triggered.
+
+## Hard Limits
+
+| Trigger | Response |
+|---|---|
+| 25 tool calls | Stop. Summarize. Decide: compact / spawn / split. |
+| Context >50% | Warn. Consider compact or subagent. |
+| 100 events | Hard stop. No new work without decision. |
+| Context >75% | Refuse new work unless user explicitly overrides. |
+
+## Anti-Patterns
+
+- Continuing past 75% context without deciding
+- Ignoring rising tool call count
+- Letting one session grow to 300+ events
+
+Past $1/session = session design failure.

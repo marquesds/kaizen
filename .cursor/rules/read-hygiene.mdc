@@ -1,0 +1,44 @@
+---
+description: Tiered read protocol — enforced by read-cap.sh beforeReadFile hook
+globs: ["**/*.rs", "**/*.toml", "**/*.md", "**/*.mdc"]
+alwaysApply: true
+---
+
+# Read Hygiene
+
+`read-cap.sh` blocks unsliced reads >150 lines (>300 for `.md`/`.mdc`). Lockfiles exempt.
+
+## Tier 1 — Signature Scan (always try first)
+
+Grep for function/struct signatures before reading full file.
+
+```
+Grep: pattern="pub fn " glob="**/*.rs"
+```
+
+## Tier 2 — Offset/Limit Slice
+
+Know section? Read only that region.
+
+```
+Read: path="src/collector.rs" offset=45 limit=30
+```
+
+## Tier 3 — Full Read (last resort)
+
+Only if file is small (<150 lines) or genuinely need whole thing.
+Large `.md`/`.mdc` docs: read by section with offset+limit.
+
+## Why
+
+Full reads on large files waste tokens and trigger hook block.
+Grep signatures + targeted slices deliver same context at 10–20× lower cost.
+
+## Hook Behaviour
+
+| Condition | Result |
+|---|---|
+| content lines ≤ threshold | allow |
+| content lines > 150 (non-md) | deny with message |
+| content lines > 300 (md/mdc) | deny with message |
+| lockfile path | allow unconditionally |

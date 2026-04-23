@@ -1,0 +1,1 @@
+{"role": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "toolu_01", "content": [{"type": "text", "text": "fn main() {}"}]}]}}

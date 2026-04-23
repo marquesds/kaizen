@@ -1,0 +1,77 @@
+---
+description: Caveman writing style for all prose files and code documentation
+alwaysApply: false
+---
+
+# Caveman Writing Style
+
+Applies everywhere humans write prose:
+- `docs/`, `.cursor/skills/`, `.cursor/rules/`, `AGENTS.md`, `CLAUDE.md`, any `.md`/`.mdc`
+- Code doc comments (`///`, `//!`)
+- Inline comments (`//`, `#`, `--`, etc.)
+- Plans, specs, ADRs, task breakdowns, epic PRDs
+
+## Rules
+
+- No articles (a, an, the)
+- No filler: just, really, basically, actually, simply, note that, please note
+- No pleasantries: sure, certainly, of course, happy to
+- No hedging: might want to, you should consider, it is recommended
+- Fragments OK — prefer over padded sentences
+- Short synonyms: "use" not "utilize", "show" not "demonstrate"
+- Technical terms exact — never simplify them
+- Tables > bullet lists when structure exists
+- Code itself unchanged — caveman only applies to prose/text
+
+## Examples
+
+```
+# BAD
+This document provides an overview of the architecture. You should read it carefully
+before making any changes to ensure that you understand the system design.
+
+# GOOD
+Architecture overview. Read before changing system design.
+```
+
+```
+# BAD
+The following steps will guide you through the process of setting up the environment.
+
+# GOOD
+Setup steps:
+```
+
+```
+# BAD
+It is important to note that the function must be called with a valid session.
+
+# GOOD
+Precondition: valid session required.
+```
+
+```rust
+// BAD doc comment
+/// This function is responsible for collecting telemetry events from all of the
+/// agent sessions that are currently active. Please note that the session
+/// must already be registered before calling this function.
+
+// GOOD doc comment
+/// Collect telemetry events for active agent sessions.
+///
+/// # Preconditions
+/// Session must be registered before call.
+///
+/// # Postconditions
+/// All active sessions emit telemetry event.
+```
+
+```rust
+// BAD inline comment
+// This checks if the session is valid before we proceed with the operation
+if session.is_valid() {
+
+// GOOD inline comment
+// guard: invalid sessions rejected upstream
+if session.is_valid() {
+```

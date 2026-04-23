@@ -1,0 +1,149 @@
+openapi: 3.0.3
+info:
+  title: Kaizen ingest API
+  version: 1.0.0
+  description: >
+    Minimal HTTP surface for the kaizen sync client (`POST /v1/events`, health).
+    Aligns with docs/ingest-contract.md.
+servers:
+  - url: https://example.com
+    description: Placeholder; clients use `sync.endpoint` from config.
+paths:
+  /v1/health:
+    get:
+      summary: Liveness
+      operationId: health
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  /v1/events:
+    post:
+      summary: Batched event ingestion
+      operationId: ingestEvents
+      parameters:
+        - name: Authorization
+          in: header
+          required: true
+          schema:
+            type: string
+            example: Bearer <team-token>
+        - name: X-Kaizen-Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: UUID v7 per batch attempt; replays return 409.
+        - name: X-Kaizen-Client
+          in: header
+          required: false
+          schema:
+            type: string
+            example: kaizen/0.1.0
+      requestBody:
+        required: true
+        description: >
+          JSON document gzip-compressed; client sets `Content-Encoding: gzip`
+          (see ingest-contract.md).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventsBatch'
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IngestAccepted'
+        '400':
+          description: Schema rejection
+        '401':
+          description: Unauthorized
+        '409':
+          description: Idempotency key replay
+        '413':
+          description: Batch too large
+        '429':
+          description: Rate limited
+          headers:
+            Retry-After:
+              schema:
+                type: string
+components:
+  schemas:
+    EventsBatch:
+      type: object
+      required: [team_id, workspace_hash, events]
+      properties:
+        team_id:
+          type: string
+        workspace_hash:
+          type: string
+          description: Prefix `blake3:` + hex digest
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/OutboundEvent'
+    OutboundEvent:
+      type: object
+      required:
+        - session_id_hash
+        - event_seq
+        - ts_ms
+        - agent
+        - model
+        - kind
+        - source
+        - payload
+      properties:
+        session_id_hash:
+          type: string
+        event_seq:
+          type: integer
+          format: int64
+        ts_ms:
+          type: integer
+          format: int64
+        agent:
+          type: string
+        model:
+          type: string
+        kind:
+          type: string
+          description: e.g. tool_call, hook
+        source:
+          type: string
+        tool:
+          type: string
+          nullable: true
+        tokens_in:
+          type: integer
+          format: int32
+          nullable: true
+        tokens_out:
+          type: integer
+          format: int32
+          nullable: true
+        cost_usd_e6:
+          type: integer
+          format: int64
+          nullable: true
+        payload:
+          type: object
+          additionalProperties: true
+          description: Client-redacted JSON only
+    IngestAccepted:
+      type: object
+      properties:
+        received:
+          type: integer
+          format: int64
+        deduped:
+          type: integer
+          format: int64

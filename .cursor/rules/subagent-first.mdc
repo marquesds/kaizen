@@ -1,0 +1,42 @@
+---
+description: Subagent-first rule — concrete spawn triggers and compression rationale
+alwaysApply: true
+---
+# Subagent-First
+
+Spawn subagent when ANY condition met. No vague "use liberally".
+
+## Spawn Triggers
+
+| Condition | Type |
+|---|---|
+| Explore 3+ files for answer | `explore` |
+| 5+ shell commands for one task | `shell` |
+| Task likely >15 turns | `explore` or `generalPurpose` |
+| Browser/MCP test >2 actions | `browser-use` |
+| Best-of-N experiment needed | `best-of-n-runner` |
+| Broad codebase orientation | `explore` |
+| Multi-file refactor | `generalPurpose` |
+
+## Why
+
+`explore` subagent: reads ~50k tokens → returns ~2k summary. 25× compression.
+Main context stays clean. Big sessions = big cost.
+
+## Subagent Types
+
+- `explore` — read-only codebase search, answers questions about structure
+- `shell` — git ops, build commands, sequential terminal tasks
+- `generalPurpose` — multi-step implementation, research
+- `browser-use` — UI testing, web automation
+- `best-of-n-runner` — isolated parallel experiments in git worktrees
+
+## Anti-Patterns
+
+- Reading 5 files inline when `explore` would compress them
+- Running 10 shell commands in main context when `shell` subagent handles them
+- Keeping task context in main window past 15 turns
+
+## Default
+
+When in doubt: spawn. Cost of wrong subagent < cost of bloated main context.

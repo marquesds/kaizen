@@ -1,0 +1,7 @@
+{
+  "hook_event_name": "Stop",
+  "session_id": "claude_sess_01JT4B8XKYNZ7FM2EC4P6Q1X",
+  "stop_reason": "end_turn",
+  "total_cost_usd": 0.042,
+  "timestamp_ms": 1745228800000
+}

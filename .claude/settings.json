@@ -1,0 +1,40 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": ".cursor/hooks/cap-bash.sh",
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "command": "cargo run --bin kaizen -- ingest hook --source claude",
+            "type": "command"
+          }
+        ]
+      },
+      {
+        "command": "kaizen ingest hook --source claude",
+        "type": "command"
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(*)",
+      "Read(*)",
+      "Write(*)",
+      "Edit(*)",
+      "WebFetch(*)",
+      "Glob(*)",
+      "Grep(*)"
+    ]
+  }
+}

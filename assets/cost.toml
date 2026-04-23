@@ -1,0 +1,41 @@
+# Cost table. All values in cost_usd_e6 per million tokens.
+# 1 USD = 1000000 cost_usd_e6. Example: $3/MTok = 3000000 per_mtok.
+
+[[models]]
+id = "claude-opus-4"
+input_per_mtok = 15000000
+output_per_mtok = 75000000
+
+[[models]]
+id = "claude-sonnet-4"
+input_per_mtok = 3000000
+output_per_mtok = 15000000
+
+[[models]]
+id = "claude-haiku-4"
+input_per_mtok = 800000
+output_per_mtok = 4000000
+
+[[models]]
+id = "gpt-4o"
+input_per_mtok = 2500000
+output_per_mtok = 10000000
+
+[[models]]
+id = "gpt-4o-mini"
+input_per_mtok = 150000
+output_per_mtok = 600000
+
+[[models]]
+id = "o1"
+input_per_mtok = 15000000
+output_per_mtok = 60000000
+
+# Cursor heuristic: no native tokens. Estimate: avg 4k in + 1k out per turn.
+# Use claude-sonnet pricing as proxy (most common Cursor model).
+# avg_tokens_per_turn used in estimate when tokens_in=0 and tokens_out=0.
+[[models]]
+id = "cursor"
+input_per_mtok = 3000000
+output_per_mtok = 15000000
+avg_tokens_per_turn = 5000

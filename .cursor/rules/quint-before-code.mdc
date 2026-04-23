@@ -1,0 +1,26 @@
+---
+description: Quint spec in specs/ before Rust when behavior needs formal model
+alwaysApply: true
+---
+
+# Quint Before Code (When Applicable)
+
+Skip for trivial edits. Formal Quint before or alongside Rust when wrong behavior likely without explicit model.
+
+## Use Quint First
+
+| Trigger | Examples |
+|--------|----------|
+| State machine or protocol steps | ingest, session lifecycle, hooks |
+| Invariants, idempotency, ordering | duplicate events, replay, cursor rules |
+| Concurrent or multi-step lifecycle | transitions that must stay consistent |
+
+Order: `specs/<topic>.qnt` (new or updated) → Rust → `#[quint_run]` / spec tests stay green where repo already wires `quint-connect`. CI runs Quint.
+
+## Skip Quint
+
+Typos, formatting, mechanical rename, single-line obvious fix, copy-only UI, dependency bump with no behavior change.
+
+## Reference
+
+Existing specs: `specs/*.qnt`. Cross-cutting sequence: `docs/impl-sequence.md`.

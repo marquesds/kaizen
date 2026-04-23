@@ -1,0 +1,73 @@
+[package]
+name = "kaizen"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "kaizen"
+path = "src/lib.rs"
+
+[[bin]]
+name = "kaizen"
+path = "src/main.rs"
+
+[[bin]]
+name = "spike_a"
+path = "src/bin/spike_a.rs"
+
+[[bin]]
+name = "spike_e"
+path = "src/bin/spike_e.rs"
+
+[[test]]
+name = "session_lifecycle"
+path = "tests/spec/session_lifecycle.rs"
+
+[[test]]
+name = "ingest_idempotency"
+path = "tests/spec/ingest_idempotency.rs"
+
+[[test]]
+name = "ingest_stub"
+path = "tests/ingest_stub/integration_test.rs"
+
+[[test]]
+name = "hook_ingest"
+path = "tests/spec/hook_ingest.rs"
+
+[[test]]
+name = "redaction_completeness"
+path = "tests/spec/redaction_completeness.rs"
+
+[[test]]
+name = "sync_backpressure"
+path = "tests/spec/sync_backpressure.rs"
+
+[dependencies]
+serde_json = "1"
+serde = { version = "1", features = ["derive"] }
+clap = { version = "4", features = ["derive"] }
+anyhow = "1"
+rusqlite = { version = "0.32", features = ["bundled"] }
+rand = { version = "0.8", features = ["small_rng"] }
+tokio = { version = "1", features = ["full"] }
+notify = "6"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+toml = "0.8"
+ratatui = "0.29"
+crossterm = "0.28"
+reqwest = { version = "0.12", default-features = false, features = ["json", "gzip", "blocking", "rustls-tls"] }
+flate2 = "1"
+uuid = { version = "1", features = ["v7"] }
+blake3 = "1"
+aho-corasick = "1"
+regex = "1"
+hex = "0.4"
+
+[dev-dependencies]
+quint-connect = "0.1"
+itf = "0.4"
+axum = "0.8"
+tower = { version = "0.5", features = ["util"] }
+tempfile = "3"

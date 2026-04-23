@@ -1,0 +1,61 @@
+---
+description: Code quality — elegance check, file/function size limits, low cyclomatic complexity
+alwaysApply: true
+---
+
+# Code Quality
+
+## Demand Elegance (Balanced)
+
+Nontrivial changes: pause, ask "Is there more elegant way?"
+Hacky fix: "Knowing everything now, implement elegant solution."
+Skip for obvious fixes. Challenge own work before presenting.
+
+```rust
+// GOOD — iterator chains, clear data flow
+fn process(events: &[Event]) -> Vec<Summary> {
+    events
+        .iter()
+        .filter(|e| e.is_valid())
+        .map(summarize)
+        .collect()
+}
+
+// BAD — nested conditionals + mutation
+fn process(events: &[Event]) -> Vec<Summary> {
+    let mut results = Vec::new();
+    for e in events {
+        if e.is_valid() {
+            let s = summarize(e);
+            results.push(s);
+        }
+    }
+    results
+}
+```
+
+## Code Smell
+
+- Max 200 lines per file (including `.md` files)
+- Max 10 lines per function
+- No cyclomatic complexity — prefer iterator chains + `match`
+- Functional core: flatten logic, don't nest it
+
+```rust
+// GOOD — small, single-purpose match arms
+fn apply_discount(order: &Order) -> Price {
+    match order.tier {
+        Tier::Vip => Price::ZERO,
+        Tier::Standard => order.price,
+    }
+}
+
+// BAD — fat function, deep branching
+fn apply_discount(order: &Order) -> Price {
+    if order.tier == Tier::Vip {
+        if order.price > 100 { ... } else { ... }
+    } else {
+        if order.seasonal_promo { ... } else { ... }
+    }
+}
+```

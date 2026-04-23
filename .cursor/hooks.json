@@ -1,0 +1,29 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "command": "cargo run --bin kaizen -- ingest hook --source cursor"
+      },
+      {
+        "command": "kaizen ingest hook --source cursor"
+      }
+    ],
+    "beforeReadFile": [
+      {
+        "command": ".cursor/hooks/read-cap.sh"
+      }
+    ],
+    "beforeShellExecution": [
+      {
+        "command": ".cursor/hooks/cap-bash.sh"
+      }
+    ],
+    "subagentStart": [
+      {
+        "command": ".cursor/hooks/subagent-context-check.sh",
+        "matcher": "generalPurpose"
+      }
+    ]
+  },
+  "version": 1
+}

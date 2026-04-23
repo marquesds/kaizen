@@ -1,0 +1,21 @@
+# Rust
+/target
+*.profraw
+
+# Local product discovery notes (not part of the public tree)
+/discoveries/
+
+# kaizen workspace data (config, DB, reports) when dogfooding in this repo
+.kaizen/
+
+# OS
+.DS_Store
+
+# Env / secrets (never commit)
+.env
+.env.*
+!.env.example
+
+# Editor
+.vscode/
+.idea/
