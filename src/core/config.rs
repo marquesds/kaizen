@@ -6,15 +6,23 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ScanConfig {
     pub roots: Vec<String>,
+    /// Minimum seconds between full agent transcript rescans when `--refresh` is not passed.
+    #[serde(default = "default_min_rescan_seconds")]
+    pub min_rescan_seconds: u64,
+}
+
+fn default_min_rescan_seconds() -> u64 {
+    300
 }
 
 impl Default for ScanConfig {
     fn default() -> Self {
         Self {
             roots: vec!["~/.cursor/projects".to_string()],
+            min_rescan_seconds: default_min_rescan_seconds(),
         }
     }
 }
@@ -66,7 +74,7 @@ pub struct SourcesConfig {
     pub tail: TailAgentToggles,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RetentionConfig {
     pub hot_days: u32,
     pub warm_days: u32,
@@ -329,16 +337,44 @@ fn load_file(path: &Path) -> Option<Config> {
 
 fn merge(base: Config, user: Config) -> Config {
     Config {
-        scan: if user.scan.roots != ScanConfig::default().roots {
-            user.scan
-        } else {
-            base.scan
-        },
+        scan: merge_scan(base.scan, user.scan),
         sources: user.sources,
-        retention: user.retention,
+        retention: merge_retention(base.retention, user.retention),
         sync: merge_sync(base.sync, user.sync),
         telemetry: merge_telemetry(base.telemetry, user.telemetry),
         proxy: merge_proxy(base.proxy, user.proxy),
+    }
+}
+
+fn merge_scan(base: ScanConfig, user: ScanConfig) -> ScanConfig {
+    let def = ScanConfig::default();
+    ScanConfig {
+        roots: if user.roots != def.roots {
+            user.roots
+        } else {
+            base.roots
+        },
+        min_rescan_seconds: if user.min_rescan_seconds != def.min_rescan_seconds {
+            user.min_rescan_seconds
+        } else {
+            base.min_rescan_seconds
+        },
+    }
+}
+
+fn merge_retention(base: RetentionConfig, user: RetentionConfig) -> RetentionConfig {
+    let def = RetentionConfig::default();
+    RetentionConfig {
+        hot_days: if user.hot_days != def.hot_days {
+            user.hot_days
+        } else {
+            base.hot_days
+        },
+        warm_days: if user.warm_days != def.warm_days {
+            user.warm_days
+        } else {
+            base.warm_days
+        },
     }
 }
 
@@ -458,6 +494,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let cfg = load(dir.path()).unwrap();
         assert_eq!(cfg.scan.roots, ScanConfig::default().roots);
+        assert_eq!(cfg.scan.min_rescan_seconds, 300);
         assert_eq!(cfg.retention.hot_days, 30);
     }
 
@@ -487,17 +524,61 @@ mod tests {
         let base = Config {
             scan: ScanConfig {
                 roots: vec!["/base".to_string()],
+                ..ScanConfig::default()
             },
             ..Default::default()
         };
         let user = Config {
             scan: ScanConfig {
                 roots: vec!["/user".to_string()],
+                ..ScanConfig::default()
             },
             ..Default::default()
         };
         let merged = merge(base, user);
         assert_eq!(merged.scan.roots, vec!["/user"]);
+    }
+
+    #[test]
+    fn merge_retention_field_by_field() {
+        let base = Config {
+            retention: RetentionConfig {
+                hot_days: 60,
+                warm_days: 90,
+            },
+            ..Default::default()
+        };
+        let user = Config {
+            retention: RetentionConfig {
+                hot_days: 30,
+                warm_days: 45,
+            },
+            ..Default::default()
+        };
+        let merged = merge(base, user);
+        assert_eq!(merged.retention.hot_days, 60);
+        assert_eq!(merged.retention.warm_days, 45);
+    }
+
+    #[test]
+    fn merge_retention_user_hot_overrides() {
+        let base = Config {
+            retention: RetentionConfig {
+                hot_days: 60,
+                warm_days: 90,
+            },
+            ..Default::default()
+        };
+        let user = Config {
+            retention: RetentionConfig {
+                hot_days: 14,
+                warm_days: 90,
+            },
+            ..Default::default()
+        };
+        let merged = merge(base, user);
+        assert_eq!(merged.retention.hot_days, 14);
+        assert_eq!(merged.retention.warm_days, 90);
     }
 
     #[test]

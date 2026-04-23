@@ -15,6 +15,12 @@ cargo build
 cargo test
 ```
 
+Install the binary from your working tree into `~/.cargo/bin` (handy after local changes):
+
+```bash
+./scripts/install-local.sh
+```
+
 Requires Rust 1.95+ (edition 2024). For Quint specs:
 
 ```bash

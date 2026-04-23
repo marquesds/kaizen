@@ -9,10 +9,6 @@ all-features = true
 [advisories]
 version = 2
 yanked = "deny"
-# paste is pulled by ratatui 0.29; RUSTSEC is unmaintained/INFO. ratatui 0.30 removes it but requires Rust 1.86+.
-ignore = [
-  { id = "RUSTSEC-2024-0436", reason = "transitive via ratatui; upgrade when MSRV >= 1.86" },
-]
 
 [licenses]
 version = 2

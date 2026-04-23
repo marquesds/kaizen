@@ -43,6 +43,9 @@ enum Command {
         /// Emit JSON (same fields as the MCP `kaizen_summary` tool with json=true).
         #[arg(long)]
         json: bool,
+        /// Force a full agent transcript rescan (ignore `[scan].min_rescan_seconds`).
+        #[arg(short, long)]
+        refresh: bool,
     },
     /// Open interactive TUI.
     #[command(next_help_heading = "Trust & observe")]
@@ -65,12 +68,28 @@ enum Command {
         #[arg(long)]
         workspace: Option<PathBuf>,
     },
+    /// Prune local sessions older than retention window (see `[retention].hot_days` or `--days`).
+    #[command(next_help_heading = "Operate")]
+    Gc {
+        /// workspace root (default: cwd)
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        /// Keep sessions started within the last N days (overrides config when set).
+        #[arg(long)]
+        days: Option<u32>,
+        /// Run VACUUM after delete (slow; reclaims file space).
+        #[arg(long)]
+        vacuum: bool,
+    },
     /// Rich session insights: activity by day, top tools, recent sessions.
     #[command(next_help_heading = "Trust & observe")]
     Insights {
         /// workspace root (default: cwd)
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// Force a full agent transcript rescan (ignore `[scan].min_rescan_seconds`).
+        #[arg(short, long)]
+        refresh: bool,
     },
     /// Smart metrics: code hotspots, slow tools, token sinks.
     #[command(next_help_heading = "Trust & observe")]
@@ -89,6 +108,9 @@ enum Command {
         /// workspace root (default: cwd)
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// Force a full agent transcript rescan (ignore `[scan].min_rescan_seconds`).
+        #[arg(short, long)]
+        refresh: bool,
     },
     /// Flush local outbox to the configured ingest endpoint.
     #[command(next_help_heading = "Operate")]
@@ -126,6 +148,9 @@ enum Command {
         /// workspace root (default: cwd)
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// Force a full agent transcript rescan (ignore `[scan].min_rescan_seconds`).
+        #[arg(short, long)]
+        refresh: bool,
     },
     /// Model Context Protocol server (stdio) — see docs/mcp.md.
     #[command(next_help_heading = "Integrations")]
@@ -305,6 +330,9 @@ enum SessionsCommand {
         /// Emit JSON (same as MCP with json=true)
         #[arg(long)]
         json: bool,
+        /// Force a full agent transcript rescan (ignore `[scan].min_rescan_seconds`).
+        #[arg(short, long)]
+        refresh: bool,
     },
     /// Show full details for a session.
     Show {
@@ -329,14 +357,21 @@ fn main() -> anyhow::Result<()> {
             subcmd: IngestCommand::Hook { source, workspace },
         } => ingest_hook(source, workspace),
         Command::Sessions {
-            subcmd: SessionsCommand::List { workspace, json },
-        } => kaizen::shell::cli::cmd_sessions_list(workspace.as_deref(), json),
+            subcmd:
+                SessionsCommand::List {
+                    workspace,
+                    json,
+                    refresh,
+                },
+        } => kaizen::shell::cli::cmd_sessions_list(workspace.as_deref(), json, refresh),
         Command::Sessions {
             subcmd: SessionsCommand::Show { id, workspace },
         } => kaizen::shell::cli::cmd_session_show(&id, workspace.as_deref()),
-        Command::Summary { workspace, json } => {
-            kaizen::shell::cli::cmd_summary(workspace.as_deref(), json)
-        }
+        Command::Summary {
+            workspace,
+            json,
+            refresh,
+        } => kaizen::shell::cli::cmd_summary(workspace.as_deref(), json, refresh),
         Command::Tui { workspace } => tokio::runtime::Runtime::new()?.block_on(
             kaizen::ui::tui::run(workspace.as_deref().unwrap_or(&std::env::current_dir()?)),
         ),
@@ -349,6 +384,11 @@ fn main() -> anyhow::Result<()> {
             }
             Ok(())
         }
+        Command::Gc {
+            workspace,
+            days,
+            vacuum,
+        } => kaizen::shell::gc::cmd_gc(workspace.as_deref(), days, vacuum),
         Command::Completions { shell } => {
             let sh = match shell {
                 CompletionShell::Bash => clap_complete::Shell::Bash,
@@ -362,18 +402,27 @@ fn main() -> anyhow::Result<()> {
             let _ = std::io::stdout().flush();
             Ok(())
         }
-        Command::Insights { workspace } => kaizen::shell::cli::cmd_insights(workspace.as_deref()),
+        Command::Insights { workspace, refresh } => {
+            kaizen::shell::cli::cmd_insights(workspace.as_deref(), refresh)
+        }
         Command::Metrics {
             subcmd,
             days,
             json,
             force,
             workspace,
+            refresh,
         } => match subcmd {
             Some(MetricsCommand::Index { workspace, force }) => {
                 kaizen::shell::metrics::cmd_metrics_index(workspace.as_deref(), force)
             }
-            None => kaizen::shell::metrics::cmd_metrics(workspace.as_deref(), days, json, force),
+            None => kaizen::shell::metrics::cmd_metrics(
+                workspace.as_deref(),
+                days,
+                json,
+                force,
+                refresh,
+            ),
         },
         Command::Sync {
             subcmd: SyncCommand::Run { workspace, once },
@@ -395,7 +444,15 @@ fn main() -> anyhow::Result<()> {
             json,
             force,
             workspace,
-        } => kaizen::shell::retro::cmd_retro(workspace.as_deref(), days, dry_run, json, force),
+            refresh,
+        } => kaizen::shell::retro::cmd_retro(
+            workspace.as_deref(),
+            days,
+            dry_run,
+            json,
+            force,
+            refresh,
+        ),
         Command::Exp { subcmd } => dispatch_exp(subcmd),
         Command::Mcp => {
             // Requires multi-threaded runtime (rmcp + spawn_blocking in tools)
