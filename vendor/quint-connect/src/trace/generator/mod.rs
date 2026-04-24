@@ -26,8 +26,9 @@ pub(crate) fn generate_traces<C: Config>(config: &C) -> Result<Traces> {
     let output = cmd.output().context("Failed to execute Quint command")?;
 
     if !output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(anyhow!("{}", stderr)).context("Quint returned non-zero code.");
+        return Err(anyhow!("stdout:\n{stdout}\n\nstderr:\n{stderr}")).context("Quint returned non-zero code.");
     }
 
     Traces::new(tmpdir)
