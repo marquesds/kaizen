@@ -135,21 +135,37 @@ jobs:
       - name: Push version tag when needed
         run: |
           VERSION=$(awk -F'"' '/^version = / {print $2; exit}' Cargo.toml)
-          TAG="v${VERSION}"
           HEAD_SHA=$(git rev-parse HEAD)
+          SHORT_SHA=$(git rev-parse --short=12 HEAD)
+          EXACT_TAG="v${VERSION}"
+          DERIVED_TAG="v${VERSION}-ci.${SHORT_SHA}"
 
           git fetch --force --tags origin
 
-          if git rev-parse "$TAG^{commit}" >/dev/null 2>&1; then
-            TAG_SHA=$(git rev-parse "$TAG^{commit}")
+          if git rev-parse "$EXACT_TAG^{commit}" >/dev/null 2>&1; then
+            TAG_SHA=$(git rev-parse "$EXACT_TAG^{commit}")
             if [ "$TAG_SHA" = "$HEAD_SHA" ]; then
-              echo "$TAG already points at $HEAD_SHA"
+              echo "$EXACT_TAG already points at $HEAD_SHA"
               exit 0
             fi
 
-            echo "$TAG already points at $TAG_SHA, not $HEAD_SHA" >&2
-            exit 1
+            echo "$EXACT_TAG already points at $TAG_SHA; using $DERIVED_TAG for this commit"
+
+            if git rev-parse "$DERIVED_TAG^{commit}" >/dev/null 2>&1; then
+              DERIVED_SHA=$(git rev-parse "$DERIVED_TAG^{commit}")
+              if [ "$DERIVED_SHA" = "$HEAD_SHA" ]; then
+                echo "$DERIVED_TAG already points at $HEAD_SHA"
+                exit 0
+              fi
+
+              echo "$DERIVED_TAG already points at $DERIVED_SHA, not $HEAD_SHA" >&2
+              exit 1
+            fi
+
+            git tag "$DERIVED_TAG" "$HEAD_SHA"
+            git push origin "$DERIVED_TAG"
+            exit 0
           fi
 
-          git tag "$TAG" "$HEAD_SHA"
-          git push origin "$TAG"
+          git tag "$EXACT_TAG" "$HEAD_SHA"
+          git push origin "$EXACT_TAG"
