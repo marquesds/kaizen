@@ -10,7 +10,7 @@ repository = "https://github.com/marquesds/kaizen"
 homepage = "https://github.com/marquesds/kaizen"
 documentation = "https://docs.rs/kaizen-cli"
 readme = "README.md"
-keywords = ["ai", "agile", "agents", "local", "distributed", "telemetry", "observability", "retrospective", "a/b testing", "harness-engineering"]
+keywords = ["agents", "ai", "observability", "retrospective", "telemetry"]
 categories = ["command-line-utilities", "development-tools"]
 exclude = [
     "discoveries/",
