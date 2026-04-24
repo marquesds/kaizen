@@ -8,7 +8,7 @@ on:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.ref != format('refs/heads/{0}', github.event.repository.default_branch) }}
 
 env:
   CARGO_TERM_COLOR: always
@@ -120,3 +120,36 @@ jobs:
           test "${{ needs.doc.result }}" = "success"
           test "${{ needs.test.result }}" = "success"
           test "${{ needs.audit.result }}" = "success"
+
+  push_release_tag:
+    name: push release tag
+    needs: [ci]
+    if: github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Push version tag when needed
+        run: |
+          VERSION=$(awk -F'"' '/^version = / {print $2; exit}' Cargo.toml)
+          TAG="v${VERSION}"
+          HEAD_SHA=$(git rev-parse HEAD)
+
+          git fetch --force --tags origin
+
+          if git rev-parse "$TAG^{commit}" >/dev/null 2>&1; then
+            TAG_SHA=$(git rev-parse "$TAG^{commit}")
+            if [ "$TAG_SHA" = "$HEAD_SHA" ]; then
+              echo "$TAG already points at $HEAD_SHA"
+              exit 0
+            fi
+
+            echo "$TAG already points at $TAG_SHA, not $HEAD_SHA" >&2
+            exit 1
+          fi
+
+          git tag "$TAG" "$HEAD_SHA"
+          git push origin "$TAG"

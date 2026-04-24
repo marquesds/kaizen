@@ -5,7 +5,7 @@ use std::io::Read;
 use std::io::Write;
 use std::path::PathBuf;
 
-const LONG_ABOUT: &str = "Local-first telemetry for AI coding agents. Collect, query, and improve how agents use your repo — offline by default. Docs: https://github.com/lucasmarqs/kaizen/blob/main/docs/README.md";
+const LONG_ABOUT: &str = "Deploy and share kaizen: real-time-tailable agent sessions, retros, and experiments to improve your repo, across Cursor, Claude Code, and Codex. One SQLite store; redact before any sync. Docs: https://github.com/lucasmarqs/kaizen/blob/main/docs/README.md";
 
 #[derive(Parser)]
 #[command(
@@ -40,6 +40,9 @@ enum Command {
         /// workspace root (default: cwd)
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// Read from every registered workspace on this machine.
+        #[arg(long)]
+        all_workspaces: bool,
         /// Emit JSON (same fields as the MCP `kaizen_summary` tool with json=true).
         #[arg(long)]
         json: bool,
@@ -87,6 +90,9 @@ enum Command {
         /// workspace root (default: cwd)
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// Read from every registered workspace on this machine.
+        #[arg(long)]
+        all_workspaces: bool,
         /// Force a full agent transcript rescan (ignore `[scan].min_rescan_seconds`).
         #[arg(short, long)]
         refresh: bool,
@@ -124,6 +130,9 @@ enum Command {
         /// workspace root (default: cwd)
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// Read from every registered workspace on this machine.
+        #[arg(long)]
+        all_workspaces: bool,
         /// Force a full agent transcript rescan (ignore `[scan].min_rescan_seconds`).
         #[arg(short, long)]
         refresh: bool,
@@ -343,6 +352,9 @@ enum SessionsCommand {
         /// workspace root (default: cwd)
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// Read from every registered workspace on this machine.
+        #[arg(long)]
+        all_workspaces: bool,
         /// Emit JSON (same as MCP with json=true)
         #[arg(long)]
         json: bool,
@@ -376,18 +388,25 @@ fn main() -> anyhow::Result<()> {
             subcmd:
                 SessionsCommand::List {
                     workspace,
+                    all_workspaces,
                     json,
                     refresh,
                 },
-        } => kaizen::shell::cli::cmd_sessions_list(workspace.as_deref(), json, refresh),
+        } => kaizen::shell::cli::cmd_sessions_list(
+            workspace.as_deref(),
+            json,
+            refresh,
+            all_workspaces,
+        ),
         Command::Sessions {
             subcmd: SessionsCommand::Show { id, workspace },
         } => kaizen::shell::cli::cmd_session_show(&id, workspace.as_deref()),
         Command::Summary {
             workspace,
+            all_workspaces,
             json,
             refresh,
-        } => kaizen::shell::cli::cmd_summary(workspace.as_deref(), json, refresh),
+        } => kaizen::shell::cli::cmd_summary(workspace.as_deref(), json, refresh, all_workspaces),
         Command::Tui { workspace } => tokio::runtime::Runtime::new()?.block_on(
             kaizen::ui::tui::run(workspace.as_deref().unwrap_or(&std::env::current_dir()?)),
         ),
@@ -418,9 +437,11 @@ fn main() -> anyhow::Result<()> {
             let _ = std::io::stdout().flush();
             Ok(())
         }
-        Command::Insights { workspace, refresh } => {
-            kaizen::shell::cli::cmd_insights(workspace.as_deref(), refresh)
-        }
+        Command::Insights {
+            workspace,
+            all_workspaces,
+            refresh,
+        } => kaizen::shell::cli::cmd_insights(workspace.as_deref(), all_workspaces, refresh),
         Command::Guidance {
             days,
             json,
@@ -433,6 +454,7 @@ fn main() -> anyhow::Result<()> {
             json,
             force,
             workspace,
+            all_workspaces,
             refresh,
         } => match subcmd {
             Some(MetricsCommand::Index { workspace, force }) => {
@@ -443,6 +465,7 @@ fn main() -> anyhow::Result<()> {
                 days,
                 json,
                 force,
+                all_workspaces,
                 refresh,
             ),
         },

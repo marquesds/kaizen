@@ -22,13 +22,14 @@ LLM HTTP proxy: [llm-proxy.md](llm-proxy.md).
 |-----|---------|--------|
 | `RUST_LOG` | (unset) | Log filter for the `tracing` stack (e.g. `info`, `kaizen=debug`) |
 | `HOME` | (required) | Resolves `~` paths and the user config location |
+| `KAIZEN_HOME` | (unset) | Overrides the machine-local Kaizen home used for the workspace registry and other non-workspace files |
 
 ## `[scan]`
 
 | Key | Default | Purpose |
 |-----|---------|--------|
 | `roots` | `["~/.cursor/projects"]` | Transcript index roots (Cursor projects layout) |
-| `min_rescan_seconds` | `300` | Minimum seconds between full transcript rescans unless you pass `--refresh` (CLI) or `refresh=true` (MCP) |
+| `min_rescan_seconds` | `300` | Minimum seconds between full transcript rescans when a command is already in refresh mode (`--refresh` on the CLI or `refresh=true` over MCP) |
 
 ## `[retention]`
 

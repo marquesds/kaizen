@@ -3,7 +3,8 @@
 
 use crate::core::config;
 use crate::metrics::{index, report};
-use crate::shell::cli::{maybe_scan_all_agents, workspace_path};
+use crate::shell::cli::{maybe_refresh_store, workspace_path};
+use crate::shell::scope;
 use crate::store::Store;
 use crate::sync::{ingest_ctx, smart};
 use anyhow::Result;
@@ -15,17 +16,29 @@ pub fn metrics_text(
     days: u32,
     json_out: bool,
     force: bool,
+    all_workspaces: bool,
     refresh: bool,
 ) -> Result<String> {
-    let ws = workspace_path(workspace)?;
-    let cfg = config::load(&ws)?;
-    let db_path = ws.join(".kaizen/kaizen.db");
-    let store = Store::open(&db_path)?;
-    let ws_str = ws.to_string_lossy().to_string();
-    maybe_scan_all_agents(&ws, &cfg, &ws_str, &store, refresh)?;
-    let snapshot = index::ensure_indexed(&store, &ws, force)?;
-    maybe_enqueue_snapshot(&store, &cfg, &ws, &snapshot)?;
-    let metrics = report::build_report(&store, &ws_str, days)?;
+    let roots = scope::resolve(workspace, all_workspaces)?;
+    let mut reports = Vec::new();
+    for workspace in &roots {
+        let cfg = config::load(workspace)?;
+        let store = Store::open(&crate::core::workspace::db_path(workspace))?;
+        maybe_refresh_store(workspace, &store, refresh)?;
+        if force {
+            let snapshot = index::ensure_indexed(&store, workspace, true)?;
+            maybe_enqueue_snapshot(&store, &cfg, workspace, &snapshot)?;
+        }
+        let ws_str = workspace.to_string_lossy().to_string();
+        if let Ok(report) = report::build_report(&store, &ws_str, days) {
+            reports.push(if roots.len() == 1 {
+                report
+            } else {
+                decorate_metrics(workspace, report)
+            });
+        }
+    }
+    let metrics = merge_metrics(reports);
     if json_out {
         return Ok(serde_json::to_string_pretty(&metrics)?);
     }
@@ -37,11 +50,12 @@ pub fn cmd_metrics(
     days: u32,
     json_out: bool,
     force: bool,
+    all_workspaces: bool,
     refresh: bool,
 ) -> Result<()> {
     print!(
         "{}",
-        metrics_text(workspace, days, json_out, force, refresh)?
+        metrics_text(workspace, days, json_out, force, all_workspaces, refresh)?
     );
     Ok(())
 }
@@ -64,6 +78,98 @@ pub fn metrics_index_text(workspace: Option<&Path>, force: bool) -> Result<Strin
 pub fn cmd_metrics_index(workspace: Option<&Path>, force: bool) -> Result<()> {
     print!("{}", metrics_index_text(workspace, force)?);
     Ok(())
+}
+
+fn decorate_metrics(
+    workspace: &Path,
+    mut metrics: crate::metrics::types::MetricsReport,
+) -> crate::metrics::types::MetricsReport {
+    for row in &mut metrics.hottest_files {
+        row.path = scope::decorate_path(workspace, &row.path);
+    }
+    for row in &mut metrics.most_changed_files {
+        row.path = scope::decorate_path(workspace, &row.path);
+    }
+    for row in &mut metrics.most_complex_files {
+        row.path = scope::decorate_path(workspace, &row.path);
+    }
+    for row in &mut metrics.highest_risk_files {
+        row.path = scope::decorate_path(workspace, &row.path);
+    }
+    for row in &mut metrics.agent_pain_hotspots {
+        row.path = scope::decorate_path(workspace, &row.path);
+    }
+    metrics
+}
+
+fn merge_metrics(
+    rows: Vec<crate::metrics::types::MetricsReport>,
+) -> crate::metrics::types::MetricsReport {
+    let mut out = crate::metrics::types::MetricsReport {
+        snapshot: None,
+        hottest_files: Vec::new(),
+        most_changed_files: Vec::new(),
+        most_complex_files: Vec::new(),
+        highest_risk_files: Vec::new(),
+        slowest_tools: Vec::new(),
+        highest_token_tools: Vec::new(),
+        highest_reasoning_tools: Vec::new(),
+        agent_pain_hotspots: Vec::new(),
+    };
+    for row in rows {
+        out.hottest_files.extend(row.hottest_files);
+        out.most_changed_files.extend(row.most_changed_files);
+        out.most_complex_files.extend(row.most_complex_files);
+        out.highest_risk_files.extend(row.highest_risk_files);
+        out.agent_pain_hotspots.extend(row.agent_pain_hotspots);
+        merge_tool_rows(&mut out.slowest_tools, row.slowest_tools);
+        merge_tool_rows(&mut out.highest_token_tools, row.highest_token_tools);
+        merge_tool_rows(
+            &mut out.highest_reasoning_tools,
+            row.highest_reasoning_tools,
+        );
+    }
+    trim_file_rows(&mut out.hottest_files);
+    trim_file_rows(&mut out.most_changed_files);
+    trim_file_rows(&mut out.most_complex_files);
+    trim_file_rows(&mut out.highest_risk_files);
+    trim_file_rows(&mut out.agent_pain_hotspots);
+    trim_tool_rows(&mut out.slowest_tools, |row| row.p95_ms.unwrap_or(0));
+    trim_tool_rows(&mut out.highest_token_tools, |row| row.total_tokens);
+    trim_tool_rows(&mut out.highest_reasoning_tools, |row| {
+        row.total_reasoning_tokens
+    });
+    out
+}
+
+fn merge_tool_rows(
+    target: &mut Vec<crate::metrics::types::RankedTool>,
+    rows: Vec<crate::metrics::types::RankedTool>,
+) {
+    for row in rows {
+        if let Some(existing) = target.iter_mut().find(|item| item.tool == row.tool) {
+            existing.calls += row.calls;
+            existing.total_tokens += row.total_tokens;
+            existing.total_reasoning_tokens += row.total_reasoning_tokens;
+            existing.p50_ms = existing.p50_ms.max(row.p50_ms);
+            existing.p95_ms = existing.p95_ms.max(row.p95_ms);
+            continue;
+        }
+        target.push(row);
+    }
+}
+
+fn trim_file_rows(rows: &mut Vec<crate::metrics::types::RankedFile>) {
+    rows.sort_by(|a, b| b.value.cmp(&a.value).then_with(|| a.path.cmp(&b.path)));
+    rows.truncate(10);
+}
+
+fn trim_tool_rows<F>(rows: &mut Vec<crate::metrics::types::RankedTool>, rank: F)
+where
+    F: Fn(&crate::metrics::types::RankedTool) -> u64,
+{
+    rows.sort_by(|a, b| rank(b).cmp(&rank(a)).then_with(|| a.tool.cmp(&b.tool)));
+    rows.truncate(10);
 }
 
 fn maybe_enqueue_snapshot(

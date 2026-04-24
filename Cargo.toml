@@ -5,7 +5,7 @@ edition = "2024"
 rust-version = "1.95"
 authors = ["Lucas Marques <hi@lucasmarques.me>"]
 license = "AGPL-3.0-or-later"
-description = "Local-first telemetry and tooling for AI coding agent sessions (Cursor, Claude Code, Codex)."
+description = "Distributable agent observability: real-time-tailable sessions, agile-style retros, and repo-level improvement (Cursor, Claude Code, Codex). SQLite, redact before any sync you enable."
 repository = "https://github.com/lucasmarqs/kaizen"
 homepage = "https://github.com/lucasmarqs/kaizen"
 documentation = "https://docs.rs/kaizen"
@@ -135,6 +135,10 @@ path = "tests/spec/llm_proxy.rs"
 [[test]]
 name = "auto_update"
 path = "tests/spec/auto_update.rs"
+
+[[test]]
+name = "multi_workspace"
+path = "tests/spec/multi_workspace.rs"
 
 [features]
 default = []

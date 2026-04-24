@@ -4,7 +4,9 @@ CLI reference. All commands accept `--workspace <path>` (default: cwd).
 
 Run `kaizen --help` for grouped subcommands (Trust & observe, Operate, Improve, Integrations, Shell).
 
-**Rescan throttling:** `sessions list`, `summary`, `insights`, `guidance`, `metrics`, and `retro` reuse the last full transcript scan when it is newer than `[scan].min_rescan_seconds` (default 300). Pass **`--refresh`** (`-r`) to force a full rescan. See [config.md](config.md).
+**Cache-first reads:** `sessions list`, `summary`, `insights`, `guidance`, `metrics`, and `retro` read the local workspace database first, so the common path stays fast. Pass **`--refresh`** (`-r`) when you want Kaizen to rescan external agent transcripts before rendering the command. See [config.md](config.md).
+
+**Machine-wide aggregation:** `sessions list`, `summary`, `insights`, and `metrics` accept **`--all-workspaces`**. Kaizen keeps a small machine-local registry of workspaces it has seen, then opens each repo’s own `.kaizen/kaizen.db` and merges the results on demand.
 
 ## `kaizen doctor`
 
@@ -22,6 +24,7 @@ under `.kaizen/backup/`.
 kaizen sessions list           # all sessions in workspace
 kaizen sessions list --json   # machine-readable
 kaizen sessions list --refresh
+kaizen sessions list --all-workspaces
 kaizen sessions show <id>      # full detail: events, tools, cost
 ```
 
@@ -33,6 +36,7 @@ sessions.
 ```bash
 kaizen summary --json         # same shape as the MCP `kaizen_summary` tool with json=true
 kaizen summary --refresh
+kaizen summary --all-workspaces
 ```
 
 ## `kaizen gc`
@@ -61,6 +65,12 @@ Restart the shell or `source` your profile as appropriate for your platform.
 
 Activity by day, top tools, recent sessions, and a short **Guidance** teaser (top skills/rules by observed path references in payloads).
 
+```bash
+kaizen insights
+kaizen insights --refresh
+kaizen insights --all-workspaces
+```
+
 ## `kaizen guidance`
 
 Per-skill and per–Cursor-rule stats over a trailing window: how many sessions referenced `.cursor/skills/...` or `.cursor/rules/*.mdc` in ingested tool payloads, share of active sessions, average cost per session vs workspace average, and on-disk inventory (including unused rules/skills). Silent Cursor injection without path mentions is not counted.
@@ -79,6 +89,7 @@ Smart metrics over a trailing window.
 ```bash
 kaizen metrics --days 7
 kaizen metrics --json
+kaizen metrics --all-workspaces
 kaizen metrics index --force   # rebuild repo snapshot + Ladybug sidecar
 ```
 

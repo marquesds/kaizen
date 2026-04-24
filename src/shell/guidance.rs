@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! `kaizen guidance` — skill/rule adoption and cost proxy from observed payload references.
 
-use crate::core::config;
 use crate::retro::inputs::{scan_rule_files, scan_skill_files};
-use crate::shell::cli::{maybe_scan_all_agents, workspace_path};
+use crate::shell::cli::{maybe_refresh_store, workspace_path};
 use crate::store::{GuidanceKind, GuidanceReport, Store};
 use anyhow::Result;
 use std::collections::HashSet;
@@ -42,11 +41,10 @@ pub fn guidance_text(
     refresh: bool,
 ) -> Result<String> {
     let ws = workspace_path(workspace)?;
-    let cfg = config::load(&ws)?;
     let db_path = ws.join(".kaizen/kaizen.db");
     let store = Store::open(&db_path)?;
     let ws_str = ws.to_string_lossy().to_string();
-    maybe_scan_all_agents(&ws, &cfg, &ws_str, &store, refresh)?;
+    maybe_refresh_store(&ws, &store, refresh)?;
     let report = build_guidance_report(&store, &ws, &ws_str, days)?;
     if json_out {
         return Ok(serde_json::to_string_pretty(&report)?);

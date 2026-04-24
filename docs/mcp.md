@@ -2,7 +2,7 @@
 
 Run the [Model Context Protocol](https://modelcontextprotocol.io) server for **full CLI parity** from agents (Cursor, Claude Code, Goose, OpenCode, GitHub Copilot, and other MCP hosts) without shelling to `kaizen`.
 
-Tier-1 session tailing for Goose, OpenCode, Copilot CLI, and VS Code Copilot Chat runs automatically during `kaizen sessions list`, `kaizen summary`, and related commands (see workspace `.kaizen/config.toml` `[sources.tail]` to disable individual sources).
+The MCP tools are cache-first by default. They read the local `.kaizen/kaizen.db` immediately, and only rescan external agent transcript stores when you pass `refresh: true`.
 
 ## Quint specification
 
@@ -113,13 +113,13 @@ Set any value to `false` to skip that agent’s local scan (useful if a VS Code 
 |------|----------------|--------|
 | `kaizen_capabilities` | (no CLI; static text) | Read first: which tool to use for cost rollups vs repo metrics, sessions, retro, etc. |
 | `kaizen_ingest_hook` | `kaizen ingest hook` | Pass hook JSON in `payload` (not stdin). `source`: `cursor` or `claude`. |
-| `kaizen_sessions_list` | `kaizen sessions list` | Optional `json: true`, `refresh: true` (full transcript rescan; matches `--refresh`). |
+| `kaizen_sessions_list` | `kaizen sessions list` | Optional `json: true`, `refresh: true` (full transcript rescan; matches `--refresh`), `all_workspaces: true` for machine-wide aggregation. |
 | `kaizen_session_show` | `kaizen sessions show` | `id` + optional `workspace`. |
-| `kaizen_summary` | `kaizen summary` | Optional `json: true`, `refresh: true`. |
+| `kaizen_summary` | `kaizen summary` | Optional `json: true`, `refresh: true`, `all_workspaces: true`. |
 | `kaizen_tui` | `kaizen tui` | Not runnable over MCP; returns a structured “use CLI” payload with `is_error` semantics. |
 | `kaizen_init` | `kaizen init` | Writes/updates workspace files, same as CLI. |
 | `kaizen_insights` | `kaizen insights` | Optional `refresh: true`. |
-| `kaizen_metrics` | `kaizen metrics` | `days`, `json`, `force`, `workspace`, optional `refresh`. |
+| `kaizen_metrics` | `kaizen metrics` | `days`, `json`, `force`, `workspace`, optional `refresh`, optional `all_workspaces`. |
 | `kaizen_metrics_index` | `kaizen metrics index` | |
 | `kaizen_sync_run` | `kaizen sync run` | **Only `once: true` is supported** (default). Continuous sync must use a real shell / service. |
 | `kaizen_sync_status` | `kaizen sync status` | |
@@ -134,6 +134,7 @@ Set any value to `false` to skip that agent’s local scan (useful if a VS Code 
 ## Behavior notes
 
 - **Workspace**: most tools accept optional `workspace` (string path). If omitted, the server uses the process current directory, matching CLI defaults.
-- **Rescan**: list/summary/insights/metrics/retro honor `[scan].min_rescan_seconds` unless you pass `refresh: true` (same as CLI `--refresh`).
+- **Rescan**: list/summary/insights/metrics/retro stay on the cached local DB unless you pass `refresh: true` (same as CLI `--refresh`).
+- **Aggregation**: `kaizen_sessions_list`, `kaizen_summary`, `kaizen_insights`, and `kaizen_metrics` accept `all_workspaces: true`. Kaizen opens each registered workspace DB separately and merges the results in memory.
 - **Blocking work** is run on a blocking thread pool so the async MCP runtime is not starved; long `retro` or metrics runs may take time.
 - **Version** in the MCP `initialize` response is the built-in string configured for the server (keep in sync with releases when using strict client checks).
