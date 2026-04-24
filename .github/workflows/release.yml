@@ -191,7 +191,7 @@ jobs:
     name: update homebrew-tap
     needs: [verify, build, release]
     runs-on: ubuntu-latest
-    if: ${{ needs.verify.outputs.release_version == needs.verify.outputs.cargo_version && !contains(needs.verify.outputs.release_version, '-') }}
+    if: ${{ !contains(needs.verify.outputs.release_version, '-') }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -239,11 +239,57 @@ jobs:
     name: cargo publish
     needs: [verify, release]
     runs-on: ubuntu-latest
-    if: ${{ needs.verify.outputs.release_version == needs.verify.outputs.cargo_version && !contains(needs.verify.outputs.release_version, '-') }}
+    if: ${{ !contains(needs.verify.outputs.release_version, '-') }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo publish --locked --token "${CARGO_REGISTRY_TOKEN}"
+        with:
+          key: release-publish
+      - name: Align version with tag and publish
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          RELEASE_VERSION: ${{ needs.verify.outputs.release_version }}
+        run: |
+          set -euo pipefail
+          current=$(awk -F'"' '/^version = / {print $2; exit}' Cargo.toml)
+          if [ "$current" != "$RELEASE_VERSION" ]; then
+            sed -i "s/^version = \".*\"/version = \"$RELEASE_VERSION\"/" Cargo.toml
+            # Lock must match the package version in the manifest
+            cargo build
+          fi
+          cargo publish --locked --token "${CARGO_REGISTRY_TOKEN}"
+
+  sync-cargo-on-main:
+    name: sync Cargo.toml on default branch
+    needs: [verify, publish]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch || 'main' }}
+          token: ${{ secrets.RELEASE_PUSH_TOKEN != '' && secrets.RELEASE_PUSH_TOKEN || github.token }}
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Commit version to match published crate (no CI re-run)
+        env:
+          RELEASE_VERSION: ${{ needs.verify.outputs.release_version }}
+        run: |
+          set -euo pipefail
+          branch="${{ github.event.repository.default_branch || 'main' }}"
+          current=$(awk -F'"' '/^version = / {print $2; exit}' Cargo.toml)
+          if [ "$current" != "$RELEASE_VERSION" ]; then
+            sed -i "s/^version = \".*\"/version = \"$RELEASE_VERSION\"/" Cargo.toml
+          fi
+          if ! cargo metadata --locked --format-version 1 >/dev/null 2>&1; then
+            cargo build
+          fi
+          if git diff --quiet; then
+            echo "No changes; nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.toml Cargo.lock
+          git commit -m "chore: sync version to v${RELEASE_VERSION} from release [skip ci]" -m "Published to crates.io as v${RELEASE_VERSION}."
+          git push origin "HEAD:refs/heads/${branch}"
