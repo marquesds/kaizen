@@ -7,13 +7,12 @@ Code, and Codex. One SQLite store and one CLI; **redact before** any
 sync, and only sync on **your** terms.
 
 Narrative guides and references live in this repository under [`docs/`](docs/README.md). The
-[crates.io](https://crates.io/crates/kaizen) page links to
-[docs.rs](https://docs.rs/kaizen) for the **Rust API**; full markdown documentation is not
-inside that tarball.
+crate is **not** on [crates.io](https://crates.io) yet, so install from a git checkout (see
+[Install](#install)). When it is published, [docs.rs](https://docs.rs) will host the **Rust API**;
+long-form markdown stays in this repo.
 
 [![CI](https://github.com/marquesds/kaizen/actions/workflows/ci.yml/badge.svg)](https://github.com/marquesds/kaizen/actions/workflows/ci.yml)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
-[![Crates.io](https://img.shields.io/crates/v/kaizen.svg)](https://crates.io/crates/kaizen)
 
 ## Why
 
@@ -33,7 +32,7 @@ inside that tarball.
 | Turn observations into change | dashboards only | ✅ weekly heuristic **retro** + **experiments** (A/B) |
 | Self-host, not locked to a vendor cloud | needs an account | ✅ deploy the binary, tail agent sessions live, SQLite + optional **redacted** sync |
 | Ship MCP tools to agents | depends | ✅ every CLI command surfaces as an MCP tool |
-| Rust, single static binary, sub‑second cold start | varies | ✅ `cargo install kaizen` and go |
+| Rust, single static binary, sub‑second cold start | varies | ✅ build from a checkout (`cargo install --path .` or `./scripts/install-local.sh`) |
 
 Kaizen is not a dashboard — it is an opinionated feedback loop: **capture → summarise → propose change → measure**. Start with `kaizen init` in any repo where you use a coding agent.
 
@@ -62,13 +61,32 @@ https://github.com/user-attachments/assets/3cf4ac40-cef7-480a-9bea-af69df06f3c6
 
 ## Install
 
-```bash
-cargo install kaizen
-kaizen init
-```
+The CLI is **not** on crates.io yet. You need **Rust 1.95+** ([rustup](https://rustup.rs)) and
+**git**.
 
-Requires Rust 1.95+ (edition 2024). Full install guide:
-[docs/install.md](docs/install.md).
+1. **Clone and install the binary** (installs to `~/.cargo/bin`, or `$CARGO_HOME/bin`):
+
+   ```bash
+   git clone https://github.com/marquesds/kaizen.git
+   cd kaizen
+   ./scripts/install-local.sh
+   ```
+
+   Equivalent: `cargo install --path . --locked` from the repo root (use `--force` to replace an
+   existing install).
+
+2. **Confirm `kaizen` is on your `PATH`** (rustup usually adds `~/.cargo/bin`). If the shell
+   cannot find `kaizen`, add that directory to `PATH` and open a new terminal.
+
+3. **Run `kaizen` in your own project** (where you use Cursor / Claude Code / Codex), not only
+   inside the kaizen repo:
+
+   ```bash
+   cd /path/to/your-project
+   kaizen init
+   ```
+
+Step-by-step guide, uninstall, and troubleshooting: [docs/install.md](docs/install.md).
 
 ## Quick start
 

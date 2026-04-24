@@ -96,8 +96,9 @@ change behavior or data flow, update the listed documents in the same PR when pr
 ### Where docs are published
 
 - **GitHub:** the `docs/` tree in this repository is the home for long-form documentation.
-- **crates.io / docs.rs:** the published package documents the **Rust API**; it does not include
-  the `docs/` markdown (see `exclude` in `Cargo.toml`).
+- **crates.io / docs.rs:** not live for this crate yet. After the first `cargo publish`, the
+  package will document the **Rust API** on docs.rs; it will not include the `docs/` markdown
+  (see `exclude` in `Cargo.toml`).
 
 ## Versioning
 
