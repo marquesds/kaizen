@@ -3,12 +3,11 @@ name: Release
 on:
   push:
     tags:
-      - "v[0-9]+.[0-9]+.[0-9]+"
-      - "v[0-9]+.[0-9]+.[0-9]+-*"
+      - "v*.*.*"
   workflow_dispatch:
     inputs:
       version:
-        description: "Semver (e.g. 0.1.0 or 0.1.0-beta.1), must match Cargo.toml on the selected ref"
+        description: "Release version (e.g. 0.1.0 or 0.1.0-ci.<sha>), must equal Cargo.toml or start with Cargo.toml plus '-' on the selected ref"
         required: true
         type: string
 
@@ -41,11 +40,18 @@ jobs:
               echo "workflow_dispatch: version input is empty" >&2
               exit 1
             fi
-            if [ "$V" != "$CARGO_VER" ]; then
-              echo "input v${V} != Cargo.toml ${CARGO_VER}" >&2
-              exit 1
-            fi
-            echo "notes_section=$CARGO_VER" >> "$GITHUB_OUTPUT"
+            case "$V" in
+              "$CARGO_VER")
+                echo "notes_section=$CARGO_VER" >> "$GITHUB_OUTPUT"
+                ;;
+              "$CARGO_VER"-*)
+                echo "notes_section=Unreleased" >> "$GITHUB_OUTPUT"
+                ;;
+              *)
+                echo "input v${V} does not match Cargo.toml ${CARGO_VER}" >&2
+                exit 1
+                ;;
+            esac
             echo "release_version=$V" >> "$GITHUB_OUTPUT"
             exit 0
           fi
