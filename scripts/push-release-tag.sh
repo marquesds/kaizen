@@ -103,10 +103,11 @@ dispatch_release_if_needed() {
     return 0
   fi
   echo "Dispatching Release workflow for $release_tag" >&2
+  # gh prints the run URL to stdout; keep stdout clean for eval "$(bash …)" in CI.
   gh workflow run Release \
     --repo "$GITHUB_REPOSITORY" \
     --ref "$release_tag" \
-    -f version="${release_tag#v}"
+    -f version="${release_tag#v}" >&2
 }
 
 run_self_test() {
