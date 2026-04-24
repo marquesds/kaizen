@@ -29,6 +29,9 @@ impl Config for RunConfig {
             // TS simulator can exit 1 on GHA macOS; Rust backend is reliable for `quint run` + --mbt.
             .arg("--backend")
             .arg("rust")
+            // Default n-threads=10 from Quint can be flaky on GHA `macos-latest` (worker contention).
+            .arg("--n-threads")
+            .arg("1")
             .arg("--seed")
             .arg(&self.seed)
             .arg("--max-samples")
@@ -77,6 +80,7 @@ mod tests {
             to_string(config),
             "quint run foo.qnt \
              --backend rust \
+             --n-threads 1 \
              --seed 42 \
              --max-samples 100 \
              --n-traces 100 \
@@ -95,6 +99,7 @@ mod tests {
             to_string(config),
             "quint run foo.qnt \
              --backend rust \
+             --n-threads 1 \
              --seed 42 \
              --max-samples 100 \
              --n-traces 100 \
@@ -114,6 +119,7 @@ mod tests {
             to_string(config),
             "quint run foo.qnt \
              --backend rust \
+             --n-threads 1 \
              --seed 42 \
              --max-samples 100 \
              --n-traces 100 \
@@ -133,6 +139,7 @@ mod tests {
             to_string(config),
             "quint run foo.qnt \
              --backend rust \
+             --n-threads 1 \
              --seed 42 \
              --max-samples 100 \
              --n-traces 100 \
@@ -152,6 +159,7 @@ mod tests {
             to_string(config),
             "quint run foo.qnt \
              --backend rust \
+             --n-threads 1 \
              --seed 42 \
              --max-samples 42 \
              --n-traces 42 \
@@ -170,6 +178,7 @@ mod tests {
             to_string(config),
             "quint run foo.qnt \
              --backend rust \
+             --n-threads 1 \
              --seed 42 \
              --max-samples 100 \
              --n-traces 100 \
