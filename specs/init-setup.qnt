@@ -44,13 +44,17 @@ module init_setup {
     skill_ready' = true
   }
 
+  // `kaizen init` also scaffolds `.cursor/hooks.json` / `.claude/settings.json`
+  // when absent — fresh workspaces become instrumented for both agents in a
+  // single command. Existing files are backed up and patched (unchanged
+  // behavior).
   action run_init: bool = all {
     config_ready' = true,
-    cursor_present' = cursor_present,
-    cursor_patched' = (cursor_patched or cursor_present),
+    cursor_present' = true,
+    cursor_patched' = true,
     cursor_backup' = (cursor_backup or (cursor_present and not(cursor_patched))),
-    claude_present' = claude_present,
-    claude_patched' = (claude_patched or claude_present),
+    claude_present' = true,
+    claude_patched' = true,
     claude_backup' = (claude_backup or (claude_present and not(claude_patched))),
     skill_ready' = true
   }

@@ -21,6 +21,20 @@ inside that tarball.
 - **Experiments** — A/B a rule, skill, or repo change against a real metric.
 - **Local-first** — SQLite on your disk. No data leaves the machine unless you configure sync.
 
+## Why kaizen over the alternatives
+
+| You want… | Existing tool | Kaizen |
+|---|---|---|
+| Cost per session for **Claude Code** | `ccusage`, `claude-usage-report` | ✅ plus Cursor + Codex + hook provenance |
+| Cost per session for **Cursor** | none (transcripts strip usage) | ✅ best-effort token + model from transcript tail |
+| One pane of glass across agents | glue scripts | ✅ unified store, one CLI, one MCP |
+| Turn observations into change | dashboards only | ✅ weekly heuristic **retro** + **experiments** (A/B) |
+| Works offline, no cloud | needs an account | ✅ SQLite on disk, sync optional |
+| Ship MCP tools to agents | depends | ✅ every CLI command surfaces as an MCP tool |
+| Rust, single static binary, sub‑second cold start | varies | ✅ `cargo install kaizen` and go |
+
+Kaizen is not a dashboard — it is an opinionated feedback loop: **capture → summarise → propose change → measure**. Start with `kaizen init` in any repo where you use a coding agent.
+
 ## How it works (about 60 seconds)
 
 Kaizen does not run the model. It **observes** agent activity: conversation and tool use land in
@@ -57,8 +71,8 @@ Requires Rust 1.95+ (edition 2024). Full install guide:
 ## Quick start
 
 ```bash
-kaizen init                  # scaffold .kaizen/ + wire hooks
-kaizen doctor                # verify config, DB, and hook wiring (optional)
+kaizen init                  # scaffold .kaizen/ + wire .cursor/hooks.json + .claude/settings.json
+kaizen doctor                # verify config, DB, and hook wiring
 kaizen sessions list         # index sessions in the current repo
 kaizen summary               # cost / agent / model rollup
 kaizen tui                   # live session browser
@@ -66,8 +80,10 @@ kaizen retro --days 7        # weekly heuristic bets
 kaizen exp new --name add-skill \
   --hypothesis "skill cuts tokens" --change "add .cursor/skills/x" \
   --metric tokens_per_session --bind git \
-  --duration-days 14 --target-pct -10
+  --duration-days 14 --target-pct=-10
 ```
+
+`kaizen init` creates both hook files when absent and patches them idempotently when present. Re-running is safe; originals back up under `.kaizen/backup/`.
 
 Full CLI reference: [docs/usage.md](docs/usage.md).
 

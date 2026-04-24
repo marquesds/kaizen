@@ -327,6 +327,25 @@ impl Store {
         Ok(())
     }
 
+    /// Insert a minimal session row if none exists. Used by hook ingestion when
+    /// the first observed event is not `SessionStart` (hooks installed mid-session).
+    pub fn ensure_session_stub(
+        &self,
+        id: &str,
+        agent: &str,
+        workspace: &str,
+        started_at_ms: u64,
+    ) -> Result<()> {
+        self.conn.execute(
+            "INSERT OR IGNORE INTO sessions (
+                id, agent, model, workspace, started_at_ms, ended_at_ms, status, trace_path,
+                start_commit, end_commit, branch, dirty_start, dirty_end, repo_binding_source
+             ) VALUES (?1, ?2, NULL, ?3, ?4, NULL, 'Running', '', NULL, NULL, NULL, NULL, NULL, '')",
+            params![id, agent, workspace, started_at_ms as i64],
+        )?;
+        Ok(())
+    }
+
     /// Next `seq` for a new event in this session (0 when there are no events yet).
     pub fn next_event_seq(&self, session_id: &str) -> Result<u64> {
         let n: i64 = self.conn.query_row(
@@ -986,9 +1005,10 @@ impl Store {
         let out: Vec<String> = stmt
             .query_map(
                 params![workspace, since_ms as i64, SYNTHETIC_TS_CEILING_MS],
-                |r| r.get(0),
+                |r| r.get::<_, String>(0),
             )?
             .filter_map(|r| r.ok())
+            .filter(|s: &String| crate::store::event_index::is_valid_slug(s))
             .collect();
         Ok(out)
     }
@@ -1024,9 +1044,10 @@ impl Store {
                     end_ms as i64,
                     SYNTHETIC_TS_CEILING_MS,
                 ],
-                |r| Ok((r.get(0)?, r.get(1)?)),
+                |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
             )?
             .filter_map(|r| r.ok())
+            .filter(|(_, skill): &(String, String)| crate::store::event_index::is_valid_slug(skill))
             .collect();
         Ok(out)
     }
@@ -1049,9 +1070,10 @@ impl Store {
         let out: Vec<String> = stmt
             .query_map(
                 params![workspace, since_ms as i64, SYNTHETIC_TS_CEILING_MS],
-                |r| r.get(0),
+                |r| r.get::<_, String>(0),
             )?
             .filter_map(|r| r.ok())
+            .filter(|s: &String| crate::store::event_index::is_valid_slug(s))
             .collect();
         Ok(out)
     }
@@ -1087,9 +1109,10 @@ impl Store {
                     end_ms as i64,
                     SYNTHETIC_TS_CEILING_MS,
                 ],
-                |r| Ok((r.get(0)?, r.get(1)?)),
+                |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
             )?
             .filter_map(|r| r.ok())
+            .filter(|(_, rule): &(String, String)| crate::store::event_index::is_valid_slug(rule))
             .collect();
         Ok(out)
     }
@@ -1435,7 +1458,9 @@ impl Store {
         for edge in edges {
             self.conn.execute(
                 "INSERT INTO repo_edges (snapshot_id, from_id, to_id, kind, weight)
-                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                 VALUES (?1, ?2, ?3, ?4, ?5)
+                 ON CONFLICT(snapshot_id, from_id, to_id, kind)
+                 DO UPDATE SET weight = weight + excluded.weight",
                 params![
                     snapshot.id,
                     edge.from_path,

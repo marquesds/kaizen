@@ -123,7 +123,11 @@ pub fn doctor_text(workspace: Option<&Path>) -> Result<(i32, String)> {
 
     let cursor = init::cursor_kaizen_hook_wiring(&ws);
     match &cursor {
-        Ok(None) => writeln!(&mut out, "hooks: .cursor/hooks.json — absent (optional)").unwrap(),
+        Ok(None) => writeln!(
+            &mut out,
+            "hooks: .cursor/hooks.json — absent (run `kaizen init` to wire Cursor)"
+        )
+        .unwrap(),
         Ok(Some(true)) => writeln!(
             &mut out,
             "hooks: .cursor/hooks.json — kaizen command on all events"
@@ -136,7 +140,11 @@ pub fn doctor_text(workspace: Option<&Path>) -> Result<(i32, String)> {
     }
     let claude = init::claude_kaizen_hook_wiring(&ws);
     match &claude {
-        Ok(None) => writeln!(&mut out, "hooks: .claude/settings.json — absent (optional)").unwrap(),
+        Ok(None) => writeln!(
+            &mut out,
+            "hooks: .claude/settings.json — absent (run `kaizen init` to wire Claude Code)"
+        )
+        .unwrap(),
         Ok(Some(true)) => writeln!(
             &mut out,
             "hooks: .claude/settings.json — kaizen hooks on all events"
