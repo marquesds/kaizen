@@ -101,4 +101,4 @@ kaizen does not implement the model. It **observes** how an agent: requests tool
 - [config.md](config.md) — `~/.kaizen` vs workspace, tail sources, sync, proxy.
 - [../AGENTS.md](../AGENTS.md) — note on Cursor cost telemetry limitations.
 
-Long-form documentation is maintained in the **GitHub** tree under `docs/`. The [docs.rs](https://docs.rs/kaizen) page documents the Rust library API for the published crate, not the full markdown book.
+Long-form documentation is maintained in the **GitHub** tree under `docs/`. The [docs.rs](https://docs.rs/kaizen-cli) page documents the Rust library API for the published crate, not the full markdown book.

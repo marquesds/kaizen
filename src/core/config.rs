@@ -160,6 +160,78 @@ fn default_telemetry_fail_open() -> bool {
     true
 }
 
+fn default_cache_ttl_seconds() -> u64 {
+    3600
+}
+
+/// Which third-party system is the single source for query-back / pull; OTLP is export-only, not a pull target.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum QueryAuthority {
+    #[default]
+    None,
+    Posthog,
+    Datadog,
+}
+
+/// Per-field allowlist: when `false` (default), the field is omitted or hashed in telemetry exports.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IdentityAllowlist {
+    #[serde(default)]
+    pub team: bool,
+    #[serde(default)]
+    pub workspace_label: bool,
+    #[serde(default)]
+    pub runner_label: bool,
+    #[serde(default)]
+    pub actor_kind: bool,
+    #[serde(default)]
+    pub actor_label: bool,
+    #[serde(default)]
+    pub agent: bool,
+    #[serde(default)]
+    pub model: bool,
+    #[serde(default)]
+    pub env: bool,
+    #[serde(default)]
+    pub job: bool,
+    #[serde(default)]
+    pub branch: bool,
+}
+
+/// Remote pull: query authority, cache TTL, and which identity labels may leave as cleartext.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TelemetryQueryConfig {
+    /// `posthog` or `datadog` enables provider pull when implemented; `none` or unset = no query authority.
+    #[serde(default)]
+    pub provider: QueryAuthority,
+    /// Seconds to treat remote cache rows as fresh (unless the CLI requests `--refresh`).
+    #[serde(default = "default_cache_ttl_seconds")]
+    pub cache_ttl_seconds: u64,
+    #[serde(default)]
+    pub identity_allowlist: IdentityAllowlist,
+}
+
+impl Default for TelemetryQueryConfig {
+    fn default() -> Self {
+        Self {
+            provider: QueryAuthority::default(),
+            cache_ttl_seconds: default_cache_ttl_seconds(),
+            identity_allowlist: IdentityAllowlist::default(),
+        }
+    }
+}
+
+impl TelemetryQueryConfig {
+    /// True when a PostHog or Datadog pull backend may be used (OTLP is not a pull target).
+    pub fn has_provider_for_pull(&self) -> bool {
+        matches!(
+            self.provider,
+            QueryAuthority::Posthog | QueryAuthority::Datadog
+        )
+    }
+}
+
 /// How to reduce billed input to the model (opt-in; default leaves requests unchanged).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -235,6 +307,9 @@ pub struct TelemetryConfig {
     /// When `true` (default), ignore exporter errors; when `false`, `flush` fails if any secondary errors.
     #[serde(default = "default_telemetry_fail_open")]
     pub fail_open: bool,
+    /// Query-back / pull API: authority, cache TTL, identity allowlist.
+    #[serde(default)]
+    pub query: TelemetryQueryConfig,
     /// Declarative list; `type = "none"` rows are accepted and ignored.
     #[serde(default)]
     pub exporters: Vec<ExporterConfig>,
@@ -244,6 +319,7 @@ impl Default for TelemetryConfig {
     fn default() -> Self {
         Self {
             fail_open: default_telemetry_fail_open(),
+            query: TelemetryQueryConfig::default(),
             exporters: Vec::new(),
         }
     }
@@ -426,6 +502,7 @@ fn merge_telemetry(base: TelemetryConfig, user: TelemetryConfig) -> TelemetryCon
     } else {
         base.fail_open
     };
+    let query = merge_telemetry_query(base.query, user.query);
     let exporters = if !user.exporters.is_empty() {
         user.exporters
     } else {
@@ -433,7 +510,87 @@ fn merge_telemetry(base: TelemetryConfig, user: TelemetryConfig) -> TelemetryCon
     };
     TelemetryConfig {
         fail_open,
+        query,
         exporters,
+    }
+}
+
+fn merge_telemetry_query(
+    base: TelemetryQueryConfig,
+    user: TelemetryQueryConfig,
+) -> TelemetryQueryConfig {
+    let def = TelemetryQueryConfig::default();
+    TelemetryQueryConfig {
+        provider: if user.provider != def.provider {
+            user.provider
+        } else {
+            base.provider
+        },
+        cache_ttl_seconds: if user.cache_ttl_seconds != def.cache_ttl_seconds {
+            user.cache_ttl_seconds
+        } else {
+            base.cache_ttl_seconds
+        },
+        identity_allowlist: merge_identity_allowlist(
+            base.identity_allowlist,
+            user.identity_allowlist,
+        ),
+    }
+}
+
+fn merge_identity_allowlist(base: IdentityAllowlist, user: IdentityAllowlist) -> IdentityAllowlist {
+    let def = IdentityAllowlist::default();
+    IdentityAllowlist {
+        team: if user.team != def.team {
+            user.team
+        } else {
+            base.team
+        },
+        workspace_label: if user.workspace_label != def.workspace_label {
+            user.workspace_label
+        } else {
+            base.workspace_label
+        },
+        runner_label: if user.runner_label != def.runner_label {
+            user.runner_label
+        } else {
+            base.runner_label
+        },
+        actor_kind: if user.actor_kind != def.actor_kind {
+            user.actor_kind
+        } else {
+            base.actor_kind
+        },
+        actor_label: if user.actor_label != def.actor_label {
+            user.actor_label
+        } else {
+            base.actor_label
+        },
+        agent: if user.agent != def.agent {
+            user.agent
+        } else {
+            base.agent
+        },
+        model: if user.model != def.model {
+            user.model
+        } else {
+            base.model
+        },
+        env: if user.env != def.env {
+            user.env
+        } else {
+            base.env
+        },
+        job: if user.job != def.job {
+            user.job
+        } else {
+            base.job
+        },
+        branch: if user.branch != def.branch {
+            user.branch
+        } else {
+            base.branch
+        },
     }
 }
 
@@ -586,6 +743,7 @@ mod tests {
         let base = Config {
             telemetry: TelemetryConfig {
                 fail_open: true,
+                query: TelemetryQueryConfig::default(),
                 exporters: vec![ExporterConfig::None],
             },
             ..Default::default()
@@ -593,6 +751,7 @@ mod tests {
         let user = Config {
             telemetry: TelemetryConfig {
                 fail_open: false,
+                query: TelemetryQueryConfig::default(),
                 exporters: vec![ExporterConfig::Dev { enabled: true }],
             },
             ..Default::default()
@@ -600,5 +759,82 @@ mod tests {
         let merged = merge(base, user);
         assert!(!merged.telemetry.fail_open);
         assert_eq!(merged.telemetry.exporters.len(), 1);
+    }
+
+    #[test]
+    fn telemetry_query_defaults() {
+        let t = TelemetryQueryConfig::default();
+        assert_eq!(t.provider, QueryAuthority::None);
+        assert_eq!(t.cache_ttl_seconds, 3600);
+        assert!(!t.identity_allowlist.team);
+        assert!(!t.has_provider_for_pull());
+    }
+
+    #[test]
+    fn telemetry_query_has_provider() {
+        let ph = TelemetryQueryConfig {
+            provider: QueryAuthority::Posthog,
+            ..Default::default()
+        };
+        assert!(ph.has_provider_for_pull());
+        let dd = TelemetryQueryConfig {
+            provider: QueryAuthority::Datadog,
+            ..Default::default()
+        };
+        assert!(dd.has_provider_for_pull());
+    }
+
+    #[test]
+    fn merge_telemetry_query_user_wins() {
+        let base = Config {
+            telemetry: TelemetryConfig {
+                query: TelemetryQueryConfig {
+                    provider: QueryAuthority::Posthog,
+                    cache_ttl_seconds: 3600,
+                    identity_allowlist: IdentityAllowlist {
+                        team: true,
+                        ..Default::default()
+                    },
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let user = Config {
+            telemetry: TelemetryConfig {
+                query: TelemetryQueryConfig {
+                    cache_ttl_seconds: 7200,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let merged = merge(base, user);
+        assert_eq!(merged.telemetry.query.provider, QueryAuthority::Posthog);
+        assert_eq!(merged.telemetry.query.cache_ttl_seconds, 7200);
+        assert!(merged.telemetry.query.identity_allowlist.team);
+    }
+
+    #[test]
+    fn toml_telemetry_query_roundtrip() {
+        let dir = TempDir::new().unwrap();
+        std::fs::create_dir_all(dir.path().join(".kaizen")).unwrap();
+        let toml = r#"
+[telemetry.query]
+provider = "datadog"
+cache_ttl_seconds = 1800
+
+[telemetry.query.identity_allowlist]
+team = true
+branch = true
+"#;
+        std::fs::write(dir.path().join(".kaizen/config.toml"), toml).unwrap();
+        let cfg = load(dir.path()).unwrap();
+        assert_eq!(cfg.telemetry.query.provider, QueryAuthority::Datadog);
+        assert_eq!(cfg.telemetry.query.cache_ttl_seconds, 1800);
+        assert!(cfg.telemetry.query.identity_allowlist.team);
+        assert!(cfg.telemetry.query.identity_allowlist.branch);
+        assert!(!cfg.telemetry.query.identity_allowlist.model);
     }
 }

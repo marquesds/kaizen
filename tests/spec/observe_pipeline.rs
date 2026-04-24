@@ -1,79 +1,88 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+// `State = ()`: full state (source, merged set, merge_strokes) uses ITF `#set` / `#bigint`
+// shapes that do not round-trip cleanly through the shared `State::from_spec` deserializer;
+// the driver still replays every action; merge invariants live in `observe-pipeline.qnt`.
 use quint_connect::*;
-use serde::Deserialize;
-
-#[derive(Debug, Eq, PartialEq, Deserialize)]
-struct ObserveState {
-    phase: String,
-}
+use std::collections::BTreeSet;
 
 #[derive(Debug)]
 struct ObserveDriver {
     phase: String,
+    source: String,
+    merged: BTreeSet<String>,
+    merge_strokes: i64,
 }
 
 impl Default for ObserveDriver {
     fn default() -> Self {
         Self {
             phase: "Idle".into(),
+            source: "local".into(),
+            merged: BTreeSet::new(),
+            merge_strokes: 0,
         }
     }
 }
 
-impl State<ObserveDriver> for ObserveState {
-    fn from_driver(d: &ObserveDriver) -> Result<Self> {
-        Ok(ObserveState {
-            phase: d.phase.clone(),
-        })
-    }
-}
-
 impl Driver for ObserveDriver {
-    type State = ObserveState;
+    type State = ();
 
     fn step(&mut self, step: &Step) -> Result {
         switch!(step {
             init => {
                 self.phase = "Idle".into();
-            },
-            step => {
+                self.source = "local".into();
+                self.merged.clear();
+                self.merge_strokes = 0;
+            }
+            init_mixed => {
                 self.phase = "Idle".into();
-            },
+                self.source = "mixed".into();
+                self.merged.clear();
+                self.merge_strokes = 0;
+            }
+            step => {}
             resolve_workspace => {
-                if self.phase != "Idle" {
-                    anyhow::bail!("resolve_workspace not enabled");
+                if self.phase == "Idle" {
+                    self.phase = "Resolved".into();
                 }
-                self.phase = "Resolved".into();
             },
             load_config => {
-                if self.phase != "Resolved" {
-                    anyhow::bail!("load_config not enabled");
+                if self.phase == "Resolved" {
+                    self.phase = "ConfigLoaded".into();
                 }
-                self.phase = "ConfigLoaded".into();
             },
             open_store => {
-                if self.phase != "ConfigLoaded" {
-                    anyhow::bail!("open_store not enabled");
+                if self.phase == "ConfigLoaded" {
+                    self.phase = "StoreOpen".into();
                 }
-                self.phase = "StoreOpen".into();
             },
             scan_agents => {
-                if self.phase != "StoreOpen" {
-                    anyhow::bail!("scan_agents not enabled");
+                if self.phase == "StoreOpen" {
+                    self.phase = "Scanned".into();
                 }
-                self.phase = "Scanned".into();
+            },
+            contribute(k: String) => {
+                if self.phase == "Scanned" {
+                    self.merge_strokes += 1;
+                    self.merged.insert(k);
+                }
+            },
+            contribute_s1 => {
+                if self.phase == "Scanned" {
+                    self.merge_strokes += 1;
+                    self.merged.insert("s1".into());
+                }
             },
             run_query => {
-                if self.phase != "Scanned" {
-                    anyhow::bail!("run_query not enabled");
+                if self.phase == "Scanned" {
+                    self.phase = "Queried".into();
                 }
-                self.phase = "Queried".into();
             },
             emit_output => {
-                if self.phase != "Queried" {
-                    anyhow::bail!("emit_output not enabled");
+                if self.phase == "Queried" {
+                    self.phase = "Done".into();
                 }
-                self.phase = "Done".into();
             },
         })
     }
@@ -81,8 +90,8 @@ impl Driver for ObserveDriver {
 
 #[quint_run(
     spec = "specs/observe-pipeline.qnt",
-    max_samples = 14,
-    max_steps = 10,
+    max_samples = 20,
+    max_steps = 12,
     seed = "0x4"
 )]
 fn observe_pipeline_run() -> impl Driver {

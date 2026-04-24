@@ -2,6 +2,7 @@
 //! Sync daemon: redacted outbox → `POST /v1/events`.
 
 pub mod client;
+pub mod canonical;
 pub mod context;
 pub mod engine;
 pub mod export_batch;
@@ -11,6 +12,10 @@ pub mod smart;
 
 pub use context::SyncIngestContext;
 pub use engine::{FlushExporters, FlushStats, flush_outbox_once};
+pub use canonical::{
+    CanonicalEnvelope, CanonicalEventName, CanonicalItem, EventItem, KAIZEN_SCHEMA_VERSION,
+    RepoSnapshotChunkItem, ToolSpanItem, WorkspaceFactSnapshotItem, expand_ingest_batch,
+};
 pub use export_batch::IngestExportBatch;
 pub use outbound::{EventsBatchBody, OutboundEvent, hash_with_salt, workspace_hash};
 

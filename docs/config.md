@@ -9,7 +9,7 @@ Config is TOML. **Paths:**
 
 **Load order:** the workspace and user files are both read; `src/core/config.rs` merges them as follows.
 
-- **`[sync]`, `[proxy]`, `[telemetry]`:** field-by-field merge. Workspace is applied first, then the user file overwrites (non-empty strings, set numbers, and so on).
+- **`[sync]`, `[proxy]`, `[telemetry]`:** field-by-field merge. Workspace is applied first, then the user file overwrites (non-empty strings, set numbers, and so on). Nested **`[telemetry.query]`** and **`[telemetry.query.identity_allowlist]`** merge the same way (per-key; see below).
 - **`[scan]`:** `roots` — if the user file sets a non-default `roots` list, that wins; otherwise the workspace’s `[scan].roots` is used. `min_rescan_seconds` merges the same way (user non-default wins, else workspace).
 - **`[retention]`:** field-by-field merge: for each of `hot_days` and `warm_days`, if the user file value differs from the schema default, the user value wins; otherwise the workspace value is kept.
 - **`[sources]`:** the merged value still comes only from the user file (`~/.kaizen/config.toml`); workspace `[sources]` is not applied. Put tail toggles and Cursor options in the user file when you need to change them.
@@ -79,6 +79,19 @@ Optional fan-out to third-party sinks (PostHog, Datadog, OTLP, or `dev` tracing)
 | Key | Default | Purpose |
 |-----|---------|--------|
 | `fail_open` | `true` | If `true`, exporter errors are ignored; if `false`, flush fails when any secondary sink errors |
+
+### `[telemetry.query]`
+
+Remote read-back (provider pull) and cache policy. OTLP is **export only**; it is not a query authority. Defaults keep pull disabled and identity fields hashed/omitted unless allowlisted.
+
+| Key | Default | Purpose |
+|-----|---------|--------|
+| `provider` | `none` | `none` \| `posthog` \| `datadog` — single query authority for pull when implemented. |
+| `cache_ttl_seconds` | `3600` | Treat cached provider rows as fresh for this many seconds (unless the user forces refresh). |
+
+### `[telemetry.query.identity_allowlist]`
+
+When `true`, the corresponding field may be emitted in **cleartext** on outbound / canonical telemetry for that key; when `false` (default), omit or hash. Keys: `team`, `workspace_label`, `runner_label`, `actor_kind`, `actor_label`, `agent`, `model`, `env`, `job`, `branch`.
 
 **Exporters** are `[[telemetry.exporters]]` tables with `type = "posthog" | "datadog" | "otlp" | "dev" | "none"`. The `kaizen telemetry configure` command appends a template block to `~/.kaizen/config.toml`.
 

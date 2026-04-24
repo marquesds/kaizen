@@ -13,7 +13,7 @@ glossary. For a **guided tour** with exercises, start at [tutorial/README.md](tu
 
 | Doc | Purpose |
 |---|---|
-| [install.md](install.md) | Install, build from source, uninstall |
+| [install.md](install.md) | `cargo install` from crates.io, build from source, uninstall |
 | [telemetry-journey.md](telemetry-journey.md) | How agent sessions map to data (ingest → events → facts) |
 | [tutorial/README.md](tutorial/README.md) | Hands-on tutorial (all major features + exercises) |
 | [usage.md](usage.md) | CLI reference |

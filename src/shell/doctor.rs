@@ -161,7 +161,7 @@ pub fn doctor_text(workspace: Option<&Path>) -> Result<(i32, String)> {
     }
     writeln!(&mut out).unwrap();
     if std::io::stdout().is_terminal() {
-        writeln!(&mut out, "If sessions list is empty, run a short agent session in this repo and `kaizen sessions list` again; see https://github.com/lucasmarqs/kaizen/blob/main/docs/config.md#sources.").unwrap();
+        writeln!(&mut out, "If sessions list is empty, run a short agent session in this repo and `kaizen sessions list` again; see https://github.com/marquesds/kaizen/blob/main/docs/config.md#sources.").unwrap();
     } else {
         writeln!(&mut out, "If sessions list is empty, see docs/config.md (sources) and `kaizen doctor` from a TTY for tips.").unwrap();
     }

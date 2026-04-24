@@ -7,9 +7,9 @@ Code, and Codex. One SQLite store and one CLI; **redact before** any
 sync, and only sync on **your** terms.
 
 Narrative guides and references live in this repository under [`docs/`](docs/README.md). The
-crate is **not** on [crates.io](https://crates.io) yet, so install from a git checkout (see
-[Install](#install)). When it is published, [docs.rs](https://docs.rs) will host the **Rust API**;
-long-form markdown stays in this repo.
+crate is on [crates.io](https://crates.io/crates/kaizen-cli) as **`kaizen-cli`** (`cargo install kaizen-cli` installs the `kaizen` binary); the **Rust API** is on
+[docs.rs/kaizen-cli](https://docs.rs/kaizen-cli). Long-form markdown stays in this repo.
+See [Install](#install) for `cargo install`, git clone, and `PATH`.
 
 [![CI](https://github.com/marquesds/kaizen/actions/workflows/ci.yml/badge.svg)](https://github.com/marquesds/kaizen/actions/workflows/ci.yml)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
@@ -62,10 +62,21 @@ https://github.com/user-attachments/assets/3cf4ac40-cef7-480a-9bea-af69df06f3c6
 
 ## Install
 
-The CLI is **not** on crates.io yet. You need **Rust 1.95+** ([rustup](https://rustup.rs)) and
-**git**.
+You need **Rust 1.95+** ([rustup](https://rustup.rs)). **Git** is only required for a source build.
 
-1. **Clone and install the binary** (installs to `~/.cargo/bin`, or `$CARGO_HOME/bin`):
+1. **Install the CLI from [crates.io](https://crates.io/crates/kaizen-cli)** (writes `kaizen` to
+   `~/.cargo/bin`, or `$CARGO_HOME/bin`):
+
+   ```bash
+   cargo install kaizen-cli --locked
+   ```
+
+   **Or use Homebrew** from a [tap](https://docs.brew.sh/Taps) once you publish
+   [`packaging/homebrew/kaizen-cli.rb`](packaging/homebrew/kaizen-cli.rb) to a `homebrew-tap` repo:
+   `brew tap <user>/tap && brew install kaizen-cli` (installs the same `kaizen` binary). See
+   [docs/install.md](docs/install.md#from-homebrew-third-party-tap).
+
+2. **Or build from a git clone** (for contributors and `--path` installs):
 
    ```bash
    git clone https://github.com/marquesds/kaizen.git
@@ -76,10 +87,10 @@ The CLI is **not** on crates.io yet. You need **Rust 1.95+** ([rustup](https://r
    Equivalent: `cargo install --path . --locked` from the repo root (use `--force` to replace an
    existing install).
 
-2. **Confirm `kaizen` is on your `PATH`** (rustup usually adds `~/.cargo/bin`). If the shell
+3. **Confirm `kaizen` is on your `PATH`** (rustup usually adds `~/.cargo/bin`). If the shell
    cannot find `kaizen`, add that directory to `PATH` and open a new terminal.
 
-3. **Run `kaizen` in your own project** (where you use Cursor / Claude Code / Codex), not only
+4. **Run `kaizen` in your own project** (where you use Cursor / Claude Code / Codex), not only
    inside the kaizen repo:
 
    ```bash

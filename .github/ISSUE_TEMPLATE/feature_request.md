@@ -25,4 +25,4 @@ assignees: ''
 
 ## Extra context
 
-<!-- Screenshots, links, related issues. If this changes how users think about the product, consider updating [docs/telemetry-journey.md](https://github.com/lucasmarqs/kaizen/blob/main/docs/telemetry-journey.md) or [docs/concepts.md](https://github.com/lucasmarqs/kaizen/blob/main/docs/concepts.md). -->
+<!-- Screenshots, links, related issues. If this changes how users think about the product, consider updating [docs/telemetry-journey.md](https://github.com/marquesds/kaizen/blob/main/docs/telemetry-journey.md) or [docs/concepts.md](https://github.com/marquesds/kaizen/blob/main/docs/concepts.md). -->

@@ -7,12 +7,20 @@ struct RetroPipelineState {
     phase: String,
     #[serde(rename = "lockHeld")]
     lock_held: bool,
+    source: String,
+    #[serde(rename = "cache_fresh")]
+    cache_fresh: bool,
+    #[serde(rename = "wants_refresh")]
+    wants_refresh: bool,
 }
 
 #[derive(Debug, Default)]
 struct RetroDriver {
     phase: String,
     lock_held: bool,
+    source: String,
+    cache_fresh: bool,
+    wants_refresh: bool,
 }
 
 impl State<RetroDriver> for RetroPipelineState {
@@ -20,6 +28,9 @@ impl State<RetroDriver> for RetroPipelineState {
         Ok(RetroPipelineState {
             phase: d.phase.clone(),
             lock_held: d.lock_held,
+            source: d.source.clone(),
+            cache_fresh: d.cache_fresh,
+            wants_refresh: d.wants_refresh,
         })
     }
 }
@@ -32,15 +43,55 @@ impl Driver for RetroDriver {
             init => {
                 self.phase = "Idle".into();
                 self.lock_held = false;
+                self.source = "local".into();
+                self.cache_fresh = true;
+                self.wants_refresh = false;
             },
-            step => {
+            init_with_remote_source => {
                 self.phase = "Idle".into();
                 self.lock_held = false;
+                self.source = "provider".into();
+                self.cache_fresh = true;
+                self.wants_refresh = false;
             },
+            init_stale_provider => {
+                self.phase = "Idle".into();
+                self.lock_held = false;
+                self.source = "provider".into();
+                self.cache_fresh = false;
+                self.wants_refresh = false;
+            },
+            step => {}
             acquire => {
-                if self.phase == "Idle" && !self.lock_held {
+                if self.phase == "Idle" && !self.lock_held && self.source == "local" {
                     self.lock_held = true;
                     self.phase = "Loading".into();
+                }
+            },
+            acquire_from_cache => {
+                if self.phase == "Idle" && !self.lock_held
+                    && (self.source == "provider" || self.source == "mixed")
+                    && self.cache_fresh
+                    && !self.wants_refresh
+                {
+                    self.lock_held = true;
+                    self.phase = "Loading".into();
+                }
+            },
+            acquire_start_pull => {
+                if self.phase == "Idle" && !self.lock_held
+                    && (self.source == "provider" || self.source == "mixed")
+                    && (!self.cache_fresh || self.wants_refresh)
+                {
+                    self.lock_held = true;
+                    self.phase = "RemotePull".into();
+                }
+            },
+            pull_done => {
+                if self.phase == "RemotePull" {
+                    self.phase = "Loading".into();
+                    self.cache_fresh = true;
+                    self.wants_refresh = false;
                 }
             },
             load_done => {
@@ -68,7 +119,7 @@ impl Driver for RetroDriver {
     }
 }
 
-#[quint_run(spec = "specs/retro-pipeline.qnt", max_samples = 10, max_steps = 8)]
+#[quint_run(spec = "specs/retro-pipeline.qnt", max_samples = 20, max_steps = 12)]
 fn retro_pipeline_run() -> impl Driver {
     RetroDriver::default()
 }

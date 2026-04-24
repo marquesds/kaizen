@@ -46,4 +46,5 @@ kaizen/
 - Full dependency set and version pins: [`Cargo.toml`](../Cargo.toml). The table above is a
   map, not a full graph.
 - Long-form user documentation in `docs/` is maintained on **GitHub**; the crate published to
-  crates.io excludes that folder in `Cargo.toml` for a smaller package tarball.
+  crates.io excludes `docs/` in `Cargo.toml` for a smaller tarball. Files under `assets/` that are
+  pulled in with `include_str!` are included in the package.
