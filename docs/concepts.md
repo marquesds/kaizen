@@ -66,7 +66,7 @@ idempotency key, retry + backoff, HTTPS POST. Dedup on
 
 ## Retro
 
-Heuristic engine H1–H8 over a trailing window → ranked bets by
+Heuristic engine H1–H14 over a trailing window → ranked bets by
 `tokens_saved_per_week / (effort_minutes + 1)`. Output: Markdown +
 JSON. No LLM calls. See [retro.md](retro.md), tuning in
 [retro-tuning.md](retro-tuning.md).
