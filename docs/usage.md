@@ -6,7 +6,9 @@ Run `kaizen --help` for grouped subcommands (Trust & observe, Operate, Improve, 
 
 **Cache-first reads:** `sessions list`, `summary`, `insights`, `guidance`, `metrics`, and `retro` read the local workspace database first, so the common path stays fast. Pass **`--refresh`** (`-r`) when you want Kaizen to rescan external agent transcripts before rendering the command. See [config.md](config.md).
 
-**Machine-wide aggregation:** `sessions list`, `summary`, `insights`, and `metrics` accept **`--all-workspaces`**. Kaizen keeps a small machine-local registry of workspaces it has seen, then opens each repo’s own `.kaizen/kaizen.db` and merges the results on demand.
+**Machine-wide aggregation:** `sessions list`, `summary`, `insights`, and `metrics` accept **`--all-workspaces`**. Kaizen records each workspace path you use (canonicalized) in a machine-local JSON list, then opens each repo’s `.kaizen/kaizen.db` and merges results in memory. Details: [config.md#machine-local-registry](config.md#machine-local-registry).
+
+**Auto-prune:** After a **full transcript rescan** (your command used `--refresh` / MCP `refresh: true`, or the scan throttle allowed a rescan), Kaizen may delete sessions older than `[retention].hot_days` — **at most once per 24 hours**. `hot_days = 0` disables that automatic pass; use `kaizen gc` for explicit pruning. See [`[retention]` in config.md](config.md#retention).
 
 ## `kaizen doctor`
 
@@ -14,9 +16,17 @@ Health check: version, config paths, store open, optional Cursor/Claude hook wir
 
 ## `kaizen init`
 
-Idempotent workspace setup. Writes `.kaizen/config.toml`, patches agent
-hooks, installs the retro skill. Re-running is safe; originals back up
-under `.kaizen/backup/`.
+Idempotent workspace setup. Typical effects:
+
+| Artifact | Action |
+|----------|--------|
+| `.kaizen/config.toml` | Created if missing (stub with commented `[sync]`). |
+| `.cursor/hooks.json` | Created or patched so `SessionStart`, `PreToolUse`, `PostToolUse`, `Stop` run `kaizen ingest hook --source cursor`. |
+| `.claude/settings.json` | Created or patched with the same events for `kaizen ingest hook --source claude`. |
+| `.cursor/skills/kaizen-retro/SKILL.md` | Written (or skipped if you already replaced the placeholder skill). |
+| `.kaizen/backup/*.bak` | Timestamped copy before patching an existing hooks/settings file. |
+
+Re-running is safe. Codex, Goose, OpenCode, and Copilot sessions are ingested via **transcript tail** (and optional hooks elsewhere); `init` only patches **Cursor** and **Claude Code** hook files today.
 
 ## `kaizen sessions`
 
@@ -25,8 +35,10 @@ kaizen sessions list           # all sessions in workspace
 kaizen sessions list --json   # machine-readable
 kaizen sessions list --refresh
 kaizen sessions list --all-workspaces
-kaizen sessions show <id>      # full detail: events, tools, cost
+kaizen sessions show <id>      # session metadata (id, agent, model, times, status, trace_path)
 ```
+
+`sessions show` prints **one session row**, not the full event stream. For turns, tools, and live tail, use **`kaizen tui`** (or inspect the transcript path shown in `trace_path`).
 
 ## `kaizen summary`
 
@@ -38,6 +50,8 @@ kaizen summary --json         # same shape as the MCP `kaizen_summary` tool with
 kaizen summary --refresh
 kaizen summary --all-workspaces
 ```
+
+With `--json`, the object includes `workspace`, `stats` (counts and rollups), `cost_usd`, and when metrics data is available for the window, optional **`hotspot`** (hottest file) and **`slowest_tool`** (by p95). Multi-workspace adds a `workspaces` array.
 
 ## `kaizen gc`
 
@@ -53,10 +67,13 @@ kaizen gc --vacuum            # VACUUM after delete (slow; shrinks the DB file)
 
 Print a shell completion script to stdout. Install (examples):
 
+Supported shells: **bash**, **elvish**, **fish**, **powershell**, **zsh**.
+
 ```bash
 kaizen completions bash  > ~/.local/share/bash-completion/completions/kaizen
 kaizen completions zsh   | sudo tee /usr/local/share/zsh/site-functions/_kaizen
 kaizen completions fish  > ~/.config/fish/completions/kaizen.fish
+# elvish, powershell: redirect stdout to the path your shell expects for completions
 ```
 
 Restart the shell or `source` your profile as appropriate for your platform.
@@ -155,7 +172,7 @@ kaizen telemetry print-effective-config # redacted: which fields resolve from en
 
 ## `kaizen mcp`
 
-Model Context Protocol server over stdio — full CLI parity for agents (Cursor, Claude Code, Goose, OpenCode, Copilot, and so on) without shelling to `kaizen`. Host config examples and tool behavior: [mcp.md](mcp.md).
+Model Context Protocol server over stdio — **most** CLI workflows are available as MCP tools so agents (Cursor, Claude Code, Goose, OpenCode, Copilot, and so on) can query Kaizen without shelling. **CLI-only today:** `doctor`, `guidance`, `gc`, `completions`, `proxy run`, and `telemetry` subcommands — run those from a real shell. Host config and tool list: [mcp.md](mcp.md).
 
 ## `kaizen exp`
 
