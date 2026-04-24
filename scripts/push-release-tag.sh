@@ -87,27 +87,39 @@ dispatch_release_if_needed() {
     echo "Not in GitHub Actions; skipping workflow dispatch" >&2
     return 0
   fi
-  sleep 10
-  local run_count
-  run_count=$(
-    gh run list \
-      --repo "$GITHUB_REPOSITORY" \
-      --workflow Release \
-      --branch "$release_tag" \
-      --limit 5 \
-      --json databaseId \
-      --jq 'length'
-  )
-  if [[ "$run_count" -gt 0 ]]; then
-    echo "Release workflow already present for $release_tag" >&2
+  if ! command -v gh &>/dev/null; then
+    echo "gh not in PATH; cannot check or back up-dispatch Release" >&2
     return 0
   fi
-  echo "Dispatching Release workflow for $release_tag" >&2
-  # gh prints the run URL to stdout; keep stdout clean for eval "$(bash …)" in CI.
+  # Tag push normally triggers the Release workflow via on: push: tags. Some setups still miss it.
+  # gh run list --branch <tag> is unreliable: tag runs often have headBranch != tag name, so
+  # we match any Release run whose headSha equals the tag's target commit.
+  local tag_sha found
+  if ! tag_sha=$(git -C "$KIZEN_ROOT" rev-parse "refs/tags/${release_tag}^{commit}" 2>/dev/null); then
+    echo "no ref refs/tags/${release_tag}; cannot match workflow runs" >&2
+    return 0
+  fi
+  for _round in 1 2 3 4 5 6; do
+    if ! found=$(gh run list -R "$GITHUB_REPOSITORY" -w Release -L 30 \
+      --json headSha,status,conclusion \
+      --jq -r --arg s "$tag_sha" \
+      '[.[] | select(.headSha == $s)] | length' 2>/dev/null); then
+      found=0
+    fi
+    if [[ -n "$found" && "$found" -ge 1 ]]; then
+      echo "Release run(s) for $release_tag (commit $tag_sha) already in Actions: $found" >&2
+      return 0
+    fi
+    if [[ "$_round" -lt 6 ]]; then
+      sleep 5
+    fi
+  done
+  echo "No Release run for $release_tag@$tag_sha after ~30s; dispatching (backup for missed tag push trigger)" >&2
+  # gh run URL to stderr; keep stdout clean for eval "$(bash …)" in CI.
   gh workflow run Release \
-    --repo "$GITHUB_REPOSITORY" \
-    --ref "$release_tag" \
-    -f version="${release_tag#v}" >&2
+    -R "$GITHUB_REPOSITORY" \
+    -f version="${release_tag#v}" \
+    --ref "$release_tag" >&2
 }
 
 run_self_test() {
