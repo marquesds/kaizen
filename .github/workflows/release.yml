@@ -1,5 +1,10 @@
 name: Release
 
+# Avoid overlapping duplicate runs when a tag both triggers on.push and push-release-tag dispatches
+concurrency:
+  group: release-${{ github.ref_name || github.run_id }}
+  cancel-in-progress: false
+
 on:
   push:
     tags:
