@@ -24,7 +24,9 @@ jobs:
     name: verify version matches
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.v.outputs.version }}
+      cargo_version: ${{ steps.v.outputs.cargo_version }}
+      notes_section: ${{ steps.v.outputs.notes_section }}
+      release_version: ${{ steps.v.outputs.release_version }}
     steps:
       - uses: actions/checkout@v4
       - id: v
@@ -32,6 +34,7 @@ jobs:
           DISPATCH_VERSION: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.version || '' }}
         run: |
           CARGO_VER=$(awk -F'"' '/^version = / {print $2; exit}' Cargo.toml)
+          echo "cargo_version=$CARGO_VER" >> "$GITHUB_OUTPUT"
           if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
             V="${DISPATCH_VERSION#v}"
             if [ -z "$V" ]; then
@@ -42,15 +45,27 @@ jobs:
               echo "input v${V} != Cargo.toml ${CARGO_VER}" >&2
               exit 1
             fi
-            echo "version=$V" >> "$GITHUB_OUTPUT"
+            echo "notes_section=$CARGO_VER" >> "$GITHUB_OUTPUT"
+            echo "release_version=$V" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           TAG="${GITHUB_REF#refs/tags/v}"
-          if [ "$TAG" != "$CARGO_VER" ]; then
-            echo "tag v$TAG != Cargo.toml $CARGO_VER" >&2
-            exit 1
+          case "$TAG" in
+            "$CARGO_VER")
+              echo "notes_section=$CARGO_VER" >> "$GITHUB_OUTPUT"
+              ;;
+            "$CARGO_VER"-*)
+              echo "notes_section=Unreleased" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "tag v$TAG does not match Cargo.toml $CARGO_VER" >&2
+              exit 1
+              ;;
+          esac
+          echo "release_version=$TAG" >> "$GITHUB_OUTPUT"
+          if [ "$TAG" = "$CARGO_VER" ]; then
+            exit 0
           fi
-          echo "version=$TAG" >> "$GITHUB_OUTPUT"
 
   build:
     name: build ${{ matrix.target }}
@@ -90,7 +105,7 @@ jobs:
       - name: Package
         id: pkg
         run: |
-          VERSION="${{ needs.verify.outputs.version }}"
+          VERSION="${{ needs.verify.outputs.release_version }}"
           NAME="kaizen-v${VERSION}-${{ matrix.target }}"
           mkdir -p "dist/${NAME}"
           cp "target/${{ matrix.target }}/release/kaizen" "dist/${NAME}/"
@@ -119,11 +134,11 @@ jobs:
       - name: Extract changelog entry
         id: changelog
         run: |
-          VERSION="${{ needs.verify.outputs.version }}"
-          awk -v ver="$VERSION" '
+          SECTION="${{ needs.verify.outputs.notes_section }}"
+          awk -v section="$SECTION" '
             /^## \[/ {
               if (found) exit
-              if ($0 ~ "\\[" ver "\\]") { found=1; next }
+              if ($0 ~ "\\[" section "\\]") { found=1; next }
             }
             found { print }
           ' CHANGELOG.md > RELEASE_NOTES.md
@@ -134,12 +149,12 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ needs.verify.outputs.version }}
-          name: v${{ needs.verify.outputs.version }}
+          tag_name: v${{ needs.verify.outputs.release_version }}
+          name: v${{ needs.verify.outputs.release_version }}
           target_commitish: ${{ github.sha }}
           body_path: RELEASE_NOTES.md
           draft: false
-          prerelease: ${{ contains(needs.verify.outputs.version, '-') }}
+          prerelease: ${{ contains(needs.verify.outputs.release_version, '-') }}
           files: |
             dist/*.tar.gz
             dist/*.sha256
@@ -148,11 +163,11 @@ jobs:
         if: github.event_name == 'push'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ needs.verify.outputs.version }}
-          name: v${{ needs.verify.outputs.version }}
+          tag_name: v${{ needs.verify.outputs.release_version }}
+          name: v${{ needs.verify.outputs.release_version }}
           body_path: RELEASE_NOTES.md
           draft: false
-          prerelease: ${{ contains(needs.verify.outputs.version, '-') }}
+          prerelease: ${{ contains(needs.verify.outputs.release_version, '-') }}
           files: |
             dist/*.tar.gz
             dist/*.sha256
@@ -161,7 +176,7 @@ jobs:
     name: cargo publish
     needs: [verify, release]
     runs-on: ubuntu-latest
-    if: ${{ !contains(needs.verify.outputs.version, '-') }}
+    if: ${{ needs.verify.outputs.release_version == needs.verify.outputs.cargo_version && !contains(needs.verify.outputs.release_version, '-') }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable

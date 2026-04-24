@@ -31,7 +31,7 @@ here explicitly.
 - `docs/install.md`, `docs/usage.md`, `docs/concepts.md` — user-facing docs.
 - `CODE_OF_CONDUCT.md`, `SECURITY.md`, issue + PR templates.
 - `CHANGELOG.md` (this file).
-- Release workflow: tag `vX.Y.Z` → cross-compile, GitHub Release, crates.io publish.
+- Release workflow: first green CI on Cargo version `X.Y.Z` pushes exact tag `vX.Y.Z` and publishes crates.io; later green CI runs on the same Cargo version push prerelease tags like `vX.Y.Z-ci.<sha>` for GitHub Release binaries without re-publishing the crate.
 
 ### Changed
 - Config merge: `[retention]` and `[scan].min_rescan_seconds` now merge workspace + user TOML field-by-field (workspace first, then user overrides non-default fields). `[sources]` remains user-file-only.
