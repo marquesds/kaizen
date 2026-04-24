@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version (e.g. 0.1.0 or 0.1.0-ci.<sha>), must equal Cargo.toml or start with Cargo.toml plus '-' on the selected ref"
+        description: "e.g. 0.1.0 or 0.1.0-alpha.1 — must be same version line as Cargo.toml (MAJOR.MINOR) with PATCH >= Cargo.toml, or a prerelease tag whose base version matches that line"
         required: true
         type: string
 
@@ -40,38 +40,45 @@ jobs:
               echo "workflow_dispatch: version input is empty" >&2
               exit 1
             fi
-            case "$V" in
-              "$CARGO_VER")
-                echo "notes_section=$CARGO_VER" >> "$GITHUB_OUTPUT"
-                ;;
-              "$CARGO_VER"-*)
-                echo "notes_section=Unreleased" >> "$GITHUB_OUTPUT"
-                ;;
-              *)
-                echo "input v${V} does not match Cargo.toml ${CARGO_VER}" >&2
-                exit 1
-                ;;
-            esac
+            if ! echo "$CARGO_VER" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+              echo "Cargo.toml version must be MAJOR.MINOR.PATCH" >&2
+              exit 1
+            fi
+            BASE="${V%%-*}"
+            if ! echo "$BASE" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+              echo "input v${V} is not a valid version (MAJOR.MINOR.PATCH with optional -prerelease)" >&2
+              exit 1
+            fi
+            IFS=. read -r c_maj c_min c_patch <<< "$CARGO_VER"
+            IFS=. read -r t_maj t_min t_patch <<< "$BASE"
+            if [ "$t_maj.$t_min" = "$c_maj.$c_min" ] && [ "$t_patch" -ge "$c_patch" ]; then
+              echo "notes_section=$CARGO_VER" >> "$GITHUB_OUTPUT"
+            else
+              echo "input v${V} is not on the same version line as Cargo.toml ${CARGO_VER}" >&2
+              exit 1
+            fi
             echo "release_version=$V" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           TAG="${GITHUB_REF#refs/tags/v}"
-          case "$TAG" in
-            "$CARGO_VER")
-              echo "notes_section=$CARGO_VER" >> "$GITHUB_OUTPUT"
-              ;;
-            "$CARGO_VER"-*)
-              echo "notes_section=Unreleased" >> "$GITHUB_OUTPUT"
-              ;;
-            *)
-              echo "tag v$TAG does not match Cargo.toml $CARGO_VER" >&2
-              exit 1
-              ;;
-          esac
-          echo "release_version=$TAG" >> "$GITHUB_OUTPUT"
-          if [ "$TAG" = "$CARGO_VER" ]; then
+          if ! echo "$CARGO_VER" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Cargo.toml version must be MAJOR.MINOR.PATCH" >&2
+            exit 1
+          fi
+          BASE="${TAG%%-*}"
+          if ! echo "$BASE" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "tag v$TAG is not a valid vMAJOR.MINOR.PATCH (optional -prerelease)" >&2
+            exit 1
+          fi
+          IFS=. read -r c_maj c_min c_patch <<< "$CARGO_VER"
+          IFS=. read -r t_maj t_min t_patch <<< "$BASE"
+          if [ "$t_maj.$t_min" = "$c_maj.$c_min" ] && [ "$t_patch" -ge "$c_patch" ]; then
+            echo "notes_section=$CARGO_VER" >> "$GITHUB_OUTPUT"
+            echo "release_version=$TAG" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          echo "tag v$TAG is not on the same version line as Cargo.toml $CARGO_VER" >&2
+          exit 1
 
   build:
     name: build ${{ matrix.target }}
