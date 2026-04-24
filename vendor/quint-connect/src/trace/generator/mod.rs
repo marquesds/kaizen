@@ -28,7 +28,12 @@ pub(crate) fn generate_traces<C: Config>(config: &C) -> Result<Traces> {
     if !output.status.success() {
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(anyhow!("stdout:\n{stdout}\n\nstderr:\n{stderr}")).context("Quint returned non-zero code.");
+        // Single `anyhow!` (no context chain): the #[quint_run] test uses panic!("{err}"), which
+        // would otherwise only print the context wrapper, not the inner I/O.
+        return Err(anyhow!(
+            "Quint returned non-zero code (status {:?}).\nstdout:\n{stdout}\n\nstderr:\n{stderr}",
+            output.status.code()
+        ));
     }
 
     Traces::new(tmpdir)
