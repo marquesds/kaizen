@@ -155,6 +155,7 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
+          token: ${{ secrets.RELEASE_PUSH_TOKEN }}
           tag_name: v${{ needs.verify.outputs.release_version }}
           name: v${{ needs.verify.outputs.release_version }}
           target_commitish: ${{ github.sha }}
@@ -169,6 +170,7 @@ jobs:
         if: github.event_name == 'push'
         uses: softprops/action-gh-release@v2
         with:
+          token: ${{ secrets.RELEASE_PUSH_TOKEN }}
           tag_name: v${{ needs.verify.outputs.release_version }}
           name: v${{ needs.verify.outputs.release_version }}
           body_path: RELEASE_NOTES.md
