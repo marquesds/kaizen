@@ -31,7 +31,7 @@ long-form markdown stays in this repo.
 | One pane of glass across agents | glue scripts | ✅ unified store, one CLI, one MCP |
 | Turn observations into change | dashboards only | ✅ weekly heuristic **retro** + **experiments** (A/B) |
 | Self-host, not locked to a vendor cloud | needs an account | ✅ deploy the binary, tail agent sessions live, SQLite + optional **redacted** sync |
-| Ship MCP tools to agents | depends | ✅ every CLI command surfaces as an MCP tool |
+| Ship MCP tools to agents | depends | ✅ most commands as MCP tools; shell-only for doctor, guidance, gc, completions, proxy, telemetry |
 | Rust, single static binary, sub‑second cold start | varies | ✅ build from a checkout (`cargo install --path .` or `./scripts/install-local.sh`) |
 
 Kaizen is not a dashboard — it is an opinionated feedback loop: **capture → summarise → propose change → measure**. Start with `kaizen init` in any repo where you use a coding agent.
@@ -51,6 +51,7 @@ local SQLite; optional HTTP proxy logging adds another path. A metrics pass ties
 | Heuristic “what to change” weekly bets | [docs/retro.md](docs/retro.md) |
 | A/B a rule or change against a metric | [docs/experiments.md](docs/experiments.md) |
 | The end-to-end data story (ingest → store → facts) | [docs/telemetry-journey.md](docs/telemetry-journey.md) |
+| Hands-on tutorial (all features, exercises) | [docs/tutorial/README.md](docs/tutorial/README.md) |
 
 ## Demo
 
@@ -105,13 +106,14 @@ kaizen exp new --name add-skill \
 
 `kaizen init` creates both hook files when absent and patches them idempotently when present. Re-running is safe; originals back up under `.kaizen/backup/`.
 
-Full CLI reference: [docs/usage.md](docs/usage.md).
+Full CLI reference: [docs/usage.md](docs/usage.md). Guided walkthrough: [docs/tutorial/README.md](docs/tutorial/README.md).
 
 ## Docs
 
 | Doc | Purpose |
 |---|---|
 | [docs/install.md](docs/install.md) | Install, build from source, uninstall |
+| [docs/tutorial/README.md](docs/tutorial/README.md) | Hands-on tutorial (all major features) |
 | [docs/usage.md](docs/usage.md) | CLI reference |
 | [docs/concepts.md](docs/concepts.md) | Sessions, events, retro, experiments |
 | [docs/architecture.md](docs/architecture.md) | Module graph, data flow |

@@ -14,18 +14,18 @@ use rmcp::tool_router;
 use serde::Deserialize;
 
 /// Static help for model routing (keep in sync with `kaizen --help` groups).
-const MCP_CAPABILITIES: &str = r#"Kaizen MCP maps 1:1 to the `kaizen` CLI.
+const MCP_CAPABILITIES: &str = r#"Kaizen MCP exposes most `kaizen` CLI workflows as tools. Shell-only today: doctor, guidance, gc, completions, proxy run, telemetry subcommands.
 
 - kaizen_summary — Session counts, USD cost, by-agent/model, top tools. Use for spend and volume. Optional json=true.
 - kaizen_metrics — Code hotspots, slow tools (p95), token-heavy tools, churn. Use for **repository** and tool latency. Optional json.
-- kaizen_sessions_list / kaizen_session_show — Raw session list and one session. Optional json on list.
+- kaizen_sessions_list / kaizen_session_show — Session list and one session metadata. Optional json on list.
 - kaizen_insights — Activity dashboard (7d). kaizen_retro — weekly bets. kaizen_exp_* — experiments.
 - List/summary/insights/metrics/retro are cache-first; set refresh=true to force a full transcript rescan (matches CLI --refresh).
 - sessions_list/summary/insights/metrics also accept all_workspaces=true to aggregate across registered workspace-local DBs.
 - kaizen_ingest_hook — same as `kaizen ingest hook` (rare; hooks call this).
 - kaizen_init — idempotent .kaizen/ + hook patches. kaizen_sync_* — outbox. kaizen_tui — not available (returns JSON stub).
 
-Docs: https://github.com/lucasmarqs/kaizen/blob/main/docs/mcp.md
+Docs: https://github.com/marquesds/kaizen/blob/main/docs/mcp.md
 "#;
 
 fn ok_str(s: String) -> Result<CallToolResult, ErrorData> {
@@ -551,6 +551,6 @@ impl KaizenMcp {
 #[tool_handler(
     name = "kaizen",
     version = "0.1.0",
-    instructions = "kaizen: local agent telemetry. Call `kaizen_capabilities` first if unsure. Cost/volume: `kaizen_summary`. Code hotspots and slow tools: `kaizen_metrics`. Tools mirror the CLI. Workspace defaults to the server cwd. `kaizen_tui` is CLI-only. `kaizen_sync_run` supports once=true only."
+    instructions = "kaizen: local agent telemetry. Call `kaizen_capabilities` first if unsure. Cost/volume: `kaizen_summary`. Code hotspots and slow tools: `kaizen_metrics`. Most CLI workflows are here; shell-only: doctor, guidance, gc, completions, proxy, telemetry. Workspace defaults to the server cwd. `kaizen_tui` is interactive CLI-only. `kaizen_sync_run` supports once=true only."
 )]
 impl ServerHandler for KaizenMcp {}

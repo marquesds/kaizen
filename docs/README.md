@@ -7,7 +7,7 @@ Index.
 If you are new to **what** gets stored and **in what order**, read
 [telemetry-journey.md](telemetry-journey.md) first. It connects transcripts, hooks, and the
 optional HTTP proxy to the SQLite tables and derived facts. Use [concepts.md](concepts.md) as a
-glossary.
+glossary. For a **guided tour** with exercises, start at [tutorial/README.md](tutorial/README.md).
 
 ## For users
 
@@ -15,8 +15,9 @@ glossary.
 |---|---|
 | [install.md](install.md) | Install, build from source, uninstall |
 | [telemetry-journey.md](telemetry-journey.md) | How agent sessions map to data (ingest → events → facts) |
+| [tutorial/README.md](tutorial/README.md) | Hands-on tutorial (all major features + exercises) |
 | [usage.md](usage.md) | CLI reference |
-| [mcp.md](mcp.md) | MCP stdio server (agent hosts, full CLI parity) |
+| [mcp.md](mcp.md) | MCP stdio server (agent hosts; most commands as tools) |
 | [llm-proxy.md](llm-proxy.md) | Local HTTP forwarder for LLM APIs (Anthropic) |
 | [concepts.md](concepts.md) | Sessions, events, retro, experiments |
 | [config.md](config.md) | Config file + env vars, sync, proxy, pluggable telemetry |
@@ -51,7 +52,8 @@ glossary.
 | Ingest / sync contract | `ingest-contract.md` |
 | Retro / experiments product spec | `retro.md` / `experiments.md` |
 | New CLI command or flag | `usage.md` |
+| New user-facing feature or meaningful flag / behavior | `usage.md` and the relevant [tutorial](tutorial/README.md) part (or new part) |
 | New Quint spec or change to spec/test pairing | [quint-coverage.md](quint-coverage.md) |
-| User-facing learning story or pipeline change | [telemetry-journey.md](telemetry-journey.md), [architecture.md](architecture.md) |
+| User-facing learning story or pipeline change | [telemetry-journey.md](telemetry-journey.md), [architecture.md](architecture.md), [tutorial](tutorial/README.md) as needed |
 
 Stale docs worse than no docs — keep current or delete.

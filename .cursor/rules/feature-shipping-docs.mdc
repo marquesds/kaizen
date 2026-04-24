@@ -1,0 +1,35 @@
+---
+description: Ship user-facing features with reference docs, tutorial, and index updates
+alwaysApply: true
+---
+
+# Product documentation (user-facing)
+
+When you add or materially change **user-facing** behavior, update docs in the same change (or immediately after), not “later.”
+
+## Triggers
+
+Apply when you touch any of:
+
+- CLI subcommands, flags, or default behavior (`src/main.rs`, `src/shell/`)
+- MCP tools or tool parameters (`src/mcp/`)
+- Config schema, env vars, or merge rules (`src/core/config.rs`, `docs/config.md`)
+- Ingest paths, sync contract, or redaction expectations
+- Tutorial-relevant workflows (anything a user would try in [docs/tutorial/](docs/tutorial/))
+
+Rust `///` on private helpers stays governed by [documentation.mdc](documentation.mdc) (minimal, contract-only). This rule is for **markdown** and learning paths.
+
+## Checklist
+
+1. **Reference** — Update the right doc: [docs/usage.md](docs/usage.md) for CLI; [docs/mcp.md](docs/mcp.md) for MCP tools; [docs/config.md](docs/config.md) for config/env; [docs/concepts.md](docs/concepts.md) or [docs/telemetry-journey.md](docs/telemetry-journey.md) when the mental model shifts.
+2. **Tutorial** — Extend the relevant part under [docs/tutorial/](docs/tutorial/) (or add a part + link it from [docs/tutorial/README.md](docs/tutorial/README.md)) so the feature appears in the learning path, not only in the reference.
+3. **Index** — Update [docs/README.md](docs/README.md) if you add a new doc or rename paths.
+4. **README** — Update the root [README.md](README.md) only when the change is **flagship** (new top-level capability or install impact).
+5. **Quint** — If behavior is model-checked, update [docs/quint-coverage.md](docs/quint-coverage.md) per the existing spec/test table.
+
+## Accuracy
+
+- Do not claim **full MCP/CLI parity** unless every command is exposed; list **CLI-only** commands explicitly (see [docs/mcp.md](docs/mcp.md) and [docs/usage.md](docs/usage.md#kaizen-mcp)).
+- Keep [docs/README.md](docs/README.md) “Keep docs current” table aligned with this checklist.
+
+Stale user docs are worse than missing ones — update or remove.

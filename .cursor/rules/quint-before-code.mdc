@@ -1,5 +1,5 @@
 ---
-description: Quint spec in specs/ before Rust when behavior needs formal model
+description: Quint spec in specs/ before Rust
 alwaysApply: true
 ---
 

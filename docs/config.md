@@ -24,6 +24,12 @@ LLM HTTP proxy: [llm-proxy.md](llm-proxy.md).
 | `HOME` | (required) | Resolves `~` paths and the user config location |
 | `KAIZEN_HOME` | (unset) | Overrides the machine-local Kaizen home used for the workspace registry and other non-workspace files |
 
+## Machine-local registry
+
+Kaizen stores a list of workspace roots it has seen under **`$KAIZEN_HOME/workspaces.json`** (default **`~/.kaizen/workspaces.json`**). Any command that resolves a workspace (default cwd or `--workspace`) **registers** that canonical path.
+
+When you pass **`--all-workspaces`** (or MCP `all_workspaces: true`), Kaizen loads that list, ensures the current workspace is included, **drops entries that no longer have** `.kaizen/kaizen.db` (except the seed workspace), then opens each remaining DB and merges results. See [usage.md](usage.md) for which commands support this.
+
 ## `[scan]`
 
 | Key | Default | Purpose |

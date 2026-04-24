@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Model Context Protocol (stdio) — full CLI parity.
+//! Model Context Protocol (stdio) — most CLI workflows as MCP tools (see `docs/mcp.md` for shell-only commands).
 
 mod handler;
 

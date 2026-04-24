@@ -1,6 +1,6 @@
 # kaizen MCP (stdio)
 
-Run the [Model Context Protocol](https://modelcontextprotocol.io) server for **full CLI parity** from agents (Cursor, Claude Code, Goose, OpenCode, GitHub Copilot, and other MCP hosts) without shelling to `kaizen`.
+Run the [Model Context Protocol](https://modelcontextprotocol.io) server so agents (Cursor, Claude Code, Goose, OpenCode, GitHub Copilot, and other MCP hosts) can call **most** `kaizen` workflows without shelling. **Not on MCP (use the real CLI):** `doctor`, `guidance`, `gc`, `completions`, `proxy run`, `telemetry configure`, `telemetry print-effective-config`.
 
 The MCP tools are cache-first by default. They read the local `.kaizen/kaizen.db` immediately, and only rescan external agent transcript stores when you pass `refresh: true`.
 
@@ -118,7 +118,7 @@ Set any value to `false` to skip that agent’s local scan (useful if a VS Code 
 | `kaizen_summary` | `kaizen summary` | Optional `json: true`, `refresh: true`, `all_workspaces: true`. |
 | `kaizen_tui` | `kaizen tui` | Not runnable over MCP; returns a structured “use CLI” payload with `is_error` semantics. |
 | `kaizen_init` | `kaizen init` | Writes/updates workspace files, same as CLI. |
-| `kaizen_insights` | `kaizen insights` | Optional `refresh: true`. |
+| `kaizen_insights` | `kaizen insights` | Optional `refresh: true`, `all_workspaces: true`. |
 | `kaizen_metrics` | `kaizen metrics` | `days`, `json`, `force`, `workspace`, optional `refresh`, optional `all_workspaces`. |
 | `kaizen_metrics_index` | `kaizen metrics index` | |
 | `kaizen_sync_run` | `kaizen sync run` | **Only `once: true` is supported** (default). Continuous sync must use a real shell / service. |
