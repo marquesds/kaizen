@@ -10,6 +10,17 @@ here explicitly.
 
 ## [Unreleased]
 
+### Changed
+
+- `Cargo.toml` no longer excludes `assets/` so `cargo publish` / docs.rs builds resolve
+  `include_str!` for embedded defaults and the retro skill template.
+- The crates.io / `cargo install` **package** name is **`kaizen-cli`** (the unscoped `kaizen` crate on
+  the registry is unrelated); the `[[bin]]` and library names stay **`kaizen`**. README,
+  `docs/install.md`, and `CONTRIBUTING` document `cargo install kaizen-cli` and, under
+  `packaging/homebrew/`, a sample tap formula and [`packaging/homebrew/README.md`](packaging/homebrew/README.md)
+  for Homebrew. `Cargo.toml` `repository` / `homepage` use `https://github.com/marquesds/kaizen`;
+  `CONTRIBUTING` still documents `CARGO_REGISTRY_TOKEN` and `RELEASE_PUSH_TOKEN`.
+
 ### Fixed
 
 - `kaizen metrics` / `kaizen metrics index` returned `PARSE_ERROR` on `CONTAINS` because GraphQLite treats it as a reserved keyword; the codegraph now uses `HAS_FILE`.
@@ -50,5 +61,5 @@ here explicitly.
 
 Initial public release. See `docs/usage.md` and the `[Unreleased]` section above for capabilities.
 
-[Unreleased]: https://github.com/lucasmarqs/kaizen/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/lucasmarqs/kaizen/releases/tag/v0.1.0
+[Unreleased]: https://github.com/marquesds/kaizen/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/marquesds/kaizen/releases/tag/v0.1.0

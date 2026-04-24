@@ -9,7 +9,7 @@ Please read the [Code of Conduct](CODE_OF_CONDUCT.md) before engaging.
 ## Getting started
 
 ```bash
-git clone https://github.com/lucasmarqs/kaizen
+git clone https://github.com/marquesds/kaizen
 cd kaizen
 cargo build
 cargo test
@@ -95,10 +95,10 @@ change behavior or data flow, update the listed documents in the same PR when pr
 
 ### Where docs are published
 
-- **GitHub:** the `docs/` tree in this repository is the home for long-form documentation.
-- **crates.io / docs.rs:** not live for this crate yet. After the first `cargo publish`, the
-  package will document the **Rust API** on docs.rs; it will not include the `docs/` markdown
-  (see `exclude` in `Cargo.toml`).
+- **GitHub:** the `docs/` tree in this repository is the home for long-form user documentation.
+- **crates.io / docs.rs:** the package [`kaizen-cli`](https://crates.io/crates/kaizen-cli) documents the
+  **Rust API** on [docs.rs/kaizen-cli](https://docs.rs/kaizen-cli). The `docs/` markdown book is not in the
+  registry tarball (see `exclude` in `Cargo.toml`). The on-disk CLI binary remains **`kaizen`**.
 
 ## Versioning
 
@@ -110,8 +110,24 @@ minor versions; document in `CHANGELOG.md`.
 The workflow is [`.github/workflows/release.yml`](.github/workflows/release.yml)
 (Linux and macOS binaries, GitHub Release, and crates.io for stable version
 names — no `-[prerelease]` suffix in the SemVer). Local `cargo login` is not
-used in CI. Add a [crates.io API token](https://doc.rust-lang.org/cargo/reference/publishing.html)
-with `publish` scope to the repository secret **`CARGO_REGISTRY_TOKEN`**.
+used in CI.
+
+### Required GitHub Actions secrets
+
+Configure these under **Settings → Secrets and variables → Actions** (or
+organization-level equivalents):
+
+| Secret | Purpose |
+|--------|---------|
+| **`CARGO_REGISTRY_TOKEN`** | [crates.io API token](https://doc.rust-lang.org/cargo/reference/publishing.html) with **publish** scope. Without it, the `cargo publish` job fails. |
+| **`RELEASE_PUSH_TOKEN`** | PAT used to create GitHub Releases and tags from the workflow (see the workflow’s `softprops/action-gh-release` steps). |
+
+### First `cargo publish` to crates.io
+
+- This repository publishes the **package name `kaizen-cli`** (the [`kaizen`](https://crates.io/crates/kaizen)
+  name on crates.io is a different, third-party crate). `cargo publish` publishes `kaizen-cli`.
+- Pushing a stable tag that **exactly** matches `version` in `Cargo.toml` (e.g. `v0.1.0` and
+  `0.1.0`) is what triggers `cargo publish` (see the `publish` job’s `if:` in the workflow file).
 
 **Path A (GitHub — creates tag in CI).** On `main`, merge a commit that
 bumps `version` in `Cargo.toml` and adds a `## [X.Y.Z]` section in
@@ -126,6 +142,18 @@ version is a stable (non-prerelease) release.
 checks, bumps the version, commits, creates a **signed** `vX.Y.Z` tag, and
 pushes. Pushing the tag still triggers the same workflow; use this when you
 need GPG-signed tags.
+
+**Path C (manual tag on `main`).** If you already merged the release commit
+and only need to trigger the workflow, ensure the tag matches `version` in
+`Cargo.toml` (e.g. `0.1.0` → `v0.1.0`):
+
+```bash
+git switch main && git pull
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+Skip the manual `git tag` if you used Path A (the workflow creates the tag).
 
 ## Security
 

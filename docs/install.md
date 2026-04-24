@@ -1,14 +1,45 @@
 # Install
 
-There is no crates.io package for this repository yet. You build the CLI from a **git clone**
-and put `kaizen` on your `PATH` (see [From crates.io](#from-cratesio) for the future story).
+The registry package is **[`kaizen-cli`](https://crates.io/crates/kaizen-cli)**; `cargo install kaizen-cli`
+places the **`kaizen`** binary on your `PATH`. Prefer `cargo install kaizen-cli --locked` for released
+versions; use a **git clone** when you need `main` or are contributing. Long-form user docs live in
+the [GitHub `docs/`](https://github.com/marquesds/kaizen/tree/main/docs) tree, not in the registry package tarball.
 
 ## Requirements
 
 - **Rust 1.95+** (edition 2024). Install with [rustup](https://rustup.rs), then `rustup update stable`.
-- **Git** to clone the repository.
+- **Git** for a source install or development (not required for `cargo install` from crates.io).
 - **macOS or Linux.** Windows is not supported in v0.1.
 - Optional (contributors): Node 20+ for Quint specs, `cargo-audit`, `cargo-deny`.
+
+## From crates.io
+
+**Recommended for end users** — installs a released version into Cargo’s bin directory
+(`~/.cargo/bin/kaizen`, or `$CARGO_HOME/bin/kaizen`):
+
+```bash
+cargo install kaizen-cli --locked
+```
+
+- Pin a version if you need a specific line: `cargo install kaizen-cli --locked --version 0.1.0`, or
+  install from a git revision (see the [cargo install](https://doc.rust-lang.org/cargo/commands/cargo-install.html#installing-a-git-repository) book section).
+
+The unrelated [`kaizen`](https://crates.io/crates/kaizen) crate on crates.io is a different project; this repository publishes as **`kaizen-cli`** only.
+
+## From Homebrew (third-party tap)
+
+There is no [homebrew-core](https://github.com/Homebrew/homebrew-core) formula in this repository
+yet. Install from a **tap** that hosts the formula (for example your own
+[`homebrew-tap`](https://github.com/marquesds/homebrew-tap) after you copy
+[`packaging/homebrew/kaizen-cli.rb`](https://github.com/marquesds/kaizen/blob/main/packaging/homebrew/kaizen-cli.rb)
+and fill in `sha256` from the release assets). Maintainer steps: [packaging/homebrew/README.md](https://github.com/marquesds/kaizen/blob/main/packaging/homebrew/README.md).
+
+```bash
+brew tap marquesds/tap
+brew install kaizen-cli
+```
+
+This installs the **`kaizen`** binary (formula name `kaizen-cli`). Uninstall: `brew uninstall kaizen-cli`.
 
 ## Install from a git clone
 
@@ -61,15 +92,15 @@ cargo build --release
 # run with full path, or symlink `kaizen` somewhere on PATH
 ```
 
-## From crates.io
+## Update or reinstall
 
-**Not published yet.** Do not run `cargo install kaizen` for this project today; the `kaizen`
-name on crates.io may point at a **different** crate. When this repository is published, this
-section will document `cargo install kaizen`.
+**From crates.io** (picks latest compatible release, or set `--version`):
 
-## Update or reinstall from the same clone
+```bash
+cargo install kaizen-cli --locked --force
+```
 
-After `git pull` (or local edits), reinstall from the repo root:
+**From the same git clone** — after `git pull` (or local edits), reinstall from the repo root:
 
 ```bash
 ./scripts/install-local.sh
@@ -89,7 +120,7 @@ Safe to rerun.
 ## Uninstall
 
 ```bash
-cargo uninstall kaizen
+cargo uninstall kaizen-cli
 rm -rf ~/.kaizen .kaizen
 ```
 

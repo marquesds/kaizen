@@ -7,9 +7,9 @@
 //!
 //! # Documentation for users
 //!
-//! Prose lives in the repository on GitHub: [`docs/`](https://github.com/lucasmarqs/kaizen/tree/main/docs)
-//! (CLI, configuration, and the [telemetry journey](https://github.com/lucasmarqs/kaizen/blob/main/docs/telemetry-journey.md)
-//! explainer). The [docs.rs](https://docs.rs/kaizen) page documents **this** Rust API; it does
+//! Prose lives in the repository on GitHub: [`docs/`](https://github.com/marquesds/kaizen/tree/main/docs)
+//! (CLI, configuration, and the [telemetry journey](https://github.com/marquesds/kaizen/blob/main/docs/telemetry-journey.md)
+//! explainer). The [docs.rs](https://docs.rs/kaizen-cli) page documents **this** Rust API; it does
 //! not include the `docs/` markdown because that folder is excluded from the published crate
 //! (see `exclude` in `Cargo.toml`).
 

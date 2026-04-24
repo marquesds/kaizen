@@ -5,7 +5,7 @@ use std::io::Read;
 use std::io::Write;
 use std::path::PathBuf;
 
-const LONG_ABOUT: &str = "Deploy and share kaizen: real-time-tailable agent sessions, retros, and experiments to improve your repo, across Cursor, Claude Code, and Codex. One SQLite store; redact before any sync. Docs: https://github.com/lucasmarqs/kaizen/blob/main/docs/README.md";
+const LONG_ABOUT: &str = "Deploy and share kaizen: real-time-tailable agent sessions, retros, and experiments to improve your repo, across Cursor, Claude Code, and Codex. One SQLite store; redact before any sync. Docs: https://github.com/marquesds/kaizen/blob/main/docs/README.md";
 
 #[derive(Parser)]
 #[command(

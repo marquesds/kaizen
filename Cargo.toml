@@ -1,14 +1,14 @@
 [package]
-name = "kaizen"
+name = "kaizen-cli"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.95"
 authors = ["Lucas Marques <hi@lucasmarques.me>"]
 license = "AGPL-3.0-or-later"
 description = "Distributable agent observability: real-time-tailable sessions, agile-style retros, and repo-level improvement (Cursor, Claude Code, Codex). SQLite, redact before any sync you enable."
-repository = "https://github.com/lucasmarqs/kaizen"
-homepage = "https://github.com/lucasmarqs/kaizen"
-documentation = "https://docs.rs/kaizen"
+repository = "https://github.com/marquesds/kaizen"
+homepage = "https://github.com/marquesds/kaizen"
+documentation = "https://docs.rs/kaizen-cli"
 readme = "README.md"
 keywords = ["ai", "agent", "telemetry", "cursor", "claude"]
 categories = ["command-line-utilities", "development-tools"]
@@ -18,7 +18,6 @@ exclude = [
     ".cursor/",
     ".claude/",
     "specs/",
-    "assets/",
     "docs/",
     "scripts/",
     ".github/",
@@ -139,6 +138,10 @@ path = "tests/spec/auto_update.rs"
 [[test]]
 name = "multi_workspace"
 path = "tests/spec/multi_workspace.rs"
+
+[[test]]
+name = "provider_pull_cache"
+path = "tests/spec/provider_pull_cache.rs"
 
 [features]
 default = []

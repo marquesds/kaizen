@@ -14,16 +14,17 @@ When to add or extend a spec: see [`.cursor/rules/quint-before-code.mdc`](../.cu
 | [`specs/init-setup.qnt`](../specs/init-setup.qnt) | `tests/spec/init_setup.rs` | `init` |
 | [`specs/retention.qnt`](../specs/retention.qnt) | `tests/spec/retention.rs` | tier aging |
 | [`specs/sync-backpressure.qnt`](../specs/sync-backpressure.qnt) | `tests/spec/sync_backpressure.rs` | sync |
-| [`specs/telemetry-exporters.qnt`](../specs/telemetry-exporters.qnt) | `tests/spec/telemetry_exporters.rs` | telemetry |
+| [`specs/telemetry-exporters.qnt`](../specs/telemetry-exporters.qnt) | `tests/spec/telemetry_exporters.rs` | telemetry (query authority + N-way fan-out) |
+| [`specs/provider-pull-cache.qnt`](../specs/provider-pull-cache.qnt) | `tests/spec/provider_pull_cache.rs` | provider pull / remote cache |
 | [`specs/mcp-server.qnt`](../specs/mcp-server.qnt) | `tests/spec/mcp_server.rs` | MCP |
 | [`specs/llm-proxy.qnt`](../specs/llm-proxy.qnt) | `tests/spec/llm_proxy.rs` | proxy |
 | [`specs/experiment-lifecycle.qnt`](../specs/experiment-lifecycle.qnt) | `tests/spec/experiment_lifecycle.rs` | experiments |
 | [`specs/auto-update.qnt`](../specs/auto-update.qnt) | `tests/spec/auto_update.rs` | auto-update |
-| [`specs/redaction-completeness.qnt`](../specs/redaction-completeness.qnt) | `tests/spec/redaction_completeness.rs` | redaction |
-| [`specs/retro-pipeline.qnt`](../specs/retro-pipeline.qnt) | `tests/spec/retro_pipeline.rs` | retro pipeline |
+| [`specs/redaction-completeness.qnt`](../specs/redaction-completeness.qnt) | `tests/spec/redaction_completeness.rs` | redaction (forbidden content vs allowlisted labels) |
+| [`specs/retro-pipeline.qnt`](../specs/retro-pipeline.qnt) | `tests/spec/retro_pipeline.rs` | retro pipeline (source + optional `RemotePull`) |
 | [`specs/doctor-diagnostic.qnt`](../specs/doctor-diagnostic.qnt) | `tests/spec/doctor_diagnostic.rs` | `doctor` checks |
 | [`specs/gc-prune.qnt`](../specs/gc-prune.qnt) | `tests/spec/gc_prune.rs` | `gc` / vacuum ordering |
-| [`specs/observe-pipeline.qnt`](../specs/observe-pipeline.qnt) | `tests/spec/observe_pipeline.rs` | `sessions list`, `summary`, `insights`, `guidance` (shared read path) |
+| [`specs/observe-pipeline.qnt`](../specs/observe-pipeline.qnt) | `tests/spec/observe_pipeline.rs` | `sessions list`, `summary`, `insights`, `guidance` (source; mixed dedupe in spec) |
 | [`specs/session-lookup.qnt`](../specs/session-lookup.qnt) | `tests/spec/session_lookup.rs` | `sessions show` |
 | [`specs/metrics-pipeline.qnt`](../specs/metrics-pipeline.qnt) | `tests/spec/metrics_pipeline.rs` | `metrics` |
 | [`specs/tui-app.qnt`](../specs/tui-app.qnt) | `tests/spec/tui_app.rs` | TUI lifecycle |

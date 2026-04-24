@@ -224,7 +224,7 @@ fn sessions_empty_state_hints(out: &mut String) {
     let _ = writeln!(out, "  · a short agent session in this repo, then re-run");
     let _ = writeln!(
         out,
-        "  · docs: https://github.com/lucasmarqs/kaizen/blob/main/docs/config.md (sources)"
+        "  · docs: https://github.com/marquesds/kaizen/blob/main/docs/config.md (sources)"
     );
 }
 

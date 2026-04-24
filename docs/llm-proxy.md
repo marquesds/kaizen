@@ -90,4 +90,4 @@ context_policy = { type = "none" }
 ## Model checking
 
 - [`specs/llm-proxy.qnt`](../specs/llm-proxy.qnt) for abstract lifecycle invariants.
-- `cargo test -p kaizen --test llm_proxy` replays the Quint spec via `quint-connect`.
+- `cargo test -p kaizen-cli --test llm_proxy` replays the Quint spec via `quint-connect`.
