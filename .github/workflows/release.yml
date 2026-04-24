@@ -265,7 +265,7 @@ jobs:
             # Lock must match the package version in the manifest
             cargo build
           fi
-          cargo publish --locked --token "${CARGO_REGISTRY_TOKEN}"
+          cargo publish --locked --allow-dirty --token "${CARGO_REGISTRY_TOKEN}"
 
   sync-cargo-on-main:
     name: sync Cargo.toml on default branch
