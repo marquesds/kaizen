@@ -8,7 +8,7 @@ Retro engine ranks "bets" (improvements). Option: call LLM to
 generate bets from raw session data. Option: deterministic heuristics.
 
 ## Decision
-Deterministic heuristics only (H1–H8). No LLM in retro compute path.
+Deterministic heuristics only (H1–H14). No LLM in retro compute path.
 
 ## Rationale
 - Reproducible: same inputs, same report — enables CI + backtests.

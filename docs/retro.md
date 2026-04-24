@@ -37,14 +37,22 @@ Each heuristic = pure function `Inputs → Vec<Bet>`. Easy to test, easy to spec
 
 | ID | Name | Signal | Bet | Impact estimate |
 |---|---|---|---|---|
-| H1 | Dead Skill | Skill file in `.cursor/skills/` never in `skills_used` 30d AND not edited 60d | "Delete `.cursor/skills/<name>/`. Saves description-frontmatter tokens/session." | `description_bytes / 4 × sessions/day × 30` |
-| H2 | Hot File Cluster | Pair of files co-edited ≥ 5× in 14d, different modules | "Refactor `<a>` + `<b>` — hidden coupling, agents pay context cost loading both." | `co_edit_count × avg_context_tokens` |
-| H3 | Repeated Failed Edit | Same file ≥ 3× edit→test_fail→edit cycles in single session, recurring | "Add guardrail/test/invariant for `<file>` — agents loop here." | `loop_count × avg_loop_tokens` |
-| H4 | High-Cost Tool | Tool call (e.g. full-file read >500 lines) in top-10 cost contributors | "Tighten `read-hygiene` rule. $X/week from `<tool>`." | direct cost sum |
-| H5 | Idle Session Bloat | Sessions >30 min `idle` with no `done`, avg rising WoW | "Tune `scan.idleTtlMinutes`. Inflates active counts + sync noise." | count × bytes |
-| H6 | Skill Trigger Misfire | Skill triggered but `outcome = ignored` >70% | "Rewrite `<skill>` description. Wastes context budget." | `trigger_count × description_bytes` |
-| H7 | Model Mismatch | Cheap model loops/fails; expensive model on trivial reads | "Flip model routing for `<task pattern>`." | `cost_delta × frequency` |
-| H8 | Doc Drift | Agent reads `docs/<x>.md` then edits contradicting source ≥ 3× in 14d | "Update `docs/<x>.md`. Agents waste turns reconciling." | `contradict_count × recovery_tokens` |
+| H1 | Dead Skill / Rule | On-disk skill or `.mdc` rule unused in 30d lookback and not edited recently (stale mtime) | Remove or merge unused `.cursor/skills/<slug>/` or `.cursor/rules/*.mdc`. | size × usage proxy |
+| H2 | Hot File Cluster | Pair of files co-edited in ≥ 3 distinct sessions, different top-level path (window = `--days`) | Refactor `<a>` + `<b>` — hidden coupling. | co-edit count × complexity |
+| H3 | Path churn | Same path touched by ≥ 4 tool calls in one session (edit-loop proxy, not literal test failures) | Tighten guardrails for `<path>`. | touches × complexity |
+| H4 | Dominant tool | One tool ≥ 25% of aggregated tool events and ≥ 15 tool events total | Review read/search shortcuts for that tool. | calls + cost/reasoning proxy |
+| H5 | Idle bloat | ≥ 2 sessions stay `Idle` ≥ 30 minutes | Tune idle TTL / end sessions explicitly. | idle count × constant |
+| H6 | Skill misfire | ≥ 10 skill-like payloads, ≥ 70% “ignored” pattern | Rewrite skill description / triggers. | ignored × constant |
+| H7 | Premium overkill | ≥ 8 sessions, low average $/session, many “premium” model names | Route mechanical work to smaller models. | sessions × constant |
+| H8 | Doc drift | Same session: read under `docs/` then ≥ 3 edits to `.rs`/`.ts`/`.md` elsewhere | Refresh docs vs implementation. | drift hits × complexity |
+| H9 | Error budget | ≥ 6 `Error` events **or** ≥ 22% of sessions (≥ 5 sessions) with ≥ 1 error | Fix flaky tools / proxy / permissions. | error count × constant |
+| H10 | Shell / test failures | ≥ 3 failing shell-like `ToolResult`s in one session (`is_error` or exit/test-fail text heuristics) | Stabilize command or CI signal. | failures × constant |
+| H11 | Cost outlier | ≥ 6 sessions; one session’s attributed cost ≥ 4× the per-session mean and ≥ $0.04 | Inspect longest / hottest session. | cost delta proxy |
+| H12 | Large file reads | Read-like tool hits a path with `file_facts` LOC ≥ 500 or bytes ≥ 80k, ≥ 2 reads | Read-hygiene / split file. | reads × LOC |
+| H13 | Delegation load | MCP: ≥ 12% of tool calls are MCP-named (≥ 20 calls). Subagents: ≥ 15% of sessions have `trace_path` under `subagents/` (≥ 6 sessions; local Cursor best) | Reduce MCP chatter or subagent fan-out. | calls or sessions × constant |
+| H14 | Instruction bloat | ≥ 22 skill + rule files on disk **or** ≥ 140 KiB combined (≥ 10 items) | Consolidate rules/skills. | bytes / 8 proxy |
+
+**Provider-only note:** Remote cache rows omit `tool_spans` / `files_touched` / local indexes; H12 still uses local `file_facts` when indexed. H13 subagent detection relies on `trace_path` (often empty on synthetic remote sessions).
 
 ## Ranking
 
