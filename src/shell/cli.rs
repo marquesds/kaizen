@@ -286,6 +286,7 @@ pub fn summary_text(
     json_out: bool,
     refresh: bool,
     all_workspaces: bool,
+    source: crate::core::data_source::DataSource,
 ) -> Result<String> {
     let roots = scope::resolve(workspace, all_workspaces)?;
     let mut total_cost_usd_e6 = 0_i64;
@@ -297,10 +298,18 @@ pub fn summary_text(
     let mut slowest = Vec::new();
 
     for workspace in &roots {
+        let cfg = config::load(workspace)?;
         let store = open_workspace_store(workspace)?;
+        crate::shell::remote_pull::maybe_telemetry_pull(workspace, &store, &cfg, source, refresh)?;
         maybe_refresh_store(workspace, &store, refresh)?;
         let ws_str = workspace.to_string_lossy().to_string();
-        let stats = store.summary_stats(&ws_str)?;
+        let mut stats = store.summary_stats(&ws_str)?;
+        if source != crate::core::data_source::DataSource::Local
+            && let Ok(Some(agg)) =
+                crate::shell::remote_observe::try_remote_event_agg(&store, &cfg, workspace)
+        {
+            stats = crate::shell::remote_observe::merge_summary_stats(stats, &agg, source);
+        }
         total_cost_usd_e6 += stats.total_cost_usd_e6;
         session_count += stats.session_count;
         by_agent.push(stats.by_agent);
@@ -415,10 +424,11 @@ pub fn cmd_summary(
     json_out: bool,
     refresh: bool,
     all_workspaces: bool,
+    source: crate::core::data_source::DataSource,
 ) -> Result<()> {
     print!(
         "{}",
-        summary_text(workspace, json_out, refresh, all_workspaces)?
+        summary_text(workspace, json_out, refresh, all_workspaces, source,)?
     );
     Ok(())
 }

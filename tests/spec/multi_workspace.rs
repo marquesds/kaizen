@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use kaizen::DataSource;
 use kaizen::core::event::{Event, EventKind, EventSource, SessionRecord, SessionStatus};
 use kaizen::shell::cli::{sessions_list_text, summary_text};
+use kaizen::shell::scope;
 use kaizen::store::Store;
 use serde_json::json;
 use std::path::Path;
@@ -76,11 +78,38 @@ fn summary_aggregates_registered_workspaces() -> anyhow::Result<()> {
     seed_session(&ws1, "s1", "read_file")?;
     seed_session(&ws2, "s2", "shell")?;
 
-    let text = summary_text(Some(&ws1), true, false, true)?;
+    let text = summary_text(Some(&ws1), true, false, true, DataSource::Local)?;
     let json: serde_json::Value = serde_json::from_str(&text)?;
     assert_eq!(json["session_count"], 2);
     assert_eq!(json["workspaces"].as_array().map(|v| v.len()), Some(2));
 
+    clear_env("KAIZEN_HOME");
+    clear_env("HOME");
+    Ok(())
+}
+
+#[test]
+fn all_workspaces_includes_init_only_root_without_local_kaizen_db() -> anyhow::Result<()> {
+    let _guard = env_lock().lock().unwrap_or_else(|e| e.into_inner());
+    let home = TempDir::new()?;
+    let ws1 = home.path().join("repo-a");
+    let ws2 = home.path().join("repo-b");
+    std::fs::create_dir_all(&ws1)?;
+    std::fs::create_dir_all(&ws2)?;
+    let ws1 = std::fs::canonicalize(&ws1)?;
+    let ws2 = std::fs::canonicalize(&ws2)?;
+    set_env("HOME", home.path());
+    set_env("KAIZEN_HOME", home.path().join(".kaizen"));
+    kaizen::core::workspace::resolve(Some(&ws1))?;
+    kaizen::core::machine_registry::record_init(&ws2)?;
+    assert!(
+        !kaizen::core::workspace::db_path(&ws2).exists(),
+        "test assumes second repo has no .kaizen/kaizen.db yet"
+    );
+    let roots = scope::resolve(Some(&ws1), true)?;
+    assert_eq!(roots.len(), 2);
+    assert!(roots.contains(&ws1));
+    assert!(roots.contains(&ws2));
     clear_env("KAIZEN_HOME");
     clear_env("HOME");
     Ok(())

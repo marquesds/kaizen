@@ -37,8 +37,13 @@ the formula changes.
 brew uninstall kaizen-cli
 ```
 
-## Optional automation
+## Automation (default)
 
-A GitHub Action in the main `kaizen` repo can bump `version` and `sha256` in the tap on each
-release using a personal access token with `contents: write` on the tap repository. That is
-optional; the first release is usually updated manually as above.
+On stable releases, [`.github/workflows/release.yml`](../../.github/workflows/release.yml) runs the
+**`update-homebrew-tap`** job: it downloads the same build artifacts, runs
+[`scripts/render-homebrew-tap-formula.sh`](../../scripts/render-homebrew-tap-formula.sh), and pushes
+to `homebrew-tap` when the repository secret **`HOMEBREW_TAP_TOKEN`** is set (see
+[`CONTRIBUTING.md`](../../CONTRIBUTING.md)). No manual sha edit is required for normal releases.
+
+You can still run the script locally against a `dist/` directory of `.sha256` files if you need to
+fix the tap outside CI.

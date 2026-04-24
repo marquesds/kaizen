@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pub mod event_index;
+pub mod remote_cache;
 pub mod sqlite;
 pub mod tool_span_index;
+pub use remote_cache::{
+    RemoteCacheStore, RemoteEventAgg, RemotePullState, clear_remote_cache_tables,
+};
 pub use sqlite::GuidanceKind;
 pub use sqlite::GuidancePerfRow;
 pub use sqlite::GuidanceReport;

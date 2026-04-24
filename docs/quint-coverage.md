@@ -15,7 +15,10 @@ When to add or extend a spec: see [`.cursor/rules/quint-before-code.mdc`](../.cu
 | [`specs/retention.qnt`](../specs/retention.qnt) | `tests/spec/retention.rs` | tier aging |
 | [`specs/sync-backpressure.qnt`](../specs/sync-backpressure.qnt) | `tests/spec/sync_backpressure.rs` | sync |
 | [`specs/telemetry-exporters.qnt`](../specs/telemetry-exporters.qnt) | `tests/spec/telemetry_exporters.rs` | telemetry (query authority + N-way fan-out) |
+| [`specs/telemetry-push-replay.qnt`](../specs/telemetry-push-replay.qnt) | `tests/spec/telemetry_push_replay.rs` | `telemetry push` (exporter replay, chunking) |
 | [`specs/provider-pull-cache.qnt`](../specs/provider-pull-cache.qnt) | `tests/spec/provider_pull_cache.rs` | provider pull / remote cache |
+| [`specs/workspace-facts-sync.qnt`](../specs/workspace-facts-sync.qnt) | `tests/spec/workspace_facts_sync.rs` | outbox kind order: `events` before `workspace_facts` |
+| [`specs/provider-pull-event-keys.qnt`](../specs/provider-pull-event-keys.qnt) | `tests/spec/provider_pull_event_keys.rs` | pull upsert dedupes `(session_id_hash, event_seq)` composite keys |
 | [`specs/mcp-server.qnt`](../specs/mcp-server.qnt) | `tests/spec/mcp_server.rs` | MCP |
 | [`specs/llm-proxy.qnt`](../specs/llm-proxy.qnt) | `tests/spec/llm_proxy.rs` | proxy |
 | [`specs/experiment-lifecycle.qnt`](../specs/experiment-lifecycle.qnt) | `tests/spec/experiment_lifecycle.rs` | experiments |

@@ -84,7 +84,7 @@ fn build_exporter(c: &ExporterConfig) -> Option<Arc<dyn TelemetryExporter>> {
         ExporterConfig::Dev { .. } => {
             #[cfg(feature = "telemetry-dev")]
             {
-                return Some(Arc::new(dev::DevExporter) as _);
+                Some(Arc::new(dev::DevExporter) as _)
             }
             #[cfg(not(feature = "telemetry-dev"))]
             {
@@ -98,9 +98,7 @@ fn build_exporter(c: &ExporterConfig) -> Option<Arc<dyn TelemetryExporter>> {
             let r = PostHogResolved::from_config(c)?;
             #[cfg(feature = "telemetry-posthog")]
             {
-                return Some(
-                    Arc::new(posthog::PostHogExporter::new(&r.host, &r.project_api_key)) as _,
-                );
+                Some(Arc::new(posthog::PostHogExporter::new(&r.host, &r.project_api_key)) as _)
             }
             #[cfg(not(feature = "telemetry-posthog"))]
             {
@@ -115,7 +113,7 @@ fn build_exporter(c: &ExporterConfig) -> Option<Arc<dyn TelemetryExporter>> {
             let r = DatadogResolved::from_config(c)?;
             #[cfg(feature = "telemetry-datadog")]
             {
-                return Some(Arc::new(datadog::DatadogExporter::new(&r.site, &r.api_key)) as _);
+                Some(Arc::new(datadog::DatadogExporter::new(&r.site, &r.api_key)) as _)
             }
             #[cfg(not(feature = "telemetry-datadog"))]
             {
@@ -130,7 +128,7 @@ fn build_exporter(c: &ExporterConfig) -> Option<Arc<dyn TelemetryExporter>> {
             let r = OtlpResolved::from_config(c)?;
             #[cfg(feature = "telemetry-otlp")]
             {
-                return Some(Arc::new(otlp::OtlpExporter::new(&r.endpoint)) as _);
+                Some(Arc::new(otlp::OtlpExporter::new(&r.endpoint)) as _)
             }
             #[cfg(not(feature = "telemetry-otlp"))]
             {

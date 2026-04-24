@@ -49,7 +49,7 @@ SQLite WAL at `.kaizen/kaizen.db`. Single-writer tokio task. Append-only
 `repo_edges`). Graph sidecar at `.kaizen/codegraph.db` (SQLite + GraphQLite Cypher extension) for graph
 queries.
 
-**Machine-local registry:** paths to repos you have opened with Kaizen live in `~/.kaizen/workspaces.json` (or under `KAIZEN_HOME`) for `--all-workspaces` aggregation. See [config.md#machine-local-registry](config.md#machine-local-registry).
+**Machine-local registry:** paths to repos you have opened or inited with Kaizen are stored in `~/.kaizen/machine.db` (or under `KAIZEN_HOME`) for `--all-workspaces` aggregation. See [config.md#machine-local-registry](config.md#machine-local-registry).
 
 ## Redact
 

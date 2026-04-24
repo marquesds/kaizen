@@ -13,6 +13,14 @@ kaizen metrics --refresh
 
 Use **`--refresh`** when you care that transcript-derived events are up to date before metrics runs. Use **`--force`** when you want indexing work even if fingerprints look unchanged (see below).
 
+### `metrics` and `--source`
+
+```bash
+kaizen metrics --days 7 --source mixed
+```
+
+**File- and repo-backed sections** (hottest files, complexity, index snapshots) still come from the **local** repo index. **Tool-oriented sections** (slowest / highest-token tools) can also pick up **call and token totals from imported provider events** when you use `provider` or `mixed` and the remote cache has event-shaped JSON. If you have no query provider or no rows yet, you get the same result as `local`. See [Part 2](02-observe.md#data-source-local-provider-or-mixed) and [config.md](../config.md#telemetryquery).
+
 ## Rebuild the repo snapshot and graph sidecar
 
 ```bash

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! MCP `#[tool]` handlers (stdio server).
 
+use crate::core::data_source::DataSource;
 use crate::shell::exp::NewArgs;
 use crate::shell::ingest::{IngestSource, ingest_hook_string};
 use crate::shell::{cli, exp, init, insights, metrics, retro, sync};
@@ -14,7 +15,7 @@ use rmcp::tool_router;
 use serde::Deserialize;
 
 /// Static help for model routing (keep in sync with `kaizen --help` groups).
-const MCP_CAPABILITIES: &str = r#"Kaizen MCP exposes most `kaizen` CLI workflows as tools. Shell-only today: doctor, guidance, gc, completions, proxy run, telemetry subcommands.
+const MCP_CAPABILITIES: &str = r#"Kaizen MCP exposes most `kaizen` CLI workflows as tools. Shell-only today: doctor, guidance, gc, completions, proxy run, telemetry subcommands (init, doctor, pull, print-schema, configure, print-effective-config).
 
 - kaizen_summary — Session counts, USD cost, by-agent/model, top tools. Use for spend and volume. Optional json=true.
 - kaizen_metrics — Code hotspots, slow tools (p95), token-heavy tools, churn. Use for **repository** and tool latency. Optional json.
@@ -298,9 +299,16 @@ impl KaizenMcp {
         }): Parameters<WorkspaceJsonArg>,
     ) -> Result<CallToolResult, ErrorData> {
         let w = opt_path(&workspace);
-        let t =
-            run_blocking(move || cli::summary_text(w.as_deref(), json, refresh, all_workspaces))
-                .await?;
+        let t = run_blocking(move || {
+            cli::summary_text(
+                w.as_deref(),
+                json,
+                refresh,
+                all_workspaces,
+                DataSource::Local,
+            )
+        })
+        .await?;
         ok_str(t)
     }
 
@@ -345,9 +353,10 @@ impl KaizenMcp {
         }): Parameters<InsightsArg>,
     ) -> Result<CallToolResult, ErrorData> {
         let w = opt_path(&ws.workspace);
-        let t =
-            run_blocking(move || insights::insights_text(w.as_deref(), all_workspaces, refresh))
-                .await?;
+        let t = run_blocking(move || {
+            insights::insights_text(w.as_deref(), all_workspaces, refresh, DataSource::Local)
+        })
+        .await?;
         ok_str(t)
     }
 
@@ -368,7 +377,15 @@ impl KaizenMcp {
     ) -> Result<CallToolResult, ErrorData> {
         let w = opt_path(&ws.workspace);
         let t = run_blocking(move || {
-            metrics::metrics_text(w.as_deref(), days, json, force, all_workspaces, refresh)
+            metrics::metrics_text(
+                w.as_deref(),
+                days,
+                json,
+                force,
+                all_workspaces,
+                refresh,
+                DataSource::Local,
+            )
         })
         .await?;
         ok_str(t)
@@ -541,7 +558,15 @@ impl KaizenMcp {
     ) -> Result<CallToolResult, ErrorData> {
         let w = opt_path(&ws.workspace);
         let t = run_blocking(move || {
-            retro::retro_stdout(w.as_deref(), days, dry_run, json, force, refresh)
+            retro::retro_stdout(
+                w.as_deref(),
+                days,
+                dry_run,
+                json,
+                force,
+                refresh,
+                DataSource::Local,
+            )
         })
         .await?;
         ok_str(t)

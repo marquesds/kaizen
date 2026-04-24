@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use clap::CommandFactory;
 use clap::{Parser, Subcommand, ValueEnum};
+use kaizen::DataSource;
 use std::io::Read;
 use std::io::Write;
 use std::path::PathBuf;
@@ -49,6 +50,9 @@ enum Command {
         /// Force a full agent transcript rescan (ignore `[scan].min_rescan_seconds`).
         #[arg(short, long)]
         refresh: bool,
+        /// `local` (default) \| `provider` (remote cache) \| `mixed`. With `provider`/`mixed`, use `--refresh` to force a query pull.
+        #[arg(long, value_enum, default_value_t = DataSource::Local)]
+        source: DataSource,
     },
     /// Open interactive TUI.
     #[command(next_help_heading = "Trust & observe")]
@@ -96,6 +100,9 @@ enum Command {
         /// Force a full agent transcript rescan (ignore `[scan].min_rescan_seconds`).
         #[arg(short, long)]
         refresh: bool,
+        /// `local` \| `provider` \| `mixed` (see `kaizen summary --help`).
+        #[arg(long, value_enum, default_value_t = DataSource::Local)]
+        source: DataSource,
     },
     /// Skill and Cursor rule adoption from observed path refs in payloads (not silent injection).
     #[command(next_help_heading = "Trust & observe")]
@@ -112,6 +119,8 @@ enum Command {
         /// Force a full agent transcript rescan (ignore `[scan].min_rescan_seconds`).
         #[arg(short, long)]
         refresh: bool,
+        #[arg(long, value_enum, default_value_t = DataSource::Local)]
+        source: DataSource,
     },
     /// Smart metrics: code hotspots, slow tools, token sinks.
     #[command(next_help_heading = "Trust & observe")]
@@ -136,6 +145,8 @@ enum Command {
         /// Force a full agent transcript rescan (ignore `[scan].min_rescan_seconds`).
         #[arg(short, long)]
         refresh: bool,
+        #[arg(long, value_enum, default_value_t = DataSource::Local)]
+        source: DataSource,
     },
     /// Flush local outbox to the configured ingest endpoint.
     #[command(next_help_heading = "Operate")]
@@ -176,6 +187,8 @@ enum Command {
         /// Force a full agent transcript rescan (ignore `[scan].min_rescan_seconds`).
         #[arg(short, long)]
         refresh: bool,
+        #[arg(long, value_enum, default_value_t = DataSource::Local)]
+        source: DataSource,
     },
     /// Model Context Protocol server (stdio) — see docs/mcp.md.
     #[command(next_help_heading = "Integrations")]
@@ -222,6 +235,44 @@ enum ProxyCommand {
 
 #[derive(Subcommand)]
 enum TelemetrySubcommand {
+    /// Append exporter template to `~/.kaizen/config.toml` (alias of `configure`).
+    Init {
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+    },
+    /// Call configured provider `health`, show query settings, and exporter resolution (redacted).
+    Doctor {
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+    },
+    /// Run one provider `pull` into local `remote_*` cache (stub until APIs are fully wired).
+    Pull {
+        /// Trailing window in days (passed to the provider; coarse).
+        #[arg(long, default_value_t = 7)]
+        days: u32,
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+    },
+    /// Replay events from local SQLite through telemetry exporters (PostHog, Datadog, OTLP, dev).
+    ///
+    /// Does not POST to Kaizen ingest or modify the sync outbox. Requires `[sync].team_salt_hex`
+    /// and at least one enabled `[[telemetry.exporters]]`. Re-running sends duplicates (no dedupe).
+    /// Sessions pruned by `[retention].hot_days` are absent from the store (same as `retro`).
+    Push {
+        /// Trailing window in days (`end = now`, same idea as `retro` / `metrics`).
+        #[arg(long, default_value_t = 7)]
+        days: u32,
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        /// Every workspace registered for this machine (see `kaizen summary --all-workspaces`).
+        #[arg(long)]
+        all_workspaces: bool,
+        /// Print per-workspace event and batch counts without calling exporters.
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Print JSON shapes for canonical telemetry items (see `sync::canonical`).
+    PrintSchema,
     /// Append `[[telemetry.exporters]]` template to `~/.kaizen/config.toml` (editor fill-in).
     Configure {
         #[arg(long)]
@@ -406,7 +457,14 @@ fn main() -> anyhow::Result<()> {
             all_workspaces,
             json,
             refresh,
-        } => kaizen::shell::cli::cmd_summary(workspace.as_deref(), json, refresh, all_workspaces),
+            source,
+        } => kaizen::shell::cli::cmd_summary(
+            workspace.as_deref(),
+            json,
+            refresh,
+            all_workspaces,
+            source,
+        ),
         Command::Tui { workspace } => tokio::runtime::Runtime::new()?.block_on(
             kaizen::ui::tui::run(workspace.as_deref().unwrap_or(&std::env::current_dir()?)),
         ),
@@ -441,13 +499,22 @@ fn main() -> anyhow::Result<()> {
             workspace,
             all_workspaces,
             refresh,
-        } => kaizen::shell::cli::cmd_insights(workspace.as_deref(), all_workspaces, refresh),
+            source,
+        } => kaizen::shell::insights::cmd_insights(
+            workspace.as_deref(),
+            all_workspaces,
+            refresh,
+            source,
+        ),
         Command::Guidance {
             days,
             json,
             workspace,
             refresh,
-        } => kaizen::shell::guidance::cmd_guidance(workspace.as_deref(), days, json, refresh),
+            source,
+        } => {
+            kaizen::shell::guidance::cmd_guidance(workspace.as_deref(), days, json, refresh, source)
+        }
         Command::Metrics {
             subcmd,
             days,
@@ -456,6 +523,7 @@ fn main() -> anyhow::Result<()> {
             workspace,
             all_workspaces,
             refresh,
+            source,
         } => match subcmd {
             Some(MetricsCommand::Index { workspace, force }) => {
                 kaizen::shell::metrics::cmd_metrics_index(workspace.as_deref(), force)
@@ -467,6 +535,7 @@ fn main() -> anyhow::Result<()> {
                 force,
                 all_workspaces,
                 refresh,
+                source,
             ),
         },
         Command::Sync {
@@ -476,6 +545,29 @@ fn main() -> anyhow::Result<()> {
             subcmd: SyncCommand::Status { workspace },
         } => kaizen::shell::sync::cmd_sync_status(workspace.as_deref()),
         Command::Telemetry { subcmd } => match subcmd {
+            TelemetrySubcommand::Init { workspace } => {
+                kaizen::shell::telemetry::cmd_telemetry_init(workspace.as_deref())
+            }
+            TelemetrySubcommand::Doctor { workspace } => {
+                kaizen::shell::telemetry::cmd_telemetry_doctor(workspace.as_deref())
+            }
+            TelemetrySubcommand::Pull { days, workspace } => {
+                kaizen::shell::telemetry::cmd_telemetry_pull(workspace.as_deref(), days)
+            }
+            TelemetrySubcommand::Push {
+                days,
+                workspace,
+                all_workspaces,
+                dry_run,
+            } => kaizen::shell::telemetry::cmd_telemetry_push(
+                workspace.as_deref(),
+                all_workspaces,
+                days,
+                dry_run,
+            ),
+            TelemetrySubcommand::PrintSchema => {
+                kaizen::shell::telemetry::cmd_telemetry_print_schema()
+            }
             TelemetrySubcommand::Configure { workspace } => {
                 kaizen::shell::telemetry::cmd_telemetry_configure(workspace.as_deref())
             }
@@ -490,6 +582,7 @@ fn main() -> anyhow::Result<()> {
             force,
             workspace,
             refresh,
+            source,
         } => kaizen::shell::retro::cmd_retro(
             workspace.as_deref(),
             days,
@@ -497,6 +590,7 @@ fn main() -> anyhow::Result<()> {
             json,
             force,
             refresh,
+            source,
         ),
         Command::Exp { subcmd } => dispatch_exp(subcmd),
         Command::Mcp => {

@@ -17,7 +17,10 @@ kaizen retro --dry-run    # print Markdown, no file
 kaizen retro --json       # structured Report on stdout
 kaizen retro --force      # overwrite this week’s file
 kaizen retro --refresh    # rescan transcripts first
+kaizen retro --source mixed   # local events + remote_events in the window (with sync + query provider)
 ```
+
+**`--source`** follows the same three-way model as `summary` / `insights` (see [Part 2](02-observe.md#data-source-local-provider-or-mixed)). For **`provider`**, the retro pipeline can use cached remote events when local identity fields match; **`mixed`** unions remote events with local ones in the time window. Configure **[telemetry.query](https://github.com/marquesds/kaizen/blob/main/docs/config.md#telemetryquery)** for pulls.
 
 ## Read the output like a staff engineer
 

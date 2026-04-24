@@ -155,9 +155,55 @@ const MIGRATIONS: &[&str] = &[
         rule TEXT NOT NULL
     )",
     "CREATE UNIQUE INDEX IF NOT EXISTS rules_used_session_rule_idx ON rules_used(session_id, rule)",
+    // Provider pull cache (single-row state + per-kind rows; atomic refresh = txn + clear + insert)
+    "CREATE TABLE IF NOT EXISTS remote_pull_state (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        query_provider TEXT NOT NULL DEFAULT 'none',
+        cursor_json TEXT NOT NULL DEFAULT '',
+        last_success_ms INTEGER
+    )",
+    "INSERT OR IGNORE INTO remote_pull_state (id) VALUES (1)",
+    "CREATE TABLE IF NOT EXISTS remote_sessions (
+        team_id TEXT NOT NULL,
+        workspace_hash TEXT NOT NULL,
+        session_id_hash TEXT NOT NULL,
+        json TEXT NOT NULL,
+        PRIMARY KEY (team_id, workspace_hash, session_id_hash)
+    )",
+    "CREATE TABLE IF NOT EXISTS remote_events (
+        team_id TEXT NOT NULL,
+        workspace_hash TEXT NOT NULL,
+        session_id_hash TEXT NOT NULL,
+        event_seq INTEGER NOT NULL,
+        json TEXT NOT NULL,
+        PRIMARY KEY (team_id, workspace_hash, session_id_hash, event_seq)
+    )",
+    "CREATE TABLE IF NOT EXISTS remote_tool_spans (
+        team_id TEXT NOT NULL,
+        workspace_hash TEXT NOT NULL,
+        span_id_hash TEXT NOT NULL,
+        json TEXT NOT NULL,
+        PRIMARY KEY (team_id, workspace_hash, span_id_hash)
+    )",
+    "CREATE TABLE IF NOT EXISTS remote_repo_snapshots (
+        team_id TEXT NOT NULL,
+        workspace_hash TEXT NOT NULL,
+        snapshot_id_hash TEXT NOT NULL,
+        chunk_index INTEGER NOT NULL,
+        json TEXT NOT NULL,
+        PRIMARY KEY (team_id, workspace_hash, snapshot_id_hash, chunk_index)
+    )",
+    "CREATE TABLE IF NOT EXISTS remote_workspace_facts (
+        team_id TEXT NOT NULL,
+        workspace_hash TEXT NOT NULL,
+        fact_key TEXT NOT NULL,
+        json TEXT NOT NULL,
+        PRIMARY KEY (team_id, workspace_hash, fact_key)
+    )",
 ];
 
 /// Per-workspace activity dashboard stats.
+#[derive(Clone)]
 pub struct InsightsStats {
     pub total_sessions: u64,
     pub running_sessions: u64,

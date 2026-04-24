@@ -41,6 +41,12 @@ impl Driver for ObserveDriver {
                 self.merged.clear();
                 self.merge_strokes = 0;
             }
+            init_provider => {
+                self.phase = "Idle".into();
+                self.source = "provider".into();
+                self.merged.clear();
+                self.merge_strokes = 0;
+            }
             step => {}
             resolve_workspace => {
                 if self.phase == "Idle" {
@@ -72,6 +78,12 @@ impl Driver for ObserveDriver {
                 if self.phase == "Scanned" {
                     self.merge_strokes += 1;
                     self.merged.insert("s1".into());
+                }
+            },
+            contribute_remote => {
+                if self.phase == "Scanned" && (self.source == "provider" || self.source == "mixed") {
+                    self.merge_strokes += 1;
+                    self.merged.insert("r1".into());
                 }
             },
             run_query => {

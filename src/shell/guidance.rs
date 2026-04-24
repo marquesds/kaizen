@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! `kaizen guidance` — skill/rule adoption and cost proxy from observed payload references.
 
+use crate::core::config;
+use crate::core::data_source::DataSource;
 use crate::retro::inputs::{scan_rule_files, scan_skill_files};
 use crate::shell::cli::{maybe_refresh_store, workspace_path};
+use crate::shell::remote_pull::maybe_telemetry_pull;
 use crate::store::{GuidanceKind, GuidanceReport, Store};
 use anyhow::Result;
 use std::collections::HashSet;
@@ -39,13 +42,22 @@ pub fn guidance_text(
     days: u32,
     json_out: bool,
     refresh: bool,
+    source: DataSource,
 ) -> Result<String> {
     let ws = workspace_path(workspace)?;
     let db_path = ws.join(".kaizen/kaizen.db");
     let store = Store::open(&db_path)?;
     let ws_str = ws.to_string_lossy().to_string();
+    let cfg = config::load(&ws)?;
+    maybe_telemetry_pull(&ws, &store, &cfg, source, refresh)?;
     maybe_refresh_store(&ws, &store, refresh)?;
-    let report = build_guidance_report(&store, &ws, &ws_str, days)?;
+    let mut report = build_guidance_report(&store, &ws, &ws_str, days)?;
+    if source != DataSource::Local
+        && let Ok(Some(agg)) = crate::shell::remote_observe::try_remote_event_agg(&store, &cfg, &ws)
+    {
+        report =
+            crate::shell::remote_observe::merge_guidance_sessions_in_window(report, &agg, source);
+    }
     if json_out {
         return Ok(serde_json::to_string_pretty(&report)?);
     }
@@ -57,8 +69,12 @@ pub fn cmd_guidance(
     days: u32,
     json_out: bool,
     refresh: bool,
+    source: DataSource,
 ) -> Result<()> {
-    print!("{}", guidance_text(workspace, days, json_out, refresh)?);
+    print!(
+        "{}",
+        guidance_text(workspace, days, json_out, refresh, source)?
+    );
     Ok(())
 }
 

@@ -3,11 +3,13 @@
 
 use crate::core::config::try_team_salt;
 use crate::metrics::types::{FileFact, RepoEdge, RepoSnapshotRecord};
+use crate::retro::inputs::{scan_rule_files, scan_skill_files};
 use crate::store::{Store, sqlite::ToolSpanSyncRow};
 use crate::sync::context::SyncIngestContext;
 use crate::sync::outbound::{hash_with_salt, workspace_hash};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 
 const SNAPSHOT_CHUNK: usize = 100;
 
@@ -81,6 +83,20 @@ pub struct OutboundRepoEdge {
     pub weight: u32,
 }
 
+/// One outbox row for `workspace_facts` (hashed slugs, no raw paths by default).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OutboundWorkspaceFactRow {
+    pub skill_slugs: Vec<String>,
+    pub rule_slugs: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkspaceFactsBatchBody {
+    pub team_id: String,
+    pub workspace_hash: String,
+    pub facts: Vec<OutboundWorkspaceFactRow>,
+}
+
 pub fn enqueue_tool_spans_for_session(
     store: &Store,
     session_id: &str,
@@ -113,6 +129,42 @@ pub fn enqueue_repo_snapshot(
         .map(serde_json::to_string)
         .collect::<serde_json::Result<Vec<_>>>()?;
     store.replace_outbox_rows(&snapshot.id, "repo_snapshots", &payloads)
+}
+
+/// Enqueue one workspace-facts row (replaces pending `workspace_facts` for this workspace id).
+/// Slugs are Blake3+hex hashes so exports stay redacted without extra config.
+pub fn enqueue_workspace_fact_snapshot(
+    store: &Store,
+    workspace_root: &Path,
+    ctx: &SyncIngestContext,
+) -> Result<()> {
+    let Some(salt) = try_team_salt(&ctx.sync) else {
+        return Ok(());
+    };
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+    let skills = scan_skill_files(workspace_root, now_ms)?;
+    let rules = scan_rule_files(workspace_root, now_ms)?;
+    let skill_slugs: Vec<String> = skills
+        .iter()
+        .map(|s| hash_with_salt(&salt, format!("slug:{}", s.slug).as_bytes()))
+        .collect();
+    let rule_slugs: Vec<String> = rules
+        .iter()
+        .map(|r| hash_with_salt(&salt, format!("rule:{}", r.slug).as_bytes()))
+        .collect();
+    let row = OutboundWorkspaceFactRow {
+        skill_slugs,
+        rule_slugs,
+    };
+    let raw = serde_json::to_string(&row)?;
+    let key = match workspace_hash_for(ctx) {
+        Some(h) => format!("w:{h}"),
+        None => "workspace".into(),
+    };
+    store.replace_outbox_rows(&key, "workspace_facts", &[raw])
 }
 
 pub fn outbound_tool_span(row: &ToolSpanSyncRow, salt: &[u8; 32]) -> OutboundToolSpan {

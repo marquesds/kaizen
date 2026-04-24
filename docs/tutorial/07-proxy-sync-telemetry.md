@@ -41,6 +41,16 @@ Templates and env resolution: [config.md](../config.md#telemetry) and [usage.md]
 
 **CLI-only:** telemetry subcommands are not MCP tools.
 
+## Reading back from the provider (optional)
+
+Export and query are separate paths: pluggable **exporters** send redacted batches upstream; **[telemetry.query]** enables **pull** (when a provider is implemented and credentials are set). Pulled event-shaped rows are stored in SQLite and can feed **`summary`**, **`insights`**, **`metrics`**, **`guidance`**, and **`retro`** when you pass **`--source provider`** or **`--source mixed`**.
+
+- Setup and TTL: [config.md](../config.md#telemetryquery) (`provider`, `cache_ttl_seconds`).
+- User-facing walkthrough: [Part 2 — data source (local, provider, mixed)](02-observe.md#data-source-local-provider-or-mixed) and the later parts that reference it.
+- Ingest contract (including workspace-facts batches): [ingest-contract.md](../ingest-contract.md).
+
+**CLI-only:** there is no MCP tool for `telemetry pull` or for choosing `--source` (hosts should shell to the CLI).
+
 ## Exercise
 
 1. Read [llm-proxy.md](../llm-proxy.md) and decide whether proxy fits your threat model (loopback default, API key forwarding).

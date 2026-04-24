@@ -10,6 +10,8 @@ pub mod init;
 pub mod insights;
 pub mod metrics;
 pub mod proxy;
+pub mod remote_observe;
+pub mod remote_pull;
 pub mod retro;
 pub mod scope;
 pub mod sync;

@@ -25,6 +25,14 @@ module observe_pipeline {
     merge_strokes' = 0
   }
 
+  // Read path uses provider cache (no local rows); remote-sourced id must still land in `merged` after query.
+  action init_provider: bool = all {
+    phase' = "Idle",
+    source' = "provider",
+    merged' = Set(),
+    merge_strokes' = 0
+  }
+
   action resolve_workspace: bool = all {
     phase == "Idle",
     phase' = "Resolved",
@@ -78,6 +86,16 @@ module observe_pipeline {
     source' = source
   }
 
+  // Remote cache contributes id "r1" (abstract session/event key) — only for provider|mixed.
+  action contribute_remote: bool = all {
+    phase == "Scanned",
+    (source == "provider" or source == "mixed"),
+    merge_strokes' = merge_strokes + 1,
+    merged' = merged.union(Set("r1")),
+    phase' = "Scanned",
+    source' = source
+  }
+
   action run_query: bool = all {
     phase == "Scanned",
     phase' = "Queried",
@@ -101,6 +119,7 @@ module observe_pipeline {
     scan_agents,
     contribute,
     contribute_s1,
+    contribute_remote,
     run_query,
     emit_output
   }
@@ -134,5 +153,18 @@ module observe_pipeline {
       .then(run_query)
       .then(emit_output)
       .expect(merge_strokes == 2 and merged.size() == 1 and phase == "Done")
+  }
+
+  // Provider (or could start mixed) — any remote id folded into `merged` before Done.
+  run provider_includes_remote_in_merged = {
+    init_provider
+      .then(resolve_workspace)
+      .then(load_config)
+      .then(open_store)
+      .then(scan_agents)
+      .then(contribute_remote)
+      .then(run_query)
+      .then(emit_output)
+      .expect(phase == "Done" and source == "provider" and merged == Set("r1") and merge_strokes == 1)
   }
 }

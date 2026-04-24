@@ -6,7 +6,7 @@ use crate::core::config::ExporterConfig;
 const KAIZEN: &str = "KAIZEN_";
 
 /// Resolve env, preferring standard names, then `KAIZEN_` + same suffix.
-fn env_two(std_key: &str, kaizen_key: &str) -> Option<String> {
+pub(crate) fn env_two(std_key: &str, kaizen_key: &str) -> Option<String> {
     std::env::var(std_key)
         .ok()
         .filter(|s| !s.is_empty())
@@ -52,6 +52,17 @@ impl PostHogResolved {
             project_api_key,
         })
     }
+
+    /// Query / pull: API key and host from env only (no TOML row required).
+    pub fn from_env_only() -> Option<Self> {
+        let project_api_key = env_two("POSTHOG_API_KEY", "KAIZEN_POSTHOG_API_KEY")?;
+        let host = env_two("POSTHOG_HOST", "KAIZEN_POSTHOG_HOST")
+            .unwrap_or_else(|| "https://us.i.posthog.com".to_string());
+        Some(Self {
+            host,
+            project_api_key,
+        })
+    }
 }
 
 impl DatadogResolved {
@@ -67,6 +78,14 @@ impl DatadogResolved {
             .map(String::from)
             .or_else(|| env_two("DD_SITE", "KAIZEN_DD_SITE"))
             .unwrap_or_else(|| "datadoghq.com".to_string());
+        Some(Self { site, api_key })
+    }
+
+    /// Query / pull: API key and site from env only.
+    pub fn from_env_only() -> Option<Self> {
+        let api_key = env_two("DD_API_KEY", "KAIZEN_DD_API_KEY")?;
+        let site =
+            env_two("DD_SITE", "KAIZEN_DD_SITE").unwrap_or_else(|| "datadoghq.com".to_string());
         Some(Self { site, api_key })
     }
 }

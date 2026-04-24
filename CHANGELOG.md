@@ -12,14 +12,20 @@ here explicitly.
 
 ### Changed
 
+- **Machine-local project registry** lives in `~/.kaizen/machine.db` (SQLite) instead of `workspaces.json`; `kaizen init` upserts the current repo. Legacy `workspaces.json` is imported once and renamed to `workspaces.json.migrated`. `kaizen doctor` reports registry status. `--all-workspaces` still merges per-repo stores and now includes inited projects that do not yet have `.kaizen/kaizen.db`.
+- **Telemetry wire format (third-party sinks):** PostHog capture is one event per canonical row (`kaizen.event`, `kaizen.tool_span`, `kaizen.repo_snapshot_chunk`, `kaizen.workspace_fact_snapshot`); Datadog uses the [Logs API v2](https://docs.datadoghq.com/api/latest/logs/) (`POST /api/v2/logs`) with one JSON log per canonical item instead of the Events API. OTLP remains a placeholder with `tracing::debug` of expanded item counts. Primary Kaizen `POST` ingest and outbox JSON shapes for `events` / `tool_spans` / `repo_snapshots` are unchanged; when sync is enabled, workspace skill/rule discovery can enqueue **`workspace_facts`** for the new `/v1/workspace-facts` path.
+- **CLI — read paths and telemetry:** `summary`, `insights`, `metrics`, `guidance`, and `retro` accept `--source local|provider|mixed` (default `local`). With `provider` or `mixed`, a background provider pull runs when `[telemetry.query].cache_ttl_seconds` has expired, or when you pass `--refresh` (in addition to transcript rescan where applicable). New `kaizen telemetry` subcommands: `init` (alias of `configure`), `doctor`, `pull --days`, and `print-schema`. MCP tools keep the previous local-only behavior.
 - `Cargo.toml` no longer excludes `assets/` so `cargo publish` / docs.rs builds resolve
   `include_str!` for embedded defaults and the retro skill template.
+- Release workflow **`update-homebrew-tap`**: `scripts/render-homebrew-tap-formula.sh` + push to
+  **marquesds/homebrew-tap** when `HOMEBREW_TAP_TOKEN` is set.
 - The crates.io / `cargo install` **package** name is **`kaizen-cli`** (the unscoped `kaizen` crate on
   the registry is unrelated); the `[[bin]]` and library names stay **`kaizen`**. README,
   `docs/install.md`, and `CONTRIBUTING` document `cargo install kaizen-cli` and, under
   `packaging/homebrew/`, a sample tap formula and [`packaging/homebrew/README.md`](packaging/homebrew/README.md)
   for Homebrew. `Cargo.toml` `repository` / `homepage` use `https://github.com/marquesds/kaizen`;
-  `CONTRIBUTING` still documents `CARGO_REGISTRY_TOKEN` and `RELEASE_PUSH_TOKEN`.
+  `CONTRIBUTING` still documents `CARGO_REGISTRY_TOKEN`, `RELEASE_PUSH_TOKEN`, and optional
+  `HOMEBREW_TAP_TOKEN`.
 
 ### Fixed
 

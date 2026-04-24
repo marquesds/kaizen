@@ -2,6 +2,7 @@
 //! Placeholder for OTLP push; wire a full OpenTelemetry SDK mapping when a collector path is required.
 
 use crate::sync::IngestExportBatch;
+use crate::sync::canonical::expand_ingest_batch;
 use crate::telemetry::TelemetryExporter;
 use anyhow::Result;
 
@@ -23,11 +24,13 @@ impl TelemetryExporter for OtlpExporter {
     }
 
     fn export(&self, batch: &IngestExportBatch) -> Result<()> {
+        let items = expand_ingest_batch(batch);
         tracing::debug!(
             target: "kaizen::telemetry::otlp",
             kind = %batch.kind_name(),
-            items = batch.item_count(),
-            "OTLP push not fully wired; enable a collector mapping in a follow-up"
+            batch_items = batch.item_count(),
+            canonical_items = items.len(),
+            "OTLP push not fully wired; canonical item count logged for parity with other exporters"
         );
         Ok(())
     }

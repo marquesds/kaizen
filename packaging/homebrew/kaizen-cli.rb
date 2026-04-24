@@ -1,11 +1,10 @@
 # frozen_string_literal: true
 #
-# Copy this file to a Homebrew tap repository as Formula/kaizen-cli.rb, then replace
-# the sha256 placeholders with values from the matching GitHub Release assets, or
-# from the `.sha256` sidecar files next to each .tar.gz.
+# Template for the tap: [github.com/marquesds/homebrew-tap](https://github.com/marquesds/homebrew-tap).
+# Placeholder shas below are not installable. On each stable release, CI runs
+# `scripts/render-homebrew-tap-formula.sh` and pushes the real formula (or set shas manually).
 #
-# Source assets are produced by: .github/workflows/release.yml
-#   kaizen-v<VER>-<RUST_TRIPLE>.tar.gz  →  contains  kaizen-v<VER>-<RUST_TRIPLE>/kaizen
+# Release assets: .github/workflows/release.yml → kaizen-v<VER>-<TRIPLE>.tar.gz + .sha256
 
 class KaizenCli < Formula
   desc "Distributable agent observability: sessions, retros, and repo-level improvement for coding agents"

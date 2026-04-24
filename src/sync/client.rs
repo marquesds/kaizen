@@ -2,7 +2,7 @@
 //! HTTP sync client: gzip JSON, retries, batch split on 413.
 
 use crate::sync::outbound::EventsBatchBody;
-use crate::sync::smart::{RepoSnapshotsBatchBody, ToolSpansBatchBody};
+use crate::sync::smart::{RepoSnapshotsBatchBody, ToolSpansBatchBody, WorkspaceFactsBatchBody};
 use anyhow::{Context, Result};
 use flate2::Compression;
 use flate2::write::GzEncoder;
@@ -66,6 +66,14 @@ impl SyncHttpClient {
         idempotency_key: &Uuid,
     ) -> Result<PostBatchOutcome> {
         self.post_json_gzip("/v1/repo-snapshots", body, idempotency_key)
+    }
+
+    pub fn post_workspace_facts_batch(
+        &self,
+        body: &WorkspaceFactsBatchBody,
+        idempotency_key: &Uuid,
+    ) -> Result<PostBatchOutcome> {
+        self.post_json_gzip("/v1/workspace-facts", body, idempotency_key)
     }
 
     fn post_json_gzip<T: serde::Serialize>(
