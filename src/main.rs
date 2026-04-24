@@ -244,7 +244,7 @@ enum ExpCommand {
         #[arg(long, default_value_t = 14)]
         duration_days: u32,
         /// target delta pct, e.g. -10.0 for -10%
-        #[arg(long, default_value_t = -10.0)]
+        #[arg(long, default_value_t = -10.0, allow_hyphen_values = true)]
         target_pct: f64,
         #[arg(long)]
         control_commit: Option<String>,

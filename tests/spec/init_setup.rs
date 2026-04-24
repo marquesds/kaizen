@@ -52,12 +52,15 @@ impl InitDriver {
         self.skill_ready = true;
         if self.cursor_present && !self.cursor_patched {
             self.cursor_backup = true;
-            self.cursor_patched = true;
         }
         if self.claude_present && !self.claude_patched {
             self.claude_backup = true;
-            self.claude_patched = true;
         }
+        // init now scaffolds hook files when absent.
+        self.cursor_present = true;
+        self.cursor_patched = true;
+        self.claude_present = true;
+        self.claude_patched = true;
     }
 }
 

@@ -8,12 +8,24 @@ use rusqlite::{Connection, params};
 use serde_json::Value;
 use std::sync::LazyLock;
 
-static SKILL_PATH_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r#"(?i)\.cursor/skills/([^/\s"'<>]+)"#).expect("skill path regex"));
+static SKILL_PATH_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(?i)\.cursor/skills/([A-Za-z0-9][A-Za-z0-9_\-]{0,63})"#)
+        .expect("skill path regex")
+});
 
 static RULE_PATH_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?i)\.cursor/rules/([^/\s"'<>]+\.mdc)"#).expect("rule path regex")
+    Regex::new(r#"(?i)\.cursor/rules/([A-Za-z0-9][A-Za-z0-9_\-]{0,63}\.mdc)"#)
+        .expect("rule path regex")
 });
+
+static SLUG_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"^[A-Za-z0-9][A-Za-z0-9_\-]{0,63}$"#).expect("slug regex"));
+
+/// True iff `slug` matches the strict skill/rule slug shape.
+/// Used to reject legacy rows that were indexed with a permissive regex.
+pub fn is_valid_slug(slug: &str) -> bool {
+    SLUG_RE.is_match(slug)
+}
 
 /// Collect likely file paths from tool payload JSON (read_file, write, patch, etc.).
 pub fn paths_from_event_payload(payload: &Value) -> Vec<String> {
@@ -139,5 +151,30 @@ mod tests {
         let v = json!({"text": "See .cursor/rules/Foo.MDC for details"});
         let r = rules_from_event_json(&v);
         assert_eq!(r, vec!["Foo".to_string()]);
+    }
+
+    #[test]
+    fn skills_regex_rejects_noise_tokens() {
+        // Prose mentions of `.cursor/skills/` followed by punctuation must not
+        // produce garbage slugs like `**`, `{}`, `` ` ``, `\n`, `:\n1.`.
+        let v = json!({
+            "text": "See .cursor/skills/**, .cursor/skills/{}, .cursor/skills/`, .cursor/skills/.foo and .cursor/skills/valid-slug for details"
+        });
+        let s = skills_from_event_json(&v);
+        assert_eq!(s, vec!["valid-slug".to_string()]);
+    }
+
+    #[test]
+    fn is_valid_slug_filters_garbage() {
+        assert!(is_valid_slug("kaizen-retro"));
+        assert!(is_valid_slug("api_and_interface_design"));
+        assert!(is_valid_slug("Foo"));
+        assert!(!is_valid_slug(""));
+        assert!(!is_valid_slug("`"));
+        assert!(!is_valid_slug("{}"));
+        assert!(!is_valid_slug("\\n"));
+        assert!(!is_valid_slug(".foo"));
+        assert!(!is_valid_slug("_leading"));
+        assert!(!is_valid_slug("-leading"));
     }
 }

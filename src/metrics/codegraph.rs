@@ -47,7 +47,7 @@ pub fn rebuild_sidecar(
         run_cypher(
             &conn,
             &format!(
-                "MATCH (s:Snapshot {{id: '{}'}}), (f:File {{id: '{}'}}) CREATE (s)-[:CONTAINS]->(f)",
+                "MATCH (s:Snapshot {{id: '{}'}}), (f:File {{id: '{}'}}) CREATE (s)-[:HAS_FILE]->(f)",
                 esc(&snapshot.id),
                 esc(&file.path)
             ),

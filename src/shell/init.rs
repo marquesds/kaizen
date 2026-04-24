@@ -79,6 +79,18 @@ fn cursor_hook_exists(root: &serde_json::Value, event: &str) -> bool {
 fn patch_cursor_hooks(out: &mut String, ws: &Path) -> Result<()> {
     let path = ws.join(".cursor/hooks.json");
     if !path.exists() {
+        std::fs::create_dir_all(path.parent().unwrap())?;
+        let mut obj = serde_json::Map::new();
+        let mut hooks = serde_json::Map::new();
+        for event in CURSOR_HOOK_EVENTS {
+            hooks.insert(
+                (*event).to_string(),
+                serde_json::json!([{"command": KAIZEN_CURSOR_HOOK_CMD}]),
+            );
+        }
+        obj.insert("hooks".to_string(), serde_json::Value::Object(hooks));
+        std::fs::write(&path, serde_json::to_string_pretty(&obj)?)?;
+        writeln!(out, "  created  .cursor/hooks.json").unwrap();
         return Ok(());
     }
     let raw = std::fs::read_to_string(&path)?;
@@ -138,6 +150,20 @@ fn entry_has_kaizen_cmd(entry: &serde_json::Value) -> bool {
 fn patch_claude_settings(out: &mut String, ws: &Path) -> Result<()> {
     let path = ws.join(".claude/settings.json");
     if !path.exists() {
+        std::fs::create_dir_all(path.parent().unwrap())?;
+        let mut obj = serde_json::Map::new();
+        let mut hooks = serde_json::Map::new();
+        for event in CLAUDE_HOOK_EVENTS {
+            hooks.insert(
+                (*event).to_string(),
+                serde_json::json!([
+                    {"hooks": [{"type": "command", "command": KAIZEN_CLAUDE_HOOK_CMD}]}
+                ]),
+            );
+        }
+        obj.insert("hooks".to_string(), serde_json::Value::Object(hooks));
+        std::fs::write(&path, serde_json::to_string_pretty(&obj)?)?;
+        writeln!(out, "  created  .claude/settings.json").unwrap();
         return Ok(());
     }
     let raw = std::fs::read_to_string(&path)?;
@@ -261,28 +287,29 @@ pub fn init_text(workspace: Option<&std::path::Path>) -> Result<String> {
     patch_claude_settings(&mut out, &ws)?;
     write_skill(&mut out, &ws)?;
     writeln!(out).unwrap();
-    writeln!(out, "kaizen init complete.").unwrap();
-    writeln!(out).unwrap();
-    writeln!(out, "Next steps:").unwrap();
     writeln!(
         out,
-        "  1. kaizen sessions list   # see indexed sessions (run an agent in this repo if empty)"
-    )
-    .unwrap();
-    writeln!(
-        out,
-        "  2. kaizen summary         # cost and rollups by agent / model"
-    )
-    .unwrap();
-    writeln!(
-        out,
-        "  3. kaizen metrics         # or: kaizen tui  (browse + live tail)"
+        "kaizen init complete — Cursor + Claude Code hooks wired."
     )
     .unwrap();
     writeln!(out).unwrap();
+    writeln!(out, "Run Cursor or Claude Code in this repo once, then:").unwrap();
     writeln!(
         out,
-        "MCP: run `kaizen mcp` (stdio) — https://github.com/lucasmarqs/kaizen/blob/main/docs/mcp.md"
+        "  kaizen summary            # cost + rollups (agent / model)"
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "  kaizen insights           # activity, top tools, guidance"
+    )
+    .unwrap();
+    writeln!(out, "  kaizen tui                # live session browser").unwrap();
+    writeln!(out, "  kaizen retro --days 7     # weekly heuristic bets").unwrap();
+    writeln!(out).unwrap();
+    writeln!(
+        out,
+        "Agents: `kaizen mcp` exposes every command as MCP tools — see docs/mcp.md."
     )
     .unwrap();
     Ok(out)

@@ -57,6 +57,10 @@ name = "hook_ingest"
 path = "tests/spec/hook_ingest.rs"
 
 [[test]]
+name = "event_index"
+path = "tests/spec/event_index.rs"
+
+[[test]]
 name = "redaction_completeness"
 path = "tests/spec/redaction_completeness.rs"
 
