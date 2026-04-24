@@ -1,6 +1,7 @@
 // Ingesting a hook event always materialises/updates a session row (mid-session install),
 // a positive `started_at_ms` (Claude can omit `timestamp_ms`), and a real agent source
-// (never a literal "unknown" string in storage).
+// (never a literal "unknown" string in storage). Known sources match hook/MCP and tail
+// agent strings: Cursor, Claude Code, Codex, Copilot CLI.
 module hook_ingest {
   type HookKind = | SessionStart | PreToolUse | PostToolUse | Stop | Other
   type Status = | NotStarted | Running | Waiting | Done
@@ -17,7 +18,7 @@ module hook_ingest {
     agent' = "",
   }
 
-  val sources = Set("cursor", "claude")
+  val sources = Set("cursor", "claude", "codex", "copilot-cli")
 
   // Any hook ingest records source via nondet so Rust traces can branch on the pick.
   action on_session_start: bool = {
@@ -82,7 +83,7 @@ module hook_ingest {
   val started_at_positive: bool = session_exists implies (started_at_ms > 0)
 
   val agent_is_source_not_unknown: bool =
-    session_exists implies (agent == "cursor" or agent == "claude")
+    session_exists implies agent.in(sources)
 
   run testHookLifecycle = {
     init
@@ -94,7 +95,7 @@ module hook_ingest {
         status == Done,
         session_exists,
         started_at_ms > 0,
-        agent == "cursor" or agent == "claude",
+        agent.in(sources),
       })
   }
 
@@ -104,7 +105,7 @@ module hook_ingest {
       .expect(all {
         session_exists,
         started_at_ms > 0,
-        agent == "cursor" or agent == "claude",
+        agent.in(sources),
       })
   }
 }
