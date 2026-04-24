@@ -58,7 +58,7 @@ pub struct RepoSnapshotChunkItem {
     pub chunk: OutboundRepoSnapshotChunk,
 }
 
-/// Workspace-level facts (rules, skills labels); stub until Phase 6 builds payloads.
+/// Workspace-level facts (hashed skill/rule slugs from `.cursor/skills` and `.cursor/rules` discovery).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkspaceFactSnapshotItem {
     /// Redacted or hashed slugs / labels only by default.
@@ -116,11 +116,34 @@ pub fn expand_ingest_batch(batch: &crate::sync::IngestExportBatch) -> Vec<Canoni
                 }));
             }
         }
+        IngestExportBatch::WorkspaceFacts(b) => {
+            let env = canonical_envelope(&b.team_id, &b.workspace_hash);
+            for row in &b.facts {
+                out.push(CanonicalItem::WorkspaceFactSnapshot {
+                    envelope: env.clone(),
+                    name: CanonicalEventName::WorkspaceFactSnapshot,
+                    payload: WorkspaceFactSnapshotItem {
+                        skill_slugs: row.skill_slugs.clone(),
+                        rule_slugs: row.rule_slugs.clone(),
+                    },
+                });
+            }
+        }
     }
     out
 }
 
 impl CanonicalItem {
+    /// Short name for third-party tags / metrics (`kaizen.event`, `kaizen.tool_span`, …).
+    pub fn telemetry_kind(&self) -> &'static str {
+        match self {
+            CanonicalItem::Event(_) => "kaizen.event",
+            CanonicalItem::ToolSpan(_) => "kaizen.tool_span",
+            CanonicalItem::RepoSnapshotChunk(_) => "kaizen.repo_snapshot_chunk",
+            CanonicalItem::WorkspaceFactSnapshot { .. } => "kaizen.workspace_fact_snapshot",
+        }
+    }
+
     /// Schema version for assertions and exporters; workspace fact variant included.
     pub fn envelope_kaizen_schema_version(&self) -> Option<u32> {
         match self {
@@ -146,8 +169,8 @@ fn canonical_envelope(team_id: &str, workspace_hash: &str) -> CanonicalEnvelope 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sync::outbound::EventsBatchBody;
     use crate::sync::IngestExportBatch;
+    use crate::sync::outbound::EventsBatchBody;
     use crate::sync::smart::{OutboundToolSpan, ToolSpansBatchBody};
 
     #[test]
@@ -221,5 +244,21 @@ mod tests {
         let v = expand_ingest_batch(&b);
         assert_eq!(v.len(), 1);
         assert!(matches!(v[0], CanonicalItem::ToolSpan(_)));
+    }
+
+    #[test]
+    fn expand_workspace_facts_one_per_row() {
+        use crate::sync::smart::{OutboundWorkspaceFactRow, WorkspaceFactsBatchBody};
+        let b = IngestExportBatch::WorkspaceFacts(WorkspaceFactsBatchBody {
+            team_id: "t".into(),
+            workspace_hash: "w".into(),
+            facts: vec![OutboundWorkspaceFactRow {
+                skill_slugs: vec!["a".into()],
+                rule_slugs: vec!["b".into()],
+            }],
+        });
+        let v = expand_ingest_batch(&b);
+        assert_eq!(v.len(), 1);
+        assert!(matches!(v[0], CanonicalItem::WorkspaceFactSnapshot { .. }));
     }
 }

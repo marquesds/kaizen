@@ -2,27 +2,40 @@
 //! `kaizen retro` command.
 
 use crate::core::config;
+use crate::core::data_source::DataSource;
 use crate::metrics::index;
 use crate::report::{ReportsDirLock, iso_week_label_utc, to_json, to_markdown, write_atomic};
 use crate::retro::types::Report;
 use crate::retro::{engine, inputs};
 use crate::shell::cli::{maybe_refresh_store, workspace_path};
+use crate::shell::remote_pull::maybe_telemetry_pull;
 use crate::store::Store;
 use anyhow::Result;
 use std::path::{Path, PathBuf};
 
-fn compute_retro(workspace: &Path, days: u32, refresh: bool) -> Result<(PathBuf, Report)> {
+fn compute_retro(
+    workspace: &Path,
+    days: u32,
+    refresh: bool,
+    source: DataSource,
+) -> Result<(PathBuf, Report)> {
     let cfg = config::load(workspace)?;
     let db_path = workspace.join(".kaizen/kaizen.db");
     let store = Store::open(&db_path)?;
     let ws_str = workspace.to_string_lossy().to_string();
+    maybe_telemetry_pull(workspace, &store, &cfg, source, refresh)?;
     maybe_refresh_store(workspace, &store, refresh)?;
     if let Ok(snapshot) = index::ensure_indexed(&store, workspace, refresh)
         && let Some(ctx) = crate::sync::ingest_ctx(&cfg, workspace.to_path_buf())
-        && let Ok(facts) = store.file_facts_for_snapshot(&snapshot.id)
-        && let Ok(edges) = store.repo_edges_for_snapshot(&snapshot.id)
     {
-        let _ = crate::sync::smart::enqueue_repo_snapshot(&store, &snapshot, &facts, &edges, &ctx);
+        if let (Ok(facts), Ok(edges)) = (
+            store.file_facts_for_snapshot(&snapshot.id),
+            store.repo_edges_for_snapshot(&snapshot.id),
+        ) {
+            let _ =
+                crate::sync::smart::enqueue_repo_snapshot(&store, &snapshot, &facts, &edges, &ctx);
+        }
+        let _ = crate::sync::smart::enqueue_workspace_fact_snapshot(&store, workspace, &ctx);
     }
 
     let end_ms = std::time::SystemTime::now()
@@ -31,7 +44,24 @@ fn compute_retro(workspace: &Path, days: u32, refresh: bool) -> Result<(PathBuf,
         .as_millis() as u64;
     let start_ms = end_ms.saturating_sub((days as u64).saturating_mul(86_400_000));
 
-    let inputs = inputs::load_inputs(&store, workspace, &ws_str, start_ms, end_ms)?;
+    let team_id = if cfg.sync.team_id.is_empty() {
+        None
+    } else {
+        Some(cfg.sync.team_id.as_str())
+    };
+    let workspace_hash = crate::sync::ingest_ctx(&cfg, workspace.to_path_buf())
+        .as_ref()
+        .and_then(crate::sync::smart::workspace_hash_for);
+    let inputs = inputs::load_inputs_for_data_source(
+        &store,
+        workspace,
+        &ws_str,
+        start_ms,
+        end_ms,
+        source,
+        team_id,
+        workspace_hash.as_deref(),
+    )?;
     let reports_dir = workspace.join(".kaizen/reports");
     let week_label = iso_week_label_utc();
     let prior = inputs::prior_bet_fingerprints(&reports_dir)?;
@@ -41,9 +71,14 @@ fn compute_retro(workspace: &Path, days: u32, refresh: bool) -> Result<(PathBuf,
 }
 
 /// Build retro report (shared by CLI and MCP; no report file I/O).
-pub fn run_retro_report(workspace: Option<&Path>, days: u32, refresh: bool) -> Result<Report> {
+pub fn run_retro_report(
+    workspace: Option<&Path>,
+    days: u32,
+    refresh: bool,
+    source: DataSource,
+) -> Result<Report> {
     let ws = workspace_path(workspace)?;
-    let (_reports_dir, report) = compute_retro(&ws, days, refresh)?;
+    let (_reports_dir, report) = compute_retro(&ws, days, refresh, source)?;
     Ok(report)
 }
 
@@ -55,9 +90,10 @@ pub fn retro_stdout(
     json_out: bool,
     force: bool,
     refresh: bool,
+    source: DataSource,
 ) -> Result<String> {
     let ws = workspace_path(workspace)?;
-    let (reports_dir, report) = compute_retro(&ws, days, refresh)?;
+    let (reports_dir, report) = compute_retro(&ws, days, refresh, source)?;
     let week_label = report.meta.week_label.clone();
     let out_path = reports_dir.join(format!("{week_label}.md"));
 
@@ -90,10 +126,11 @@ pub fn cmd_retro(
     json_out: bool,
     force: bool,
     refresh: bool,
+    source: DataSource,
 ) -> Result<()> {
     print!(
         "{}",
-        retro_stdout(workspace, days, dry_run, json_out, force, refresh)?
+        retro_stdout(workspace, days, dry_run, json_out, force, refresh, source)?
     );
     Ok(())
 }

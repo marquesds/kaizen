@@ -128,6 +128,10 @@ name = "telemetry_exporters"
 path = "tests/spec/telemetry_exporters.rs"
 
 [[test]]
+name = "telemetry_push_replay"
+path = "tests/spec/telemetry_push_replay.rs"
+
+[[test]]
 name = "llm_proxy"
 path = "tests/spec/llm_proxy.rs"
 
@@ -142,6 +146,14 @@ path = "tests/spec/multi_workspace.rs"
 [[test]]
 name = "provider_pull_cache"
 path = "tests/spec/provider_pull_cache.rs"
+
+[[test]]
+name = "workspace_facts_sync"
+path = "tests/spec/workspace_facts_sync.rs"
+
+[[test]]
+name = "provider_pull_event_keys"
+path = "tests/spec/provider_pull_event_keys.rs"
 
 [features]
 default = []

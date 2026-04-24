@@ -2,8 +2,10 @@
 //! `kaizen metrics` command.
 
 use crate::core::config;
+use crate::core::data_source::DataSource;
 use crate::metrics::{index, report};
 use crate::shell::cli::{maybe_refresh_store, workspace_path};
+use crate::shell::remote_pull::maybe_telemetry_pull;
 use crate::shell::scope;
 use crate::store::Store;
 use crate::sync::{ingest_ctx, smart};
@@ -18,19 +20,28 @@ pub fn metrics_text(
     force: bool,
     all_workspaces: bool,
     refresh: bool,
+    source: DataSource,
 ) -> Result<String> {
     let roots = scope::resolve(workspace, all_workspaces)?;
     let mut reports = Vec::new();
     for workspace in &roots {
         let cfg = config::load(workspace)?;
         let store = Store::open(&crate::core::workspace::db_path(workspace))?;
+        maybe_telemetry_pull(workspace, &store, &cfg, source, refresh)?;
         maybe_refresh_store(workspace, &store, refresh)?;
         if force {
             let snapshot = index::ensure_indexed(&store, workspace, true)?;
             maybe_enqueue_snapshot(&store, &cfg, workspace, &snapshot)?;
         }
         let ws_str = workspace.to_string_lossy().to_string();
-        if let Ok(report) = report::build_report(&store, &ws_str, days) {
+        if let Ok(mut report) = report::build_report(&store, &ws_str, days) {
+            if source != DataSource::Local
+                && let Ok(Some(agg)) =
+                    crate::shell::remote_observe::try_remote_event_agg(&store, &cfg, workspace)
+            {
+                report =
+                    crate::shell::remote_observe::apply_remote_to_metrics(report, &agg, source);
+            }
             reports.push(if roots.len() == 1 {
                 report
             } else {
@@ -52,10 +63,19 @@ pub fn cmd_metrics(
     force: bool,
     all_workspaces: bool,
     refresh: bool,
+    source: DataSource,
 ) -> Result<()> {
     print!(
         "{}",
-        metrics_text(workspace, days, json_out, force, all_workspaces, refresh)?
+        metrics_text(
+            workspace,
+            days,
+            json_out,
+            force,
+            all_workspaces,
+            refresh,
+            source
+        )?
     );
     Ok(())
 }
@@ -183,7 +203,8 @@ fn maybe_enqueue_snapshot(
     };
     let facts = store.file_facts_for_snapshot(&snapshot.id)?;
     let edges = store.repo_edges_for_snapshot(&snapshot.id)?;
-    smart::enqueue_repo_snapshot(store, snapshot, &facts, &edges, &ctx)
+    smart::enqueue_repo_snapshot(store, snapshot, &facts, &edges, &ctx)?;
+    smart::enqueue_workspace_fact_snapshot(store, ws, &ctx)
 }
 
 pub fn print_human(metrics: &crate::metrics::types::MetricsReport) {

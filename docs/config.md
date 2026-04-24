@@ -26,9 +26,12 @@ LLM HTTP proxy: [llm-proxy.md](llm-proxy.md).
 
 ## Machine-local registry
 
-Kaizen stores a list of workspace roots it has seen under **`$KAIZEN_HOME/workspaces.json`** (default **`~/.kaizen/workspaces.json`**). Any command that resolves a workspace (default cwd or `--workspace`) **registers** that canonical path.
+Kaizen records known workspace roots in **`$KAIZEN_HOME/machine.db`** (default **`~/.kaizen/machine.db`**) — a small SQLite file with one row per canonical path (first seen, last seen, last `kaizen init`, optional `git` remote, and so on).
 
-When you pass **`--all-workspaces`** (or MCP `all_workspaces: true`), Kaizen loads that list, ensures the current workspace is included, **drops entries that no longer have** `.kaizen/kaizen.db` (except the seed workspace), then opens each remaining DB and merges results. See [usage.md](usage.md) for which commands support this.
+- **Registration:** any command that resolves a workspace (default cwd or `--workspace`) **upserts** that path. **`kaizen init`** also records the workspace after hook setup (even before a local `.kaizen/kaizen.db` exists).
+- **Legacy file:** if **`~/.kaizen/workspaces.json`** is present from an older build, it is imported once and renamed to **`workspaces.json.migrated`**.
+
+When you pass **`--all-workspaces`** (or MCP `all_workspaces: true`), Kaizen loads that list, ensures the current workspace is included, **keeps a path** if it still exists on disk and it **either** has a local **`.kaizen/kaizen.db`** **or** appears in the machine registry (e.g. only ran `init`), then opens each per-workspace DB that exists and merges results. The seed workspace is always kept when in scope. See [usage.md](usage.md) for which commands support this.
 
 ## `[scan]`
 
@@ -87,7 +90,9 @@ Remote read-back (provider pull) and cache policy. OTLP is **export only**; it i
 | Key | Default | Purpose |
 |-----|---------|--------|
 | `provider` | `none` | `none` \| `posthog` \| `datadog` — single query authority for pull when implemented. |
-| `cache_ttl_seconds` | `3600` | Treat cached provider rows as fresh for this many seconds (unless the user forces refresh). |
+| `cache_ttl_seconds` | `3600` | Treat cached provider rows as fresh for this many seconds (unless the user forces refresh). With `--source provider` or `mixed` on read commands, Kaizen may skip `telemetry pull` while the cache is fresh; use `--refresh` to force a pull. |
+
+`kaizen summary`, `insights`, `metrics`, `guidance`, and `retro` accept `--source` with values `local` (default), `provider`, or `mixed`. The PostHog/Datadog **exporters** still fan out the same redacted sync batches; Datadog is mapped to [Logs v2](https://docs.datadoghq.com/api/latest/logs/) per expanded item. `kaizen telemetry print-schema` lists canonical event names. `kaizen telemetry doctor` checks provider health when configured; OTLP has no query path in v1.
 
 ### `[telemetry.query.identity_allowlist]`
 

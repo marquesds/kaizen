@@ -39,6 +39,24 @@ pub fn doctor_text(workspace: Option<&Path>) -> Result<(i32, String)> {
     } else {
         writeln!(&mut out, "~/.kaizen/config.toml: (HOME unset, skipped)").unwrap();
     }
+    match crate::core::machine_registry::status() {
+        Ok(None) => writeln!(
+            &mut out,
+            "machine registry: (KAIZEN_HOME / HOME unset, skipped)"
+        )
+        .unwrap(),
+        Ok(Some((ref path, n))) => writeln!(
+            &mut out,
+            "machine registry: OK ({}; {} project(s))",
+            path.display(),
+            n
+        )
+        .unwrap(),
+        Err(e) => {
+            hard_fail = true;
+            writeln!(&mut out, "machine registry: ERROR: {e}").unwrap();
+        }
+    }
     writeln!(&mut out).unwrap();
 
     let cfg = match config::load(&ws) {

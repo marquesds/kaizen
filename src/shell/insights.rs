@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! `kaizen insights` — workspace activity dashboard.
 
+use crate::core::config;
+use crate::core::data_source::DataSource;
 use crate::metrics::report;
 use crate::shell::cli::maybe_refresh_store;
 use crate::shell::fmt::fmt_ts;
+use crate::shell::remote_pull::maybe_telemetry_pull;
 use crate::shell::scope;
 use crate::store::InsightsStats;
 use anyhow::Result;
@@ -16,16 +19,28 @@ pub fn insights_text(
     workspace: Option<&Path>,
     all_workspaces: bool,
     refresh: bool,
+    source: DataSource,
 ) -> Result<String> {
     let roots = scope::resolve(workspace, all_workspaces)?;
     let mut stats_rows = Vec::new();
     let mut reports = Vec::new();
     let mut guidance = String::new();
     for workspace in &roots {
+        let cfg = config::load(workspace)?;
         let store = crate::store::Store::open(&crate::core::workspace::db_path(workspace))?;
+        maybe_telemetry_pull(workspace, &store, &cfg, source, refresh)?;
         maybe_refresh_store(workspace, &store, refresh)?;
         let ws_str = workspace.to_string_lossy().to_string();
-        stats_rows.push(store.insights(&ws_str)?);
+        let row = store.insights(&ws_str)?;
+        let row = if source != DataSource::Local
+            && let Ok(Some(agg)) =
+                crate::shell::remote_observe::try_remote_event_agg(&store, &cfg, workspace)
+        {
+            crate::shell::remote_observe::merge_insights_stats(row, &agg, source)
+        } else {
+            row
+        };
+        stats_rows.push(row);
         if let Ok(report) = report::build_report(&store, &ws_str, 7) {
             reports.push(if roots.len() == 1 {
                 report
@@ -50,8 +65,16 @@ pub fn insights_text(
 }
 
 /// Print workspace activity dashboard.
-pub fn cmd_insights(workspace: Option<&Path>, all_workspaces: bool, refresh: bool) -> Result<()> {
-    print!("{}", insights_text(workspace, all_workspaces, refresh)?);
+pub fn cmd_insights(
+    workspace: Option<&Path>,
+    all_workspaces: bool,
+    refresh: bool,
+    source: DataSource,
+) -> Result<()> {
+    print!(
+        "{}",
+        insights_text(workspace, all_workspaces, refresh, source)?
+    );
     Ok(())
 }
 

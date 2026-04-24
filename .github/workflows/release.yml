@@ -187,6 +187,54 @@ jobs:
             dist/*.tar.gz
             dist/*.sha256
 
+  update-homebrew-tap:
+    name: update homebrew-tap
+    needs: [verify, build, release]
+    runs-on: ubuntu-latest
+    if: ${{ needs.verify.outputs.release_version == needs.verify.outputs.cargo_version && !contains(needs.verify.outputs.release_version, '-') }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Render formula and push to marquesds/homebrew-tap
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          VERSION: ${{ needs.verify.outputs.release_version }}
+        run: |
+          if [ -z "${HOMEBREW_TAP_TOKEN:-}" ]; then
+            echo "HOMEBREW_TAP_TOKEN is not set; skip Homebrew tap update (add repo secret to enable)."
+            exit 0
+          fi
+          set -euo pipefail
+          for f in \
+            "dist/kaizen-v${VERSION}-aarch64-apple-darwin.tar.gz.sha256" \
+            "dist/kaizen-v${VERSION}-x86_64-apple-darwin.tar.gz.sha256" \
+            "dist/kaizen-v${VERSION}-aarch64-unknown-linux-gnu.tar.gz.sha256" \
+            "dist/kaizen-v${VERSION}-x86_64-unknown-linux-gnu.tar.gz.sha256"; do
+            if [ ! -f "$f" ]; then
+              echo "Missing artifact: $f" >&2
+              ls -la dist/ >&2 || true
+              exit 1
+            fi
+          done
+          RENDERED="$(mktemp)"
+          bash "$GITHUB_WORKSPACE/scripts/render-homebrew-tap-formula.sh" "$VERSION" "$GITHUB_WORKSPACE/dist" > "$RENDERED"
+          git clone --depth=1 "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/marquesds/homebrew-tap.git" /tmp/homebrew-tap
+          install -m0644 "$RENDERED" /tmp/homebrew-tap/Formula/kaizen-cli.rb
+          cd /tmp/homebrew-tap
+          if git diff --exit-code; then
+            echo "No formula changes; skip push."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/kaizen-cli.rb
+          SHORT="${GITHUB_SHA:0:7}"
+          git commit -m "bump kaizen-cli to v${VERSION}" -m "Synced from ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}@${SHORT}"
+          git push origin HEAD:main
+
   publish:
     name: cargo publish
     needs: [verify, release]

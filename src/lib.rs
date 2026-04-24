@@ -15,9 +15,12 @@
 
 pub mod collect;
 pub mod core;
+
+pub use crate::core::DataSource;
 pub mod experiment;
 pub mod mcp;
 pub mod metrics;
+pub mod provider;
 pub mod proxy;
 pub mod report;
 pub mod retro;

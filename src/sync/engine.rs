@@ -10,7 +10,8 @@ use crate::sync::IngestExportBatch;
 use crate::sync::client::{PostBatchOutcome, SyncHttpClient};
 use crate::sync::outbound::{EventsBatchBody, OutboundEvent};
 use crate::sync::smart::{
-    OutboundRepoSnapshotChunk, OutboundToolSpan, RepoSnapshotsBatchBody, ToolSpansBatchBody,
+    OutboundRepoSnapshotChunk, OutboundToolSpan, OutboundWorkspaceFactRow, RepoSnapshotsBatchBody,
+    ToolSpansBatchBody, WorkspaceFactsBatchBody,
 };
 use crate::telemetry::ExporterRegistry;
 use anyhow::Context;
@@ -124,6 +125,20 @@ fn build_batch(
                 }),
             )))
         }
+        "workspace_facts" => {
+            let (ids, facts) = pack_batch_payloads::<OutboundWorkspaceFactRow>(rows, cfg, kind)?;
+            if ids.is_empty() {
+                return Ok(None);
+            }
+            Ok(Some((
+                ids,
+                IngestExportBatch::WorkspaceFacts(WorkspaceFactsBatchBody {
+                    team_id: team_id.into(),
+                    workspace_hash: workspace_hash.into(),
+                    facts,
+                }),
+            )))
+        }
         _ => Ok(None),
     }
 }
@@ -185,6 +200,9 @@ fn post_with_fanout(
                 IngestExportBatch::Events(b) => client.post_events_batch(b, key)?,
                 IngestExportBatch::ToolSpans(b) => client.post_tool_spans_batch(b, key)?,
                 IngestExportBatch::RepoSnapshots(b) => client.post_repo_snapshots_batch(b, key)?,
+                IngestExportBatch::WorkspaceFacts(b) => {
+                    client.post_workspace_facts_batch(b, key)?
+                }
             };
             Ok(o)
         })();
@@ -337,6 +355,18 @@ fn split_batch(body: IngestExportBatch, mid: usize) -> (IngestExportBatch, Inges
                 team_id: body.team_id,
                 workspace_hash: body.workspace_hash,
                 snapshots: body.snapshots[mid..].to_vec(),
+            }),
+        ),
+        IngestExportBatch::WorkspaceFacts(body) => (
+            IngestExportBatch::WorkspaceFacts(WorkspaceFactsBatchBody {
+                team_id: body.team_id.clone(),
+                workspace_hash: body.workspace_hash.clone(),
+                facts: body.facts[..mid].to_vec(),
+            }),
+            IngestExportBatch::WorkspaceFacts(WorkspaceFactsBatchBody {
+                team_id: body.team_id,
+                workspace_hash: body.workspace_hash,
+                facts: body.facts[mid..].to_vec(),
             }),
         ),
     }

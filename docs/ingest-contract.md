@@ -20,6 +20,7 @@ idempotent, project-scoped.
 | `POST` | `/v1/events` | Batched event ingestion (primary) |
 | `POST` | `/v1/tool-spans` | Batched per-tool latency + token spans |
 | `POST` | `/v1/repo-snapshots` | Batched code-fact snapshot chunks |
+| `POST` | `/v1/workspace-facts` | Batched skill/rule slug discovery (redacted; hashed in payload) |
 | `POST` | `/v1/sessions` | Upsert session metadata (lifecycle pings) |
 | `POST` | `/v1/experiments/:id/observation` | Variant assignment ping |
 | `GET`  | `/v1/health` | Liveness; returns server version + accepted schema versions |
@@ -166,6 +167,23 @@ Chunked code facts. No raw paths, symbols, commits, or file contents.
           "weight": 1
         }
       ]
+    }
+  ]
+}
+```
+
+## `POST /v1/workspace-facts`
+
+One batch per outbox flush of kind `workspace_facts`. Same transport as other batched `POST` routes (Bearer, gzip, idempotency key, `202` / `409` / `413` / `429` semantics). Body shape matches the client `WorkspaceFactsBatchBody`: `team_id`, `workspace_hash`, and a `facts` array of objects with `skill_slugs` and `rule_slugs` (Blake3-hashed identifiers, not raw paths, unless your redaction policy allowlists cleartext).
+
+```json
+{
+  "team_id": "kaizen-eng",
+  "workspace_hash": "blake3:5f3c...",
+  "facts": [
+    {
+      "skill_slugs": ["blake3:aa11...", "blake3:bb22..."],
+      "rule_slugs": ["blake3:cc33..."]
     }
   ]
 }

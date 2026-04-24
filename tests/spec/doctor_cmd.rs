@@ -18,5 +18,10 @@ fn doctor_runs_in_temp_workspace() -> anyhow::Result<()> {
     );
     // Ensure hook checks don't crash without cursor/claude files
     assert!(text.contains("hooks:"), "{}", text);
+    assert!(
+        text.contains("machine registry:"),
+        "expected machine registry line: {}",
+        text
+    );
     Ok(())
 }

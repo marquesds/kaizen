@@ -286,6 +286,10 @@ pub fn init_text(workspace: Option<&std::path::Path>) -> Result<String> {
     patch_cursor_hooks(&mut out, &ws)?;
     patch_claude_settings(&mut out, &ws)?;
     write_skill(&mut out, &ws)?;
+    let cws = crate::core::workspace::canonical(&ws);
+    if let Err(e) = crate::core::machine_registry::record_init(&cws) {
+        tracing::warn!("machine registry: {e:#}");
+    }
     writeln!(out).unwrap();
     writeln!(
         out,

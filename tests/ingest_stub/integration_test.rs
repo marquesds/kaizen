@@ -179,3 +179,68 @@ team_salt_hex = "{salt_hex}"
         "span leaked secret: {span_str}"
     );
 }
+
+#[tokio::test]
+async fn sync_flush_workspace_facts_hits_route() {
+    let (app, state) = stub::router();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(80)).await;
+
+    let tmp = tempfile::TempDir::new().unwrap();
+    let ws = tmp.path();
+    std::fs::create_dir_all(ws.join(".kaizen")).unwrap();
+    let salt_hex = "00".repeat(32);
+    let endpoint = format!("http://{}", addr);
+    std::fs::write(
+        ws.join(".kaizen/config.toml"),
+        format!(
+            r#"[sync]
+endpoint = "{endpoint}"
+team_token = "test-token"
+team_id = "team-1"
+team_salt_hex = "{salt_hex}"
+"#
+        ),
+    )
+    .unwrap();
+
+    let cfg = kaizen::core::config::load(ws).unwrap();
+    let salt = kaizen::core::config::try_team_salt(&cfg.sync).unwrap();
+    let db = ws.join(".kaizen/kaizen.db");
+    let store = Store::open(&db).unwrap();
+    let fact = serde_json::json!({
+        "skill_slugs": ["a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"],
+        "rule_slugs": ["b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3"]
+    });
+    store
+        .replace_outbox_rows("w:test", "workspace_facts", &[fact.to_string()])
+        .unwrap();
+
+    let db_path = db.clone();
+    let ws_path = ws.to_path_buf();
+    let sync_cfg = cfg.sync.clone();
+    tokio::task::spawn_blocking(move || {
+        let store = Store::open(&db_path).unwrap();
+        let flush = FlushExporters {
+            telemetry: &TelemetryConfig::default(),
+            registry: None,
+        };
+        kaizen::sync::flush_outbox_once(&store, &ws_path, &sync_cfg, &salt, &flush).unwrap();
+    })
+    .await
+    .unwrap();
+
+    let bodies = state.captured_bodies.lock().unwrap();
+    assert_eq!(bodies.len(), 1, "expected one POST to workspace-facts");
+    let v: serde_json::Value = serde_json::from_str(&bodies[0]).unwrap();
+    let facts = v
+        .get("facts")
+        .and_then(|f| f.as_array())
+        .expect("WorkspaceFacts body has `facts` array");
+    assert_eq!(facts.len(), 1);
+    assert!(facts[0].get("skill_slugs").is_some());
+}

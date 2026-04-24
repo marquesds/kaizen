@@ -25,6 +25,7 @@ Transcripts and hooks **capture**; `summary`, `insights`, `guidance`, and `metri
 
 - How `init` wires hooks and where data lands on disk.
 - When to use **cache-first** reads vs `--refresh`.
+- How **`--source local|provider|mixed`** changes observe-style commands when sync identity and `[telemetry.query]` are configured (optional).
 - How **`--all-workspaces`** aggregates across repos you have opened.
 - Which workflows are **MCP** vs **shell-only**.
 - Where to read next for proxy, sync, and experiments detail.

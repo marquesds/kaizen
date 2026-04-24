@@ -121,6 +121,7 @@ organization-level equivalents):
 |--------|---------|
 | **`CARGO_REGISTRY_TOKEN`** | [crates.io API token](https://doc.rust-lang.org/cargo/reference/publishing.html) with **publish** scope. Without it, the `cargo publish` job fails. |
 | **`RELEASE_PUSH_TOKEN`** | PAT used to create GitHub Releases and tags from the workflow (see the workflow’s `softprops/action-gh-release` steps). |
+| **`HOMEBREW_TAP_TOKEN`** | Optional. PAT with **`contents: write`** on [`marquesds/homebrew-tap`](https://github.com/marquesds/homebrew-tap). When set, the Release workflow’s **`update-homebrew-tap`** job rewrites `Formula/kaizen-cli.rb` with real `sha256` values from the release artifacts and pushes to `main`. If unset, that job no-ops. |
 
 ### First `cargo publish` to crates.io
 

@@ -1,5 +1,5 @@
 ---
-description: Quint spec in specs/ before Rust
+description: Quint in specs/ before Rust; wire specs with quint-connect
 alwaysApply: true
 ---
 
@@ -11,11 +11,14 @@ Skip for trivial edits. Formal Quint before or alongside Rust when wrong behavio
 
 | Trigger | Examples |
 |--------|----------|
+| New feature or user-visible behavior | add or extend the relevant `specs/<topic>.qnt`; do not ship behavior-only changes without the spec moving with them |
 | State machine or protocol steps | ingest, session lifecycle, hooks |
 | Invariants, idempotency, ordering | duplicate events, replay, cursor rules |
 | Concurrent or multi-step lifecycle | transitions that must stay consistent |
 
-Order: `specs/<topic>.qnt` (new or updated) → Rust → `#[quint_run]` / spec tests stay green where repo already wires `quint-connect`. CI runs Quint.
+Order: `specs/<topic>.qnt` (new or updated) → `tests/spec/` with **quint-connect** → Rust. For a new feature, treat the spec and its connect test as one change, not a follow-up.
+
+**quint-connect:** Replay the spec from Rust under `tests/spec/` with `use quint_connect::*;` and `#[quint_run]` (or extend an existing spec test in that directory). `cargo test` for that test must pass; CI runs `scripts/check-quint-specs.sh` and the spec suite. For which spec maps to which test, see `docs/quint-coverage.md`—update that map when you add a new spec file or a new `tests/spec/*` entry.
 
 ## Skip Quint
 
@@ -23,4 +26,4 @@ Typos, formatting, mechanical rename, single-line obvious fix, copy-only UI, dep
 
 ## Reference
 
-Existing specs: `specs/*.qnt`. Cross-cutting sequence: `docs/impl-sequence.md`.
+Existing specs: `specs/*.qnt`. `quint-connect` crate: `quint_connect` in `tests/spec/`, vendored in `vendor/quint-connect/`. Cross-cutting sequence: `docs/impl-sequence.md`.
