@@ -1,8 +1,10 @@
 # kaizen
 
-Local-first telemetry and tooling for AI coding agent sessions
-(Cursor, Claude Code, Codex). Collect, store, and reason about what
-agents do in your repos — offline by default, redacted before any sync.
+Run and share **kaizen** so you can see how coding agents behave in
+**real time**, run **retros** on that stream, and turn it into
+**strategies to improve** your own repo. Unifies Cursor, Claude
+Code, and Codex. One SQLite store and one CLI; **redact before** any
+sync, and only sync on **your** terms.
 
 Narrative guides and references live in this repository under [`docs/`](docs/README.md). The
 [crates.io](https://crates.io/crates/kaizen) page links to
@@ -19,7 +21,7 @@ inside that tarball.
 - **Session history** — searchable, live-tailable, across all three agents.
 - **Heuristic retro** — weekly bets: what to change to make agents cheaper / faster.
 - **Experiments** — A/B a rule, skill, or repo change against a real metric.
-- **Local-first** — SQLite on your disk. No data leaves the machine unless you configure sync.
+- **Fits your topology** — self-host, laptop, or a shared place your team can use; tailable session streams; you decide when anything syncs and **redact first**.
 
 ## Why kaizen over the alternatives
 
@@ -29,7 +31,7 @@ inside that tarball.
 | Cost per session for **Cursor** | none (transcripts strip usage) | ✅ best-effort token + model from transcript tail |
 | One pane of glass across agents | glue scripts | ✅ unified store, one CLI, one MCP |
 | Turn observations into change | dashboards only | ✅ weekly heuristic **retro** + **experiments** (A/B) |
-| Works offline, no cloud | needs an account | ✅ SQLite on disk, sync optional |
+| Self-host, not locked to a vendor cloud | needs an account | ✅ deploy the binary, tail agent sessions live, SQLite + optional **redacted** sync |
 | Ship MCP tools to agents | depends | ✅ every CLI command surfaces as an MCP tool |
 | Rust, single static binary, sub‑second cold start | varies | ✅ `cargo install kaizen` and go |
 

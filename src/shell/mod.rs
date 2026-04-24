@@ -11,5 +11,6 @@ pub mod insights;
 pub mod metrics;
 pub mod proxy;
 pub mod retro;
+pub mod scope;
 pub mod sync;
 pub mod telemetry;

@@ -10,11 +10,13 @@ use crate::collect::tail::goose::scan_goose_workspace;
 use crate::collect::tail::opencode::scan_opencode_workspace;
 use crate::core::config;
 use crate::core::event::{Event, SessionRecord};
-use crate::metrics::{index, report};
+use crate::metrics::report;
 use crate::shell::fmt::fmt_ts;
+use crate::shell::scope;
 use crate::store::{SYNC_STATE_LAST_AGENT_SCAN_MS, SYNC_STATE_LAST_AUTO_PRUNE_MS, Store};
 use anyhow::Result;
 use serde::Serialize;
+use std::collections::HashMap;
 use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 
@@ -24,12 +26,17 @@ pub use crate::shell::insights::cmd_insights;
 #[derive(Serialize)]
 struct SessionsListJson {
     workspace: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    workspaces: Vec<String>,
     count: usize,
     sessions: Vec<SessionRecord>,
 }
 
 #[derive(Serialize)]
 struct SummaryJsonOut {
+    workspace: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    workspaces: Vec<String>,
     #[serde(flatten)]
     stats: crate::store::SummaryStats,
     cost_usd: f64,
@@ -109,26 +116,70 @@ pub(crate) fn maybe_scan_all_agents(
     Ok(())
 }
 
+pub(crate) fn maybe_refresh_store(workspace: &Path, store: &Store, refresh: bool) -> Result<()> {
+    if !refresh {
+        return Ok(());
+    }
+    let cfg = config::load(workspace)?;
+    let ws_str = workspace.to_string_lossy().to_string();
+    maybe_scan_all_agents(workspace, &cfg, &ws_str, store, true)
+}
+
+fn combine_counts(rows: Vec<Vec<(String, u64)>>) -> Vec<(String, u64)> {
+    let mut counts = HashMap::new();
+    for set in rows {
+        for (key, value) in set {
+            *counts.entry(key).or_insert(0_u64) += value;
+        }
+    }
+    let mut out = counts.into_iter().collect::<Vec<_>>();
+    out.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+    out
+}
+
+fn workspace_names(roots: &[PathBuf]) -> Vec<String> {
+    roots
+        .iter()
+        .map(|path| path.to_string_lossy().to_string())
+        .collect()
+}
+
+fn open_workspace_store(workspace: &Path) -> Result<Store> {
+    Store::open(&crate::core::workspace::db_path(workspace))
+}
+
 /// `kaizen sessions list` — same output as CLI stdout.
 pub fn sessions_list_text(
     workspace: Option<&Path>,
     json_out: bool,
     refresh: bool,
+    all_workspaces: bool,
 ) -> Result<String> {
-    let ws = workspace_path(workspace)?;
-    let cfg = config::load(&ws)?;
-    let db_path = ws.join(".kaizen/kaizen.db");
-    let store = Store::open(&db_path)?;
-    let ws_str = ws.to_string_lossy().to_string();
-
-    maybe_scan_all_agents(&ws, &cfg, &ws_str, &store, refresh)?;
-
-    let sessions = store.list_sessions(&ws_str)?;
+    let roots = scope::resolve(workspace, all_workspaces)?;
+    let mut sessions = Vec::new();
+    for workspace in &roots {
+        let store = open_workspace_store(workspace)?;
+        maybe_refresh_store(workspace, &store, refresh)?;
+        let ws_str = workspace.to_string_lossy().to_string();
+        sessions.extend(store.list_sessions(&ws_str)?);
+    }
+    sessions.sort_by(|a, b| {
+        b.started_at_ms
+            .cmp(&a.started_at_ms)
+            .then_with(|| a.id.cmp(&b.id))
+    });
+    let scope_label = scope::label(&roots);
+    let workspaces = if roots.len() > 1 {
+        workspace_names(&roots)
+    } else {
+        Vec::new()
+    };
     if json_out {
         return Ok(format!(
             "{}\n",
             serde_json::to_string_pretty(&SessionsListJson {
-                workspace: ws_str,
+                workspace: scope_label,
+                workspaces,
                 count: sessions.len(),
                 sessions,
             })?
@@ -136,6 +187,10 @@ pub fn sessions_list_text(
     }
     use std::fmt::Write;
     let mut out = String::new();
+    if roots.len() > 1 {
+        writeln!(&mut out, "Scope: {scope_label}").unwrap();
+        writeln!(&mut out).unwrap();
+    }
     writeln!(
         &mut out,
         "{:<40} {:<10} {:<10} STARTED",
@@ -174,16 +229,23 @@ fn sessions_empty_state_hints(out: &mut String) {
 }
 
 /// `kaizen sessions list` — scan all agent transcripts, upsert sessions, print table.
-pub fn cmd_sessions_list(workspace: Option<&Path>, json_out: bool, refresh: bool) -> Result<()> {
-    print!("{}", sessions_list_text(workspace, json_out, refresh)?);
+pub fn cmd_sessions_list(
+    workspace: Option<&Path>,
+    json_out: bool,
+    refresh: bool,
+    all_workspaces: bool,
+) -> Result<()> {
+    print!(
+        "{}",
+        sessions_list_text(workspace, json_out, refresh, all_workspaces)?
+    );
     Ok(())
 }
 
 /// `kaizen sessions show` — same output as CLI stdout.
 pub fn session_show_text(id: &str, workspace: Option<&Path>) -> Result<String> {
     let ws = workspace_path(workspace)?;
-    let db_path = ws.join(".kaizen/kaizen.db");
-    let store = Store::open(&db_path)?;
+    let store = open_workspace_store(&ws)?;
     use std::fmt::Write;
     let mut out = String::new();
     match store.get_session(id)? {
@@ -219,40 +281,79 @@ pub fn cmd_session_show(id: &str, workspace: Option<&Path>) -> Result<()> {
 }
 
 /// `kaizen summary` — same output as CLI stdout.
-pub fn summary_text(workspace: Option<&Path>, json_out: bool, refresh: bool) -> Result<String> {
-    let ws = workspace_path(workspace)?;
-    let cfg = config::load(&ws)?;
-    let db_path = ws.join(".kaizen/kaizen.db");
-    let store = Store::open(&db_path)?;
-    let ws_str = ws.to_string_lossy().to_string();
+pub fn summary_text(
+    workspace: Option<&Path>,
+    json_out: bool,
+    refresh: bool,
+    all_workspaces: bool,
+) -> Result<String> {
+    let roots = scope::resolve(workspace, all_workspaces)?;
+    let mut total_cost_usd_e6 = 0_i64;
+    let mut session_count = 0_u64;
+    let mut by_agent = Vec::new();
+    let mut by_model = Vec::new();
+    let mut top_tools = Vec::new();
+    let mut hottest = Vec::new();
+    let mut slowest = Vec::new();
 
-    maybe_scan_all_agents(&ws, &cfg, &ws_str, &store, refresh)?;
-
-    let stats = store.summary_stats(&ws_str)?;
-    let cost_dollars = stats.total_cost_usd_e6 as f64 / 1_000_000.0;
-    if json_out {
-        let mut hotspot = None;
-        let mut slowest_tool = None;
-        if let Ok(_snapshot) = index::ensure_indexed(&store, &ws, false)
-            && let Ok(metrics) = report::build_report(&store, &ws_str, 7)
-        {
-            if let Some(ctx) = crate::sync::ingest_ctx(&cfg, ws.clone())
-                && let Some(snapshot) = metrics.snapshot.as_ref()
-                && let Ok(facts) = store.file_facts_for_snapshot(&snapshot.id)
-                && let Ok(edges) = store.repo_edges_for_snapshot(&snapshot.id)
-            {
-                let _ = crate::sync::smart::enqueue_repo_snapshot(
-                    &store, snapshot, &facts, &edges, &ctx,
-                );
+    for workspace in &roots {
+        let store = open_workspace_store(workspace)?;
+        maybe_refresh_store(workspace, &store, refresh)?;
+        let ws_str = workspace.to_string_lossy().to_string();
+        let stats = store.summary_stats(&ws_str)?;
+        total_cost_usd_e6 += stats.total_cost_usd_e6;
+        session_count += stats.session_count;
+        by_agent.push(stats.by_agent);
+        by_model.push(stats.by_model);
+        top_tools.push(stats.top_tools);
+        if let Ok(metrics) = report::build_report(&store, &ws_str, 7) {
+            if let Some(file) = metrics.hottest_files.first().cloned() {
+                hottest.push(if roots.len() == 1 {
+                    file
+                } else {
+                    crate::metrics::types::RankedFile {
+                        path: scope::decorate_path(workspace, &file.path),
+                        ..file
+                    }
+                });
             }
-            hotspot = metrics.hottest_files.first().cloned();
-            slowest_tool = metrics.slowest_tools.first().cloned();
+            if let Some(tool) = metrics.slowest_tools.first().cloned() {
+                slowest.push(tool);
+            }
         }
+    }
+
+    let stats = crate::store::SummaryStats {
+        session_count,
+        total_cost_usd_e6,
+        by_agent: combine_counts(by_agent),
+        by_model: combine_counts(by_model),
+        top_tools: combine_counts(top_tools),
+    };
+    let cost_dollars = stats.total_cost_usd_e6 as f64 / 1_000_000.0;
+    let hotspot = hottest
+        .into_iter()
+        .max_by(|a, b| a.value.cmp(&b.value).then_with(|| b.path.cmp(&a.path)));
+    let slowest_tool = slowest.into_iter().max_by(|a, b| {
+        a.p95_ms
+            .unwrap_or(0)
+            .cmp(&b.p95_ms.unwrap_or(0))
+            .then_with(|| b.tool.cmp(&a.tool))
+    });
+    let scope_label = scope::label(&roots);
+    let workspaces = if roots.len() > 1 {
+        workspace_names(&roots)
+    } else {
+        Vec::new()
+    };
+    if json_out {
         return Ok(format!(
             "{}\n",
             serde_json::to_string_pretty(&SummaryJsonOut {
-                stats,
+                workspace: scope_label,
+                workspaces,
                 cost_usd: cost_dollars,
+                stats,
                 hotspot,
                 slowest_tool,
             })?
@@ -260,6 +361,9 @@ pub fn summary_text(workspace: Option<&Path>, json_out: bool, refresh: bool) -> 
     }
     use std::fmt::Write;
     let mut out = String::new();
+    if roots.len() > 1 {
+        writeln!(&mut out, "Scope: {}", scope::label(&roots)).unwrap();
+    }
     writeln!(
         &mut out,
         "Sessions: {}   Cost: ${:.2}",
@@ -287,38 +391,35 @@ pub fn summary_text(workspace: Option<&Path>, json_out: bool, refresh: bool) -> 
         let parts: Vec<String> = stats
             .top_tools
             .iter()
+            .take(5)
             .map(|(t, n)| format!("{t} {n}"))
             .collect();
         writeln!(&mut out, "Top tools: {}", parts.join(" · ")).unwrap();
     }
-    if let Ok(_snapshot) = index::ensure_indexed(&store, &ws, false)
-        && let Ok(metrics) = report::build_report(&store, &ws_str, 7)
-    {
-        if let Some(ctx) = crate::sync::ingest_ctx(&cfg, ws.clone())
-            && let Some(snapshot) = metrics.snapshot.as_ref()
-            && let Ok(facts) = store.file_facts_for_snapshot(&snapshot.id)
-            && let Ok(edges) = store.repo_edges_for_snapshot(&snapshot.id)
-        {
-            let _ =
-                crate::sync::smart::enqueue_repo_snapshot(&store, snapshot, &facts, &edges, &ctx);
-        }
-        if let Some(file) = metrics.hottest_files.first() {
-            writeln!(&mut out, "Hotspot:   {} ({})", file.path, file.value).unwrap();
-        }
-        if let Some(tool) = metrics.slowest_tools.first() {
-            let p95 = tool
-                .p95_ms
-                .map(|v| format!("{v}ms"))
-                .unwrap_or_else(|| "-".into());
-            writeln!(&mut out, "Slowest:   {} p95 {}", tool.tool, p95).unwrap();
-        }
+    if let Some(file) = hotspot {
+        writeln!(&mut out, "Hotspot:   {} ({})", file.path, file.value).unwrap();
+    }
+    if let Some(tool) = slowest_tool {
+        let p95 = tool
+            .p95_ms
+            .map(|v| format!("{v}ms"))
+            .unwrap_or_else(|| "-".into());
+        writeln!(&mut out, "Slowest:   {} p95 {}", tool.tool, p95).unwrap();
     }
     Ok(out)
 }
 
 /// `kaizen summary` — aggregate session + cost stats across all agents.
-pub fn cmd_summary(workspace: Option<&Path>, json_out: bool, refresh: bool) -> Result<()> {
-    print!("{}", summary_text(workspace, json_out, refresh)?);
+pub fn cmd_summary(
+    workspace: Option<&Path>,
+    json_out: bool,
+    refresh: bool,
+    all_workspaces: bool,
+) -> Result<()> {
+    print!(
+        "{}",
+        summary_text(workspace, json_out, refresh, all_workspaces)?
+    );
     Ok(())
 }
 
@@ -481,10 +582,7 @@ where
 }
 
 pub(crate) fn workspace_path(workspace: Option<&Path>) -> Result<PathBuf> {
-    match workspace {
-        Some(p) => Ok(p.to_path_buf()),
-        None => std::env::current_dir().map_err(Into::into),
-    }
+    crate::core::workspace::resolve(workspace)
 }
 
 /// Convert workspace path to cursor project slug.

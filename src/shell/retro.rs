@@ -6,7 +6,7 @@ use crate::metrics::index;
 use crate::report::{ReportsDirLock, iso_week_label_utc, to_json, to_markdown, write_atomic};
 use crate::retro::types::Report;
 use crate::retro::{engine, inputs};
-use crate::shell::cli::{maybe_scan_all_agents, workspace_path};
+use crate::shell::cli::{maybe_refresh_store, workspace_path};
 use crate::store::Store;
 use anyhow::Result;
 use std::path::{Path, PathBuf};
@@ -16,8 +16,8 @@ fn compute_retro(workspace: &Path, days: u32, refresh: bool) -> Result<(PathBuf,
     let db_path = workspace.join(".kaizen/kaizen.db");
     let store = Store::open(&db_path)?;
     let ws_str = workspace.to_string_lossy().to_string();
-    maybe_scan_all_agents(workspace, &cfg, &ws_str, &store, refresh)?;
-    if let Ok(snapshot) = index::ensure_indexed(&store, workspace, false)
+    maybe_refresh_store(workspace, &store, refresh)?;
+    if let Ok(snapshot) = index::ensure_indexed(&store, workspace, refresh)
         && let Some(ctx) = crate::sync::ingest_ctx(&cfg, workspace.to_path_buf())
         && let Ok(facts) = store.file_facts_for_snapshot(&snapshot.id)
         && let Ok(edges) = store.repo_edges_for_snapshot(&snapshot.id)

@@ -20,7 +20,8 @@ const MCP_CAPABILITIES: &str = r#"Kaizen MCP maps 1:1 to the `kaizen` CLI.
 - kaizen_metrics — Code hotspots, slow tools (p95), token-heavy tools, churn. Use for **repository** and tool latency. Optional json.
 - kaizen_sessions_list / kaizen_session_show — Raw session list and one session. Optional json on list.
 - kaizen_insights — Activity dashboard (7d). kaizen_retro — weekly bets. kaizen_exp_* — experiments.
-- List/summary/insights/metrics/retro support refresh=true to force a full transcript rescan (matches CLI --refresh).
+- List/summary/insights/metrics/retro are cache-first; set refresh=true to force a full transcript rescan (matches CLI --refresh).
+- sessions_list/summary/insights/metrics also accept all_workspaces=true to aggregate across registered workspace-local DBs.
 - kaizen_ingest_hook — same as `kaizen ingest hook` (rare; hooks call this).
 - kaizen_init — idempotent .kaizen/ + hook patches. kaizen_sync_* — outbox. kaizen_tui — not available (returns JSON stub).
 
@@ -62,6 +63,9 @@ struct WorkspaceArg {
 struct WorkspaceJsonArg {
     /// Workspace root (repository path). If omitted, uses the process current directory.
     workspace: Option<String>,
+    /// When true, read from every registered workspace on this machine.
+    #[serde(default)]
+    all_workspaces: bool,
     /// When true, return the same pretty JSON as `kaizen sessions list --json` or `kaizen summary --json`.
     #[serde(default)]
     json: bool,
@@ -91,6 +95,8 @@ struct SessionIdArg {
 struct MetricsArg {
     #[serde(flatten)]
     ws: WorkspaceArg,
+    #[serde(default)]
+    all_workspaces: bool,
     #[serde(default = "default_days")]
     days: u32,
     /// When true, return pretty JSON
@@ -148,6 +154,8 @@ struct RetroArg {
 struct InsightsArg {
     #[serde(flatten)]
     ws: WorkspaceArg,
+    #[serde(default)]
+    all_workspaces: bool,
     /// When true, run a full agent transcript rescan (matches `kaizen insights --refresh`).
     #[serde(default)]
     refresh: bool,
@@ -250,12 +258,16 @@ impl KaizenMcp {
         &self,
         Parameters(WorkspaceJsonArg {
             workspace,
+            all_workspaces,
             json,
             refresh,
         }): Parameters<WorkspaceJsonArg>,
     ) -> Result<CallToolResult, ErrorData> {
         let w = opt_path(&workspace);
-        let t = run_blocking(move || cli::sessions_list_text(w.as_deref(), json, refresh)).await?;
+        let t = run_blocking(move || {
+            cli::sessions_list_text(w.as_deref(), json, refresh, all_workspaces)
+        })
+        .await?;
         ok_str(t)
     }
 
@@ -280,12 +292,15 @@ impl KaizenMcp {
         &self,
         Parameters(WorkspaceJsonArg {
             workspace,
+            all_workspaces,
             json,
             refresh,
         }): Parameters<WorkspaceJsonArg>,
     ) -> Result<CallToolResult, ErrorData> {
         let w = opt_path(&workspace);
-        let t = run_blocking(move || cli::summary_text(w.as_deref(), json, refresh)).await?;
+        let t =
+            run_blocking(move || cli::summary_text(w.as_deref(), json, refresh, all_workspaces))
+                .await?;
         ok_str(t)
     }
 
@@ -323,10 +338,16 @@ impl KaizenMcp {
     )]
     async fn kaizen_insights(
         &self,
-        Parameters(InsightsArg { ws, refresh }): Parameters<InsightsArg>,
+        Parameters(InsightsArg {
+            ws,
+            all_workspaces,
+            refresh,
+        }): Parameters<InsightsArg>,
     ) -> Result<CallToolResult, ErrorData> {
         let w = opt_path(&ws.workspace);
-        let t = run_blocking(move || insights::insights_text(w.as_deref(), refresh)).await?;
+        let t =
+            run_blocking(move || insights::insights_text(w.as_deref(), all_workspaces, refresh))
+                .await?;
         ok_str(t)
     }
 
@@ -338,6 +359,7 @@ impl KaizenMcp {
         &self,
         Parameters(MetricsArg {
             ws,
+            all_workspaces,
             days,
             json,
             force,
@@ -345,9 +367,10 @@ impl KaizenMcp {
         }): Parameters<MetricsArg>,
     ) -> Result<CallToolResult, ErrorData> {
         let w = opt_path(&ws.workspace);
-        let t =
-            run_blocking(move || metrics::metrics_text(w.as_deref(), days, json, force, refresh))
-                .await?;
+        let t = run_blocking(move || {
+            metrics::metrics_text(w.as_deref(), days, json, force, all_workspaces, refresh)
+        })
+        .await?;
         ok_str(t)
     }
 
