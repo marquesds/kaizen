@@ -11,6 +11,12 @@ struct InitState {
     claude_present: bool,
     claude_patched: bool,
     claude_backup: bool,
+    codex_present: bool,
+    codex_patched: bool,
+    codex_backup: bool,
+    copilot_cli_present: bool,
+    copilot_cli_patched: bool,
+    copilot_cli_backup: bool,
     skill_ready: bool,
 }
 
@@ -23,6 +29,12 @@ struct InitDriver {
     claude_present: bool,
     claude_patched: bool,
     claude_backup: bool,
+    codex_present: bool,
+    codex_patched: bool,
+    codex_backup: bool,
+    copilot_cli_present: bool,
+    copilot_cli_patched: bool,
+    copilot_cli_backup: bool,
     skill_ready: bool,
 }
 
@@ -35,6 +47,8 @@ impl InitDriver {
         self.seed_empty();
         self.cursor_present = true;
         self.claude_present = true;
+        self.codex_present = true;
+        self.copilot_cli_present = true;
     }
 
     fn seed_ready(&mut self) {
@@ -44,6 +58,10 @@ impl InitDriver {
         self.cursor_backup = true;
         self.claude_patched = true;
         self.claude_backup = true;
+        self.codex_patched = true;
+        self.codex_backup = true;
+        self.copilot_cli_patched = true;
+        self.copilot_cli_backup = true;
         self.skill_ready = true;
     }
 
@@ -56,11 +74,21 @@ impl InitDriver {
         if self.claude_present && !self.claude_patched {
             self.claude_backup = true;
         }
+        if self.codex_present && !self.codex_patched {
+            self.codex_backup = true;
+        }
+        if self.copilot_cli_present && !self.copilot_cli_patched {
+            self.copilot_cli_backup = true;
+        }
         // init now scaffolds hook files when absent.
         self.cursor_present = true;
         self.cursor_patched = true;
         self.claude_present = true;
         self.claude_patched = true;
+        self.codex_present = true;
+        self.codex_patched = true;
+        self.copilot_cli_present = true;
+        self.copilot_cli_patched = true;
     }
 }
 
@@ -74,6 +102,12 @@ impl State<InitDriver> for InitState {
             claude_present: d.claude_present,
             claude_patched: d.claude_patched,
             claude_backup: d.claude_backup,
+            codex_present: d.codex_present,
+            codex_patched: d.codex_patched,
+            codex_backup: d.codex_backup,
+            copilot_cli_present: d.copilot_cli_present,
+            copilot_cli_patched: d.copilot_cli_patched,
+            copilot_cli_backup: d.copilot_cli_backup,
             skill_ready: d.skill_ready,
         })
     }
