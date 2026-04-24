@@ -190,3 +190,7 @@ quint-connect = "0.1"
 itf = "0.4"
 tempfile = "3"
 tower = { version = "0.5", features = ["util"] }
+
+[patch.crates-io]
+# Patched: `quint run` uses `--backend rust` (GHA `macos-latest` + TS sim exited 1, empty stderr).
+quint-connect = { path = "vendor/quint-connect" }

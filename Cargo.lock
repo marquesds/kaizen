@@ -2378,8 +2378,6 @@ dependencies = [
 [[package]]
 name = "quint-connect"
 version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a66d8666ae428df917037dc064921a48ac74ff5758033aa388c1cd3e24af551"
 dependencies = [
  "anyhow",
  "colored",
