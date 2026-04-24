@@ -6,12 +6,15 @@ binary from [GitHub Releases](https://github.com/marquesds/kaizen/releases) (see
 [crates.io](https://crates.io/crates/kaizen-cli) package name is `kaizen-cli`; the on-disk CLI
 name stays `kaizen`.
 
-## One-time: create a tap and add the formula
+## Tap repository
 
-1. On GitHub, create a repository named `homebrew-tap` under your org or user (e.g.
-   `https://github.com/marquesds/homebrew-tap`).
-2. Add `Formula/kaizen-cli.rb` (copy from [`kaizen-cli.rb`](kaizen-cli.rb) in this folder).
-3. After a **tagged** release, download each `kaizen-v<ver>-<triple>.tar.gz` from the release page
+The tap lives at **[github.com/marquesds/homebrew-tap](https://github.com/marquesds/homebrew-tap)**.
+Copy updates from [`kaizen-cli.rb`](kaizen-cli.rb) here into that repo’s `Formula/kaizen-cli.rb` when
+the formula changes.
+
+## When you cut a release (maintainers)
+
+1. After a **tagged** release, download each `kaizen-v<ver>-<triple>.tar.gz` from the release page
    (or use the files attached to the release in CI) and set each `sha256` in the formula:
 
    ```bash
@@ -19,16 +22,14 @@ name stays `kaizen`.
    ```
 
    or paste the value from the matching `kaizen-*.tar.gz.sha256` file in the release assets.
-4. Set `version` in the formula to the released SemVer (e.g. `0.1.0`) and ensure each `url` uses the
+2. Set `version` in the formula to the released SemVer (e.g. `0.1.0`) and ensure each `url` uses the
    matching `v<version>` tag in the path.
-5. Commit and push the tap. Users can install with:
+3. Commit and push **homebrew-tap**. Users install with:
 
    ```bash
    brew tap marquesds/tap
    brew install kaizen-cli
    ```
-
-   (Replace `marquesds` with your GitHub user or org that owns `homebrew-tap`.)
 
 ## Uninstall
 
