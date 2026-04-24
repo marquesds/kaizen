@@ -31,7 +31,7 @@ here explicitly.
 - `docs/install.md`, `docs/usage.md`, `docs/concepts.md` — user-facing docs.
 - `CODE_OF_CONDUCT.md`, `SECURITY.md`, issue + PR templates.
 - `CHANGELOG.md` (this file).
-- Release workflow: first green CI on Cargo version `X.Y.Z` pushes exact tag `vX.Y.Z` and publishes crates.io; later green CI runs on the same Cargo version push prerelease tags like `vX.Y.Z-ci.<sha>` for GitHub Release binaries without re-publishing the crate.
+- Release workflow: green CI on `main` tags `vX.Y.Z` from `Cargo.toml` when that tag is free, otherwise **patch-bumps** (e.g. `v0.1.0` → `v0.1.1`) until a free semver tag and triggers the Release workflow. `cargo publish` runs only when the tag equals `Cargo.toml` (same patch); additional patch tags ship GitHub release binaries only.
 
 ### Changed
 - Config merge: `[retention]` and `[scan].min_rescan_seconds` now merge workspace + user TOML field-by-field (workspace first, then user overrides non-default fields). `[sources]` remains user-file-only.
