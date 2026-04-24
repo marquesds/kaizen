@@ -1,6 +1,6 @@
 [package]
 name = "kaizen-cli"
-version = "0.1.0"
+version = "0.1.6"
 edition = "2024"
 rust-version = "1.95"
 authors = ["Lucas Marques <hi@lucasmarques.me>"]
@@ -10,7 +10,7 @@ repository = "https://github.com/marquesds/kaizen"
 homepage = "https://github.com/marquesds/kaizen"
 documentation = "https://docs.rs/kaizen-cli"
 readme = "README.md"
-keywords = ["ai", "agent", "telemetry", "cursor", "claude"]
+keywords = ["ai", "agile", "agents", "local", "distributed", "telemetry", "observability", "retrospective", "a/b testing", "harness-engineering"]
 categories = ["command-line-utilities", "development-tools"]
 exclude = [
     "discoveries/",
