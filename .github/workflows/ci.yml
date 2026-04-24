@@ -3,8 +3,24 @@ name: CI
 on:
   push:
     branches: [main, master]
+    paths-ignore:
+      - ".claude/**"
+      - ".cursor/**"
+      - "**/*.md"
+      - ".editorconfig"
+      - ".gitattributes"
+      - ".gitignore"
+      - "LICENSE*"
   pull_request:
     branches: [main, master]
+    paths-ignore:
+      - ".claude/**"
+      - ".cursor/**"
+      - "**/*.md"
+      - ".editorconfig"
+      - ".gitattributes"
+      - ".gitignore"
+      - "LICENSE*"
 
 concurrency:
   group: ci-${{ github.ref }}
