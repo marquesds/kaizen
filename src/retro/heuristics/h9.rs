@@ -26,8 +26,8 @@ pub fn run(inputs: &Inputs) -> Vec<Bet> {
     }
     let n_sessions = inputs.aggregates.unique_session_ids.len().max(1);
     let share = err_sessions.len() as f64 / n_sessions as f64;
-    let share_ok = inputs.aggregates.unique_session_ids.len() >= MIN_SESSIONS
-        && share >= SESSION_ERROR_SHARE;
+    let share_ok =
+        inputs.aggregates.unique_session_ids.len() >= MIN_SESSIONS && share >= SESSION_ERROR_SHARE;
     if error_count < MIN_ERROR_EVENTS && !share_ok {
         return vec![];
     }

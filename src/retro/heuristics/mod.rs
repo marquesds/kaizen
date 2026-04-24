@@ -2,6 +2,11 @@
 //! Heuristic bets H1–H14.
 
 mod h1;
+mod h10;
+mod h11;
+mod h12;
+mod h13;
+mod h14;
 mod h2;
 mod h3;
 mod h4;
@@ -10,11 +15,6 @@ mod h6;
 mod h7;
 mod h8;
 mod h9;
-mod h10;
-mod h11;
-mod h12;
-mod h13;
-mod h14;
 
 use crate::retro::types::{Bet, Inputs};
 

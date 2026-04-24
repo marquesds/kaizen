@@ -22,7 +22,10 @@ pub fn run(inputs: &Inputs) -> Vec<Bet> {
             continue;
         }
         tool_calls += 1;
-        if e.tool.as_ref().is_some_and(|t| t.to_lowercase().contains("mcp")) {
+        if e.tool
+            .as_ref()
+            .is_some_and(|t| t.to_lowercase().contains("mcp"))
+        {
             mcp_calls += 1;
         }
     }
