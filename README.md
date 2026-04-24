@@ -9,7 +9,7 @@ Narrative guides and references live in this repository under [`docs/`](docs/REA
 [docs.rs](https://docs.rs/kaizen) for the **Rust API**; full markdown documentation is not
 inside that tarball.
 
-[![CI](https://github.com/lucasmarqs/kaizen/actions/workflows/ci.yml/badge.svg)](https://github.com/lucasmarqs/kaizen/actions/workflows/ci.yml)
+[![CI](https://github.com/marquesds/kaizen/actions/workflows/ci.yml/badge.svg)](https://github.com/marquesds/kaizen/actions/workflows/ci.yml)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
 [![Crates.io](https://img.shields.io/crates/v/kaizen.svg)](https://crates.io/crates/kaizen)
 
