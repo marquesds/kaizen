@@ -129,6 +129,7 @@ pub fn expand_ingest_batch(batch: &crate::sync::IngestExportBatch) -> Vec<Canoni
                 });
             }
         }
+        IngestExportBatch::SessionEvals(_) => {}
     }
     out
 }

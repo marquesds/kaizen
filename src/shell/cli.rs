@@ -271,6 +271,18 @@ pub fn session_show_text(id: &str, workspace: Option<&Path>) -> Result<String> {
         }
         None => anyhow::bail!("session not found: {id} — try `kaizen sessions list`"),
     }
+    let evals = store.list_evals_for_session(id).unwrap_or_default();
+    if !evals.is_empty() {
+        writeln!(&mut out, "evals:").unwrap();
+        for e in &evals {
+            writeln!(
+                &mut out,
+                "  {} score={:.2} flagged={} {}",
+                e.rubric_id, e.score, e.flagged, e.rationale
+            )
+            .unwrap();
+        }
+    }
     Ok(out)
 }
 

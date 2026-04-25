@@ -19,6 +19,7 @@ const CONFIG_TOML: &str = r#"[kaizen]
 # sample_rate = 1.0
 "#;
 const KAIZEN_RETRO_SKILL: &str = include_str!("../../assets/kaizen-retro-SKILL.md");
+const KAIZEN_EVAL_SKILL: &str = include_str!("../../assets/kaizen-eval-SKILL.md");
 
 const CURSOR_HOOK_EVENTS: &[&str] = &["SessionStart", "PreToolUse", "PostToolUse", "Stop"];
 const CLAUDE_HOOK_EVENTS: &[&str] = &["SessionStart", "PreToolUse", "PostToolUse", "Stop"];
@@ -260,6 +261,21 @@ pub fn claude_kaizen_hook_wiring(ws: &Path) -> Result<Option<bool>, String> {
     Ok(Some(true))
 }
 
+fn write_eval_skill(out: &mut String, ws: &Path) -> Result<()> {
+    let path = ws.join(".cursor/skills/kaizen-eval/SKILL.md");
+    std::fs::create_dir_all(path.parent().unwrap())?;
+    if path.exists() {
+        let existing = std::fs::read_to_string(&path)?;
+        if !existing.contains("placeholder") && !existing.trim().is_empty() {
+            writeln!(out, "  skipped  .cursor/skills/kaizen-eval/SKILL.md").unwrap();
+            return Ok(());
+        }
+    }
+    std::fs::write(&path, KAIZEN_EVAL_SKILL)?;
+    writeln!(out, "  wrote  .cursor/skills/kaizen-eval/SKILL.md").unwrap();
+    Ok(())
+}
+
 fn write_skill(out: &mut String, ws: &Path) -> Result<()> {
     let path = ws.join(".cursor/skills/kaizen-retro/SKILL.md");
     std::fs::create_dir_all(path.parent().unwrap())?;
@@ -286,6 +302,7 @@ pub fn init_text(workspace: Option<&std::path::Path>) -> Result<String> {
     patch_cursor_hooks(&mut out, &ws)?;
     patch_claude_settings(&mut out, &ws)?;
     write_skill(&mut out, &ws)?;
+    write_eval_skill(&mut out, &ws)?;
     let cws = crate::core::workspace::canonical(&ws);
     if let Err(e) = crate::core::machine_registry::record_init(&cws) {
         tracing::warn!("machine registry: {e:#}");

@@ -19,7 +19,9 @@ flowchart LR
   measure --> capture
 ```
 
-Transcripts and hooks **capture**; `summary`, `insights`, `guidance`, and `metrics` **summarise**; `retro` and `exp` **propose and measure** change. The deep data story is in [telemetry-journey.md](../telemetry-journey.md).
+Transcripts and hooks **capture**; `summary`, `insights`, `guidance`, and `metrics` **summarise**; `retro`, `eval`, and `exp` **propose and measure** change. The deep data story is in [telemetry-journey.md](../telemetry-journey.md).
+
+After you have sessions in the store you can run **`kaizen eval run`** to call an LLM judge (requires `[eval].enabled = true` and `ANTHROPIC_API_KEY`). Low-scoring sessions appear as the **H15** bet in `kaizen retro`. See [usage.md#kaizen-eval](../usage.md#kaizen-eval) and [config.md#eval](../config.md#eval) for setup.
 
 ## What you will know after
 

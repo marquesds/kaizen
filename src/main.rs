@@ -205,6 +205,51 @@ enum Command {
         #[command(subcommand)]
         subcmd: ProxyCommand,
     },
+    /// LLM-as-a-Judge evaluations for agent sessions. See docs/usage.md.
+    #[command(next_help_heading = "Improve")]
+    Eval {
+        #[command(subcommand)]
+        subcmd: EvalCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum EvalCommand {
+    /// Run LLM-as-a-Judge evals on unevaluated sessions.
+    Run {
+        /// workspace root (default: cwd)
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        /// Only evaluate sessions started in the last N days.
+        #[arg(long, default_value_t = 7)]
+        since_days: u64,
+        /// Print what would be evaluated without calling the judge.
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// List stored eval results.
+    List {
+        /// workspace root (default: cwd)
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        /// Only show sessions with score >= this value (0.0 = show all).
+        #[arg(long, default_value_t = 0.0)]
+        min_score: f64,
+        /// Emit JSON array.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Print the rendered judge prompt for a session (no LLM call).
+    Prompt {
+        /// workspace root (default: cwd)
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        /// Session ID to render the prompt for.
+        session_id: String,
+        /// Rubric to use.
+        #[arg(long, default_value = "tool-efficiency-v1")]
+        rubric: String,
+    },
 }
 
 /// Shells supported by clap_complete (redirect stdout to a file, or eval).
@@ -608,6 +653,23 @@ fn main() -> anyhow::Result<()> {
                     workspace,
                 },
         } => kaizen::shell::proxy::cmd_proxy_run(workspace.as_deref(), listen, upstream),
+        Command::Eval { subcmd } => match subcmd {
+            EvalCommand::Run {
+                workspace,
+                since_days,
+                dry_run,
+            } => kaizen::shell::eval::cmd_eval_run(workspace.as_deref(), since_days, dry_run),
+            EvalCommand::List {
+                workspace,
+                min_score,
+                json,
+            } => kaizen::shell::eval::cmd_eval_list(workspace.as_deref(), min_score, json),
+            EvalCommand::Prompt {
+                workspace,
+                session_id,
+                rubric,
+            } => kaizen::shell::eval::cmd_eval_prompt(workspace.as_deref(), &session_id, &rubric),
+        },
     }
 }
 

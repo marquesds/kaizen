@@ -373,6 +373,54 @@ impl ExporterConfig {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EvalConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "default_eval_endpoint")]
+    pub endpoint: String,
+    #[serde(default)]
+    pub api_key: String,
+    #[serde(default = "default_eval_model")]
+    pub model: String,
+    #[serde(default = "default_eval_rubric")]
+    pub rubric: String,
+    #[serde(default = "default_eval_batch_size")]
+    pub batch_size: usize,
+    #[serde(default = "default_eval_min_cost")]
+    pub min_cost_usd: f64,
+}
+
+impl Default for EvalConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            endpoint: default_eval_endpoint(),
+            api_key: String::new(),
+            model: default_eval_model(),
+            rubric: default_eval_rubric(),
+            batch_size: default_eval_batch_size(),
+            min_cost_usd: default_eval_min_cost(),
+        }
+    }
+}
+
+fn default_eval_endpoint() -> String {
+    "https://api.anthropic.com".into()
+}
+fn default_eval_model() -> String {
+    "claude-haiku-4-5-20251001".into()
+}
+fn default_eval_rubric() -> String {
+    "tool-efficiency-v1".into()
+}
+fn default_eval_batch_size() -> usize {
+    20
+}
+fn default_eval_min_cost() -> f64 {
+    0.01
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Config {
     #[serde(default)]
@@ -387,6 +435,8 @@ pub struct Config {
     pub telemetry: TelemetryConfig,
     #[serde(default)]
     pub proxy: ProxyConfig,
+    #[serde(default)]
+    pub eval: EvalConfig,
 }
 
 /// Load config: workspace `.kaizen/config.toml` then `~/.kaizen/config.toml`.
@@ -419,6 +469,48 @@ fn merge(base: Config, user: Config) -> Config {
         sync: merge_sync(base.sync, user.sync),
         telemetry: merge_telemetry(base.telemetry, user.telemetry),
         proxy: merge_proxy(base.proxy, user.proxy),
+        eval: merge_eval(base.eval, user.eval),
+    }
+}
+
+fn merge_eval(base: EvalConfig, user: EvalConfig) -> EvalConfig {
+    let def = EvalConfig::default();
+    EvalConfig {
+        enabled: if user.enabled != def.enabled {
+            user.enabled
+        } else {
+            base.enabled
+        },
+        endpoint: if user.endpoint != def.endpoint {
+            user.endpoint
+        } else {
+            base.endpoint
+        },
+        api_key: if !user.api_key.is_empty() {
+            user.api_key
+        } else {
+            base.api_key
+        },
+        model: if user.model != def.model {
+            user.model
+        } else {
+            base.model
+        },
+        rubric: if user.rubric != def.rubric {
+            user.rubric
+        } else {
+            base.rubric
+        },
+        batch_size: if user.batch_size != def.batch_size {
+            user.batch_size
+        } else {
+            base.batch_size
+        },
+        min_cost_usd: if user.min_cost_usd != def.min_cost_usd {
+            user.min_cost_usd
+        } else {
+            base.min_cost_usd
+        },
     }
 }
 

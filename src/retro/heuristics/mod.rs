@@ -7,6 +7,7 @@ mod h11;
 mod h12;
 mod h13;
 mod h14;
+mod h15;
 mod h2;
 mod h3;
 mod h4;
@@ -34,5 +35,6 @@ pub fn all_bets(inputs: &Inputs) -> Vec<Bet> {
     v.extend(h12::run(inputs));
     v.extend(h13::run(inputs));
     v.extend(h14::run(inputs));
+    v.extend(h15::run(inputs));
     v
 }

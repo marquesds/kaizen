@@ -24,6 +24,7 @@ Idempotent workspace setup. Typical effects:
 | `.cursor/hooks.json` | Created or patched so `SessionStart`, `PreToolUse`, `PostToolUse`, `Stop` run `kaizen ingest hook --source cursor`. |
 | `.claude/settings.json` | Created or patched with the same events for `kaizen ingest hook --source claude`. |
 | `.cursor/skills/kaizen-retro/SKILL.md` | Written (or skipped if you already replaced the placeholder skill). |
+| `.cursor/skills/kaizen-eval/SKILL.md` | Written (or skipped if you already replaced the placeholder skill). |
 | `.kaizen/backup/*.bak` | Timestamped copy before patching an existing hooks/settings file. |
 
 Re-running is safe. Codex, Goose, OpenCode, and Copilot sessions are ingested via **transcript tail** (and optional hooks elsewhere); `init` only patches **Cursor** and **Claude Code** hook files today.
@@ -196,3 +197,28 @@ kaizen exp conclude <id>
 Metrics: `tokens_per_session`, `cost_per_session`, `success_rate`,
 `tool_loops`, `duration_minutes`, `files_per_session`. Details:
 [experiments.md](experiments.md).
+
+## `kaizen eval`
+
+LLM-as-a-Judge evaluations. Requires `[eval].enabled = true` in config and either
+`[eval].api_key` or `ANTHROPIC_API_KEY` in the environment. See [config.md#eval](config.md#eval).
+
+```bash
+kaizen eval run                       # evaluate unevaluated sessions (last 7 days, cost >= $0.01)
+kaizen eval run --since-days 14       # extend the lookback window
+kaizen eval run --dry-run             # print which sessions would be evaluated without calling the judge
+kaizen eval list                      # list all stored eval results
+kaizen eval list --min-score 0        # include all sessions (default: 0.0 = show all)
+kaizen eval list --json               # emit JSON array of EvalRow objects
+kaizen eval prompt <session-id>       # print the rendered judge prompt (no LLM call)
+kaizen eval prompt <session-id> --rubric tool-efficiency-v1  # explicit rubric
+```
+
+**`kaizen eval run`** finds sessions that have no existing eval, calls the configured judge model
+(default: `claude-haiku-4-5-20251001`) with the `tool-efficiency-v1` rubric, stores the result,
+and prints a summary. Sessions with `score < 0.4` are flagged and surfaced by **H15** in `kaizen retro`.
+
+**`kaizen eval prompt`** renders the full judge prompt for any session without making any LLM
+call — useful for manual review, piping to an external model, or debugging rubric output.
+
+**`kaizen sessions show <id>`** appends eval rows when present.

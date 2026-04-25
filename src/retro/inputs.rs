@@ -39,6 +39,12 @@ pub fn load_inputs(
     let file_facts = latest_file_facts(store, workspace_key)?;
 
     let aggregates = build_aggregates(&events);
+    let eval_scores = store
+        .list_evals_in_window(window_start_ms, window_end_ms)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|r| (r.session_id, r.score))
+        .collect();
 
     Ok(Inputs {
         window_start_ms,
@@ -54,6 +60,7 @@ pub fn load_inputs(
         rules_used_recent_slugs,
         file_facts,
         aggregates,
+        eval_scores,
     })
 }
 
@@ -213,6 +220,7 @@ fn load_inputs_from_remote_cache(
         rules_used_recent_slugs,
         file_facts,
         aggregates,
+        eval_scores: vec![],
     })
 }
 

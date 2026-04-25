@@ -139,6 +139,18 @@ fn build_batch(
                 }),
             )))
         }
+        "session_evals" => {
+            let (ids, evals) = pack_batch_payloads::<crate::eval::types::EvalRow>(rows, cfg, kind)?;
+            if ids.is_empty() {
+                return Ok(None);
+            }
+            Ok(Some((
+                ids,
+                IngestExportBatch::SessionEvals(crate::sync::export_batch::SessionEvalsBatchBody {
+                    evals,
+                }),
+            )))
+        }
         _ => Ok(None),
     }
 }
@@ -203,6 +215,7 @@ fn post_with_fanout(
                 IngestExportBatch::WorkspaceFacts(b) => {
                     client.post_workspace_facts_batch(b, key)?
                 }
+                IngestExportBatch::SessionEvals(b) => client.post_session_evals_batch(b, key)?,
             };
             Ok(o)
         })();
@@ -367,6 +380,14 @@ fn split_batch(body: IngestExportBatch, mid: usize) -> (IngestExportBatch, Inges
                 team_id: body.team_id,
                 workspace_hash: body.workspace_hash,
                 facts: body.facts[mid..].to_vec(),
+            }),
+        ),
+        IngestExportBatch::SessionEvals(body) => (
+            IngestExportBatch::SessionEvals(crate::sync::export_batch::SessionEvalsBatchBody {
+                evals: body.evals[..mid].to_vec(),
+            }),
+            IngestExportBatch::SessionEvals(crate::sync::export_batch::SessionEvalsBatchBody {
+                evals: body.evals[mid..].to_vec(),
             }),
         ),
     }

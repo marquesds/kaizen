@@ -108,6 +108,7 @@ mod tests {
             rule_files_on_disk: vec![],
             rules_used_recent_slugs: HashSet::new(),
             file_facts: HashMap::new(),
+            eval_scores: vec![],
             aggregates: agg,
         };
         let bets = run(&inputs);

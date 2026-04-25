@@ -109,3 +109,22 @@ When `true`, the corresponding field may be emitted in **cleartext** on outbound
 | OTLP | `OTEL_EXPORTER_OTLP_ENDPOINT` (or `KAIZEN_OTEL_EXPORTER_OTLP_ENDPOINT`) |
 
 Redacted effective resolution: `kaizen telemetry print-effective-config`. Implementation: `src/telemetry/resolve.rs`.
+
+## `[eval]`
+
+LLM-as-a-Judge evaluations. Disabled by default; set `enabled = true` to activate.
+
+```toml
+[eval]
+enabled      = false                        # must opt in
+endpoint     = "https://api.anthropic.com"  # Anthropic-compatible base URL
+api_key      = ""                           # falls back to ANTHROPIC_API_KEY env var
+model        = "claude-haiku-4-5-20251001"  # judge model
+rubric       = "tool-efficiency-v1"         # built-in rubric id
+batch_size   = 20                           # max sessions per eval run
+min_cost_usd = 0.01                         # skip sessions cheaper than this
+```
+
+**API key resolution:** `api_key` is checked first; if empty, `ANTHROPIC_API_KEY` is used. Put the key in `~/.kaizen/config.toml` to keep it out of the repo.
+
+**Merge:** `api_key` — non-empty user value wins. All other fields: user non-default wins, else workspace value.
