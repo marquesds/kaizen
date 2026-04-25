@@ -1,10 +1,6 @@
 # kaizen
 
-Run and share **kaizen** so you can see how coding agents behave in
-**real time**, run **retros** on that stream, and turn it into
-**strategies to improve** your own repo. Unifies Cursor, Claude
-Code, and Codex. One SQLite store and one CLI; **redact before** any
-sync, and only sync on **your** terms.
+Kaizen captures every coding agent session — Cursor, Claude Code, Codex — into a local SQLite database, then closes the feedback loop that most observability tools skip: a **heuristic retro engine** that ranks concrete improvement bets by tokens-saved-per-effort, and an **A/B experiment framework** that measures whether each bet worked. Nothing leaves disk until you say so.
 
 Narrative guides and references live in this repository under [`docs/`](docs/README.md). The
 **CLI** is published on [crates.io](https://crates.io/crates/kaizen-cli) as **`kaizen-cli`**. 
@@ -17,6 +13,22 @@ Install with **`cargo install kaizen-cli --locked`**, or
 [![CI](https://github.com/marquesds/kaizen/actions/workflows/ci.yml/badge.svg)](https://github.com/marquesds/kaizen/actions/workflows/ci.yml)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
 [![Sponsor](https://img.shields.io/badge/Sponsor-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/lucasmarques)
+
+## Agile retrospectives for coding agents
+
+Agents are opaque. They burn tokens on files you didn't expect, loop on module boundaries you haven't mapped, and load skills that never fire. Most tools show you what happened. Kaizen tells you what to change — and proves whether the change worked.
+
+The loop is **observe → summarise → propose → measure**. Each step is a real command.
+
+**Observe** across three ingest tiers, zero agent restarts. `kaizen init` wires transcript tails (file notifications on agent JSONL directories) and hooks (`.cursor/hooks.json`, `.claude/settings.json`). The optional **LLM HTTP proxy** goes further: run `kaizen proxy run`, set `ANTHROPIC_BASE_URL=http://127.0.0.1:3847`, and every Anthropic API call is logged with precise token counts — no changes to the agent. The proxy optionally applies a **context policy** (`last_messages: 20` or `max_input_tokens: 200000`) that trims billed context before requests leave your machine.
+
+**Summarise** at the repository level, not just the token level. Sessions and tool spans accumulate in a local SQLite WAL. The metrics pass walks git and your source tree to build a **code graph** (`file_facts`, `repo_edges`), so retros and experiments can answer: which files co-appear in long sessions, which module boundaries cause agent edit loops, which skills are loaded every turn but never triggered.
+
+**Propose** with 14 deterministic heuristics, no LLM required. `kaizen retro --days 7` ranks bets by `tokens_saved_per_week / effort_minutes`. Each bet includes a hypothesis, estimated impact, evidence links (specific sessions and files), effort in minutes, and a ready-to-run apply command. Deterministic, formally specced in Quint, cheap to run on any schedule. The same engine ships as an **agent skill**: ask *"what should I improve?"* mid-session and kaizen surfaces the top bets inline without leaving your editor.
+
+**Measure** with bootstrap statistics. `kaizen exp new --bind git` ties a hypothesis to a git commit boundary. Kaizen auto-classifies every subsequent session as control or treatment by walking `git log`. After the window closes, `kaizen exp report` shows control vs treatment sample sizes and medians, median delta with a 95% bootstrap CI (10k resamples, winsorized at p1/p99), and a pass/fail against your target. Works for skill additions, rule changes, and architecture refactors — anything you can pin to a commit.
+
+**Distribute** with redact-first sync. Configure a shared team endpoint and kaizen ships redacted batches: Aho-Corasick secret scanning, env var stripping, absolute path normalization, and git email removal run on every event before it leaves disk. The redaction model is formally verified in a Quint spec. Sync is opt-in, idempotent (UUIDv7 dedup), and restartable after failures.
 
 ## Why
 
