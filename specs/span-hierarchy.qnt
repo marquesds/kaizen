@@ -20,19 +20,19 @@ module span_hierarchy {
     outer.start <= inner.start and inner.end <= outer.end and outer.id != inner.id
 
   // deepest containing ancestor = the one with max depth among all containers
-  pure def assign_parent(s: Span, all: List[Span]): int =
-    all.foldl(-1, (best, candidate) =>
+  pure def assign_parent(s: Span, spans_list: List[Span]): int =
+    spans_list.foldl(-1, (best, candidate) =>
       if (contains(candidate, s) and (best == -1 or
-            all.filter(x => x.id == best).length() == 0 or
-            candidate.depth > all.filter(x => x.id == best).head().depth))
+            spans_list.filter(x => x.id == best).length() == 0 or
+            candidate.depth > spans_list.filter(x => x.id == best).head().depth))
         candidate.id
       else
         best
     )
 
-  pure def depth_of(pid: int, all: List[Span]): int =
+  pure def depth_of(pid: int, spans_list: List[Span]): int =
     if (pid == -1) 0
-    else all.filter(x => x.id == pid).foldl(0, (_, p) => p.depth + 1)
+    else spans_list.filter(x => x.id == pid).foldl(0, (_, p) => p.depth + 1)
 
   action init: bool = all {
     spans' = [],
