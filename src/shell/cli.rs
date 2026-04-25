@@ -320,11 +320,7 @@ pub fn cmd_session_show(id: &str, workspace: Option<&Path>) -> Result<()> {
     Ok(())
 }
 
-pub fn sessions_tree_text(
-    id: &str,
-    max_depth: u32,
-    workspace: Option<&Path>,
-) -> Result<String> {
+pub fn sessions_tree_text(id: &str, max_depth: u32, workspace: Option<&Path>) -> Result<String> {
     let ws = workspace_path(workspace)?;
     let store = open_workspace_store(&ws)?;
     let nodes = store.session_span_tree(id)?;
@@ -351,14 +347,22 @@ fn render_node(
     let prefix = if depth == 0 { "┌─ " } else { "├─ " };
     let cost_str = match node.span.subtree_cost_usd_e6 {
         Some(c) => {
-            let pct = if session_total > 0 { c * 100 / session_total } else { 0 };
+            let pct = if session_total > 0 {
+                c * 100 / session_total
+            } else {
+                0
+            };
             let flag = if pct > 40 { " ⚡" } else { "" };
             format!(" ${:.4}{}", c as f64 / 1_000_000.0, flag)
         }
         None => String::new(),
     };
-    writeln!(out, "{}{}{} [{}]{}", indent, prefix, node.span.tool, node.span.status, cost_str)
-        .unwrap();
+    writeln!(
+        out,
+        "{}{}{} [{}]{}",
+        indent, prefix, node.span.tool, node.span.status, cost_str
+    )
+    .unwrap();
     for child in &node.children {
         render_node(out, child, depth + 1, max_depth, session_total);
     }
@@ -382,12 +386,7 @@ pub fn cmd_sessions_tree_text(
 }
 
 /// `kaizen sessions tree <id>` — print ASCII span tree.
-pub fn cmd_sessions_tree(
-    id: &str,
-    depth: u32,
-    json: bool,
-    workspace: Option<&Path>,
-) -> Result<()> {
+pub fn cmd_sessions_tree(id: &str, depth: u32, json: bool, workspace: Option<&Path>) -> Result<()> {
     print!("{}", cmd_sessions_tree_text(id, depth, json, workspace)?);
     Ok(())
 }

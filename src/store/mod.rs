@@ -4,10 +4,10 @@ pub mod remote_cache;
 pub mod span_tree;
 pub mod sqlite;
 pub mod tool_span_index;
-pub use span_tree::{SpanNode, build_tree};
 pub use remote_cache::{
     RemoteCacheStore, RemoteEventAgg, RemotePullState, clear_remote_cache_tables,
 };
+pub use span_tree::{SpanNode, build_tree};
 pub use sqlite::GuidanceKind;
 pub use sqlite::GuidancePerfRow;
 pub use sqlite::GuidanceReport;
