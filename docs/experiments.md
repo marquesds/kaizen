@@ -82,9 +82,28 @@ Non-parametric to survive small N and skewed distributions.
 
 No p-values. CI excludes zero in the wrong direction → success.
 
+- **Sequential testing**: always-valid CIs with alpha-spending let you peek at
+  `exp report` any time without inflating Type I error. The decision is sticky:
+  once `Significant`, it never downgrades. Use `--fixed` (not yet exposed) to
+  fall back to fixed-horizon bootstrap.
+- **SRM check**: chi-squared on arm counts; a `srm_warning` flag appears in the
+  report when p < 0.001. Investigate binding or routing before trusting results.
+- **CUPED**: preprocessing helper (`stats::cuped::adjust`) reduces variance by
+  regressing out pre-period correlation. Typically 30–50% CI width reduction.
+- **Cluster bootstrap**: `stats::bootstrap::cluster_bootstrap_ci` resamples whole
+  workspace clusters so within-workspace correlation doesn't inflate precision.
+- **Guardrails**: add `guardrails` to an experiment to flag secondary metric
+  regressions even when the primary criterion passes.
+- **Power / MDE**: `kaizen exp power --metric <m> --baseline-n <n>` prints the
+  minimum detectable effect at 80% power / 95% CI given observed variance.
+
 ## CLI
 
 ```bash
+# Size the experiment before starting.
+kaizen exp power --metric tokens_per_session --baseline-n 50
+
+# Create in Draft state (call `start` when ready).
 kaizen exp new \
   --name add-rust-tdd-skill \
   --hypothesis "rust-tdd skill cuts tokens/session by 10%" \
@@ -94,11 +113,22 @@ kaizen exp new \
   --duration 14d \
   --target -10%
 
+kaizen exp start <id>                     # Draft → Running
 kaizen exp list
 kaizen exp status <id>
 kaizen exp tag <id> --variant treatment   # manual override
-kaizen exp report <id>                    # markdown + bootstrap CI
-kaizen exp conclude <id>
+kaizen exp report <id>                    # markdown + bootstrap CI + sequential decision
+kaizen exp conclude <id>                  # Running → Concluded
+kaizen exp archive <id>                   # Concluded → Archived
+```
+
+Branch binding (tip of each branch at evaluation time):
+
+```bash
+kaizen exp new --bind branch \
+  --control-branch main \
+  --treatment-branch feat/new-skill \
+  --metric cost_per_session --target -15%
 ```
 
 ## Worked Example 1 — Add a Skill

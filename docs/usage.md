@@ -182,26 +182,33 @@ Model Context Protocol server over stdio — **most** CLI workflows are availabl
 
 ## `kaizen exp`
 
-Experiments v0.
+A/B experiments with bootstrap CI, SRM checks, and sequential testing.
 
 ```bash
+# Size first.
+kaizen exp power --metric tokens_per_session --baseline-n 50
+
+# Create in Draft; review before starting.
 kaizen exp new --name add-skill \
   --hypothesis "skill cuts tokens" \
   --change "add .cursor/skills/x" \
   --metric tokens_per_session \
   --bind git --duration-days 14 --target-pct -10
+  # --bind branch --control-branch main --treatment-branch feat/x
 
+kaizen exp start <id>           # Draft → Running
 kaizen exp list
 kaizen exp status <id>
 kaizen exp tag <id> --session <sid> --variant treatment
-kaizen exp report <id>          # markdown with bootstrap CI
+kaizen exp report <id>          # markdown + bootstrap CI + sequential decision
 kaizen exp report <id> --json
-kaizen exp conclude <id>
+kaizen exp conclude <id>        # Running → Concluded
+kaizen exp archive <id>         # Concluded → Archived
 ```
 
-Metrics: `tokens_per_session`, `cost_per_session`, `success_rate`,
-`tool_loops`, `duration_minutes`, `files_per_session`. Details:
-[experiments.md](experiments.md).
+Metrics: `tokens_per_session`, `cost_per_session`, `success_rate`, `tool_loops`,
+`duration_minutes`, `files_per_session`, `success_rate_by_prompt`, `cost_by_prompt`.
+Details: [experiments.md](experiments.md).
 
 ## `kaizen eval`
 

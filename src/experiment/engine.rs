@@ -4,8 +4,9 @@
 use crate::core::event::{Event, SessionRecord};
 use crate::experiment::binding::{ManualTags, partition};
 use crate::experiment::metric::value_for;
+use crate::experiment::stats::sequential::{Decision, decide as seq_decide};
 use crate::experiment::stats::{DEFAULT_RESAMPLES, Summary, summarize};
-use crate::experiment::types::{Classification, Criterion, Direction, Experiment};
+use crate::experiment::types::{Classification, Criterion, Direction, Experiment, GuardrailResult};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -15,14 +16,23 @@ pub struct Report {
     pub summary: Summary,
     pub excluded_count: usize,
     pub target_met: Option<bool>,
+    pub guardrail_results: Vec<GuardrailResult>,
+    /// Sequential decision: sticky once Significant.
+    pub sequential_decision: Decision,
+    /// Pass this back on the next `run` call to preserve stickiness.
+    pub ever_significant: bool,
 }
 
 /// Pure ranking step once `sessions` + per-session `events` gathered.
+///
+/// Pass the previous `ever_significant` from the last report to preserve
+/// sequential stickiness across incremental calls.
 pub fn run(
     exp: &Experiment,
     sessions: &[(SessionRecord, Vec<Event>)],
     manual_tags: &ManualTags,
     workspace: &Path,
+    ever_significant: bool,
 ) -> Report {
     let records: Vec<SessionRecord> = sessions.iter().map(|(s, _)| s.clone()).collect();
     let (control_s, treatment_s, excluded_s) =
@@ -50,11 +60,39 @@ pub fn run(
         DEFAULT_RESAMPLES,
     );
     let target_met = evaluate_criterion(&exp.success_criterion, &summary);
+    let seq = seq_decide(
+        &control,
+        &treatment,
+        stable_seed(&exp.id),
+        DEFAULT_RESAMPLES,
+        ever_significant,
+    );
+    let guardrail_results = exp
+        .guardrails
+        .iter()
+        .map(|g| {
+            let gvals_c = metric_values_for(g.metric, sessions, &control_s);
+            let gvals_t = metric_values_for(g.metric, sessions, &treatment_s);
+            let gs = summarize(&gvals_c, &gvals_t, stable_seed(&exp.id), DEFAULT_RESAMPLES);
+            let violated = match g.regression_direction {
+                Direction::Increase => gs.ci95_lo.map(|lo| lo > 0.0).unwrap_or(false),
+                Direction::Decrease => gs.ci95_hi.map(|hi| hi < 0.0).unwrap_or(false),
+            };
+            GuardrailResult {
+                metric: g.metric,
+                delta_pct: gs.delta_pct,
+                violated,
+            }
+        })
+        .collect();
     Report {
         experiment: exp.clone(),
         summary,
         excluded_count: excluded,
         target_met,
+        guardrail_results,
+        sequential_decision: seq.decision,
+        ever_significant: seq.ever_significant,
     }
 }
 
@@ -65,24 +103,32 @@ fn metric_values(
     _which: Classification,
     _tags: &ManualTags,
 ) -> Vec<f64> {
+    metric_values_for(exp.metric, sessions, picked)
+}
+
+fn metric_values_for(
+    metric: crate::experiment::types::Metric,
+    sessions: &[(SessionRecord, Vec<Event>)],
+    picked: &[&SessionRecord],
+) -> Vec<f64> {
     let ids: std::collections::HashSet<&str> = picked.iter().map(|s| s.id.as_str()).collect();
     sessions
         .iter()
         .filter(|(s, _)| ids.contains(s.id.as_str()))
-        .filter_map(|(s, evs)| value_for(exp.metric, s, evs))
+        .filter_map(|(s, evs)| value_for(metric, s, evs))
         .collect()
 }
 
+/// Success when the 95% CI excludes zero in the declared direction.
+/// `delta_pct` is display-only and not used here.
 fn evaluate_criterion(c: &Criterion, s: &Summary) -> Option<bool> {
     match c {
-        Criterion::Delta {
-            direction,
-            target_pct,
-        } => {
-            let pct = s.delta_pct?;
+        Criterion::Delta { direction, .. } => {
+            let lo = s.ci95_lo?;
+            let hi = s.ci95_hi?;
             Some(match direction {
-                Direction::Decrease => pct <= *target_pct,
-                Direction::Increase => pct >= *target_pct,
+                Direction::Decrease => hi < 0.0,
+                Direction::Increase => lo > 0.0,
             })
         }
         Criterion::Absolute { metric_value } => {
@@ -204,6 +250,7 @@ mod tests {
             state: State::Running,
             created_at_ms: 0,
             concluded_at_ms: None,
+            guardrails: Vec::new(),
         }
     }
 
@@ -245,6 +292,38 @@ mod tests {
     }
 
     #[test]
+    fn evaluate_criterion_ci_excludes_zero_decrease() {
+        let c = Criterion::Delta {
+            direction: Direction::Decrease,
+            target_pct: -10.0,
+        };
+        let mut s = Summary::default();
+        s.ci95_lo = Some(-20.0);
+        s.ci95_hi = Some(-5.0);
+        assert_eq!(evaluate_criterion(&c, &s), Some(true)); // entire CI < 0
+
+        s.ci95_lo = Some(-20.0);
+        s.ci95_hi = Some(2.0);
+        assert_eq!(evaluate_criterion(&c, &s), Some(false)); // CI straddles zero
+    }
+
+    #[test]
+    fn evaluate_criterion_ci_excludes_zero_increase() {
+        let c = Criterion::Delta {
+            direction: Direction::Increase,
+            target_pct: 10.0,
+        };
+        let mut s = Summary::default();
+        s.ci95_lo = Some(5.0);
+        s.ci95_hi = Some(20.0);
+        assert_eq!(evaluate_criterion(&c, &s), Some(true)); // entire CI > 0
+
+        s.ci95_lo = Some(-2.0);
+        s.ci95_hi = Some(20.0);
+        assert_eq!(evaluate_criterion(&c, &s), Some(false)); // CI straddles zero
+    }
+
+    #[test]
     fn manual_tags_drive_partition_without_git() {
         let e = exp();
         let sessions = vec![
@@ -258,7 +337,7 @@ mod tests {
         tags.insert("b".into(), Classification::Control);
         tags.insert("c".into(), Classification::Treatment);
         tags.insert("d".into(), Classification::Treatment);
-        let r = run(&e, &sessions, &tags, Path::new("/no"));
+        let r = run(&e, &sessions, &tags, Path::new("/no"), false);
         assert_eq!(r.summary.n_control, 2);
         assert_eq!(r.summary.n_treatment, 2);
     }

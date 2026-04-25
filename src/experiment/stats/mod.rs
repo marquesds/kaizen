@@ -5,14 +5,22 @@
 //! percentile bootstrap (default 10k resamples, 95%). Winsorize p1/p99
 //! before resampling to blunt skew.
 
-use rand::rngs::SmallRng;
-use rand::{RngExt, SeedableRng};
+pub mod bootstrap;
+pub mod cuped;
+pub mod power;
+pub mod sequential;
+pub mod srm;
+
+pub use bootstrap::winsorize;
+pub use srm::has_srm;
+
+use bootstrap::{bootstrap_ci, mean, median};
 use serde::{Deserialize, Serialize};
 
 pub const DEFAULT_RESAMPLES: u32 = 10_000;
 pub const MIN_SAMPLE: usize = 30;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct Summary {
     pub n_control: usize,
     pub n_treatment: usize,
@@ -25,6 +33,8 @@ pub struct Summary {
     pub ci95_lo: Option<f64>,
     pub ci95_hi: Option<f64>,
     pub small_sample_warning: bool,
+    /// Set when observed arm counts deviate from expected 50/50 at p < 0.001.
+    pub srm_warning: bool,
 }
 
 /// Pure stats for a metric. Deterministic given `seed`.
@@ -60,83 +70,8 @@ pub fn summarize(control: &[f64], treatment: &[f64], seed: u64, resamples: u32) 
         ci95_lo: lo,
         ci95_hi: hi,
         small_sample_warning: control.len().min(treatment.len()) < MIN_SAMPLE,
+        srm_warning: has_srm(control.len(), treatment.len()),
     }
-}
-
-/// Clamp values to `[p_lo quantile, p_hi quantile]`.
-pub fn winsorize(xs: &[f64], p_lo: f64, p_hi: f64) -> Vec<f64> {
-    if xs.is_empty() {
-        return Vec::new();
-    }
-    let Some(lo) = quantile(xs, p_lo) else {
-        return xs.to_vec();
-    };
-    let Some(hi) = quantile(xs, p_hi) else {
-        return xs.to_vec();
-    };
-    xs.iter().map(|v| v.clamp(lo, hi)).collect()
-}
-
-fn quantile(xs: &[f64], p: f64) -> Option<f64> {
-    if xs.is_empty() {
-        return None;
-    }
-    let mut v = xs.to_vec();
-    v.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    let idx = ((v.len() - 1) as f64 * p).round() as usize;
-    Some(v[idx.min(v.len() - 1)])
-}
-
-fn median(xs: &[f64]) -> Option<f64> {
-    if xs.is_empty() {
-        return None;
-    }
-    let mut v = xs.to_vec();
-    v.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    let n = v.len();
-    if n % 2 == 1 {
-        Some(v[n / 2])
-    } else {
-        Some((v[n / 2 - 1] + v[n / 2]) / 2.0)
-    }
-}
-
-fn mean(xs: &[f64]) -> Option<f64> {
-    if xs.is_empty() {
-        return None;
-    }
-    Some(xs.iter().sum::<f64>() / xs.len() as f64)
-}
-
-fn bootstrap_ci(
-    control: &[f64],
-    treatment: &[f64],
-    seed: u64,
-    resamples: u32,
-) -> (Option<f64>, Option<f64>) {
-    let mut rng = SmallRng::seed_from_u64(seed);
-    let mut deltas: Vec<f64> = Vec::with_capacity(resamples as usize);
-    let mut buf_c = vec![0.0_f64; control.len()];
-    let mut buf_t = vec![0.0_f64; treatment.len()];
-    for _ in 0..resamples {
-        for slot in buf_c.iter_mut() {
-            *slot = control[rng.random_range(0..control.len())];
-        }
-        for slot in buf_t.iter_mut() {
-            *slot = treatment[rng.random_range(0..treatment.len())];
-        }
-        let (Some(mc), Some(mt)) = (median(&buf_c), median(&buf_t)) else {
-            continue;
-        };
-        deltas.push(mt - mc);
-    }
-    if deltas.is_empty() {
-        return (None, None);
-    }
-    deltas.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    let lo_i = ((deltas.len() as f64 * 0.025).round() as usize).min(deltas.len() - 1);
-    let hi_i = ((deltas.len() as f64 * 0.975).round() as usize).min(deltas.len() - 1);
-    (Some(deltas[lo_i]), Some(deltas[hi_i]))
 }
 
 #[cfg(test)]
@@ -145,7 +80,6 @@ mod tests {
 
     #[test]
     fn known_positive_shift_detected() {
-        // Two tight clusters separated by 100 — CI must clear 0 comfortably.
         let control: Vec<f64> = (0..100).map(|_| 10.0).collect();
         let treatment: Vec<f64> = (0..100).map(|_| 110.0).collect();
         let s = summarize(&control, &treatment, 42, 1000);
@@ -154,6 +88,15 @@ mod tests {
         let hi = s.ci95_hi.unwrap();
         assert!(lo > 0.0, "CI should exclude zero above, got {lo}");
         assert!(hi >= lo);
+        assert!(!s.srm_warning);
+    }
+
+    #[test]
+    fn srm_warning_on_imbalance() {
+        let control: Vec<f64> = (0..800).map(|_| 1.0).collect();
+        let treatment: Vec<f64> = (0..200).map(|_| 1.0).collect();
+        let s = summarize(&control, &treatment, 0, 100);
+        assert!(s.srm_warning, "should flag SRM for 800:200 split");
     }
 
     #[test]
@@ -166,7 +109,6 @@ mod tests {
 
     #[test]
     fn winsorize_clips_outliers() {
-        // 200 ordinary values + one extreme; p99 quantile ignores the tail.
         let mut xs: Vec<f64> = (0..200).map(|i| i as f64).collect();
         xs.push(10_000.0);
         let w = winsorize(&xs, 0.01, 0.99);

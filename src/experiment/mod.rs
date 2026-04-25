@@ -10,5 +10,6 @@ pub mod types;
 
 pub use engine::{Report, run, to_markdown};
 pub use types::{
-    Binding, Classification, Criterion, Direction, Experiment, Metric, State, transition,
+    Binding, Classification, Criterion, Direction, Experiment, GuardrailResult, GuardrailSpec,
+    Metric, State, transition,
 };

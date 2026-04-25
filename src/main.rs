@@ -376,7 +376,7 @@ enum TelemetrySubcommand {
 
 #[derive(Subcommand)]
 enum ExpCommand {
-    /// Create experiment (records control/treatment commits).
+    /// Create experiment in Draft state (records control/treatment commits).
     New {
         #[arg(long)]
         name: String,
@@ -387,7 +387,7 @@ enum ExpCommand {
         /// tokens_per_session|cost_per_session|success_rate|tool_loops|duration_minutes|files_per_session
         #[arg(long)]
         metric: String,
-        /// git|manual
+        /// git|branch|manual
         #[arg(long, default_value = "git")]
         bind: String,
         #[arg(long, default_value_t = 14)]
@@ -399,6 +399,16 @@ enum ExpCommand {
         control_commit: Option<String>,
         #[arg(long)]
         treatment_commit: Option<String>,
+        #[arg(long)]
+        control_branch: Option<String>,
+        #[arg(long)]
+        treatment_branch: Option<String>,
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+    },
+    /// Transition experiment from Draft to Running.
+    Start {
+        id: String,
         #[arg(long)]
         workspace: Option<PathBuf>,
     },
@@ -435,6 +445,23 @@ enum ExpCommand {
     /// Mark experiment Concluded.
     Conclude {
         id: String,
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+    },
+    /// Mark experiment Archived (must be Concluded first).
+    Archive {
+        id: String,
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+    },
+    /// Print MDE at 80% power / 95% CI for a metric given expected sample size.
+    Power {
+        /// tokens_per_session|cost_per_session|success_rate|…
+        #[arg(long)]
+        metric: String,
+        /// Expected sessions per arm.
+        #[arg(long)]
+        baseline_n: usize,
         #[arg(long)]
         workspace: Option<PathBuf>,
     },
@@ -820,6 +847,8 @@ fn dispatch_exp(cmd: ExpCommand) -> anyhow::Result<()> {
             target_pct,
             control_commit,
             treatment_commit,
+            control_branch,
+            treatment_branch,
             workspace,
         } => exp::cmd_new(
             workspace.as_deref(),
@@ -833,8 +862,11 @@ fn dispatch_exp(cmd: ExpCommand) -> anyhow::Result<()> {
                 target_pct,
                 control_commit,
                 treatment_commit,
+                control_branch,
+                treatment_branch,
             },
         ),
+        ExpCommand::Start { id, workspace } => exp::cmd_start(workspace.as_deref(), &id),
         ExpCommand::List { workspace } => exp::cmd_list(workspace.as_deref()),
         ExpCommand::Status { id, workspace } => exp::cmd_status(workspace.as_deref(), &id),
         ExpCommand::Tag {
@@ -849,6 +881,12 @@ fn dispatch_exp(cmd: ExpCommand) -> anyhow::Result<()> {
             workspace,
         } => exp::cmd_report(workspace.as_deref(), &id, json),
         ExpCommand::Conclude { id, workspace } => exp::cmd_conclude(workspace.as_deref(), &id),
+        ExpCommand::Archive { id, workspace } => exp::cmd_archive(workspace.as_deref(), &id),
+        ExpCommand::Power {
+            metric,
+            baseline_n,
+            workspace,
+        } => exp::cmd_power(workspace.as_deref(), &metric, baseline_n),
     }
 }
 
