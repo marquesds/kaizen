@@ -261,6 +261,7 @@ pub fn scan_copilot_vscode_workspace(workspace: &Path) -> Result<Vec<(SessionRec
                         dirty_start: None,
                         dirty_end: None,
                         repo_binding_source: None,
+                        prompt_fingerprint: None,
                     },
                     events,
                 ));

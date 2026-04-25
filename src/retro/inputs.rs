@@ -45,6 +45,9 @@ pub fn load_inputs(
         .into_iter()
         .map(|r| (r.session_id, r.score))
         .collect();
+    let prompt_fingerprints = store
+        .sessions_with_prompt_fingerprint(workspace_key, window_start_ms, window_end_ms)
+        .unwrap_or_default();
 
     Ok(Inputs {
         window_start_ms,
@@ -61,6 +64,7 @@ pub fn load_inputs(
         file_facts,
         aggregates,
         eval_scores,
+        prompt_fingerprints,
     })
 }
 
@@ -155,6 +159,7 @@ fn session_event_from_outbound(o: &OutboundEvent, workspace_key: &str) -> (Sessi
         dirty_start: None,
         dirty_end: None,
         repo_binding_source: None,
+        prompt_fingerprint: None,
     };
     let event = Event {
         session_id: sid,
@@ -221,6 +226,7 @@ fn load_inputs_from_remote_cache(
         file_facts,
         aggregates,
         eval_scores: vec![],
+        prompt_fingerprints: vec![],
     })
 }
 

@@ -134,6 +134,7 @@ mod tests {
                     dirty_start: None,
                     dirty_end: None,
                     repo_binding_source: None,
+                    prompt_fingerprint: None,
                 },
                 Event {
                     session_id: "s1".into(),
@@ -166,6 +167,7 @@ mod tests {
             file_facts: HashMap::new(),
             eval_scores: vec![],
             aggregates: agg,
+            prompt_fingerprints: vec![],
         }
     }
 

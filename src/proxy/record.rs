@@ -69,6 +69,7 @@ pub fn record_forward_outcome(
             dirty_start: None,
             dirty_end: None,
             repo_binding_source: None,
+            prompt_fingerprint: None,
         };
         store.upsert_session(&rec)?;
     }

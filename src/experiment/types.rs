@@ -19,6 +19,8 @@ pub enum Metric {
     ToolLoops,
     DurationMinutes,
     FilesPerSession,
+    SuccessRateByPrompt,
+    CostByPrompt,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -86,6 +88,8 @@ impl Metric {
             Metric::ToolLoops => "tool_loops",
             Metric::DurationMinutes => "duration_minutes",
             Metric::FilesPerSession => "files_per_session",
+            Metric::SuccessRateByPrompt => "success_rate_by_prompt",
+            Metric::CostByPrompt => "cost_by_prompt",
         }
     }
 
@@ -97,6 +101,8 @@ impl Metric {
             "tool_loops" => Metric::ToolLoops,
             "duration_minutes" => Metric::DurationMinutes,
             "files_per_session" => Metric::FilesPerSession,
+            "success_rate_by_prompt" => Metric::SuccessRateByPrompt,
+            "cost_by_prompt" => Metric::CostByPrompt,
             _ => return None,
         })
     }

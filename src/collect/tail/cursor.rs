@@ -228,6 +228,7 @@ pub fn scan_session_dir_all(dir: &Path) -> Result<Vec<(SessionRecord, Vec<Event>
         dirty_start: None,
         dirty_end: None,
         repo_binding_source: None,
+        prompt_fingerprint: None,
     };
 
     let mut out = vec![(main_record, main_events)];
@@ -267,6 +268,7 @@ pub fn scan_session_dir_all(dir: &Path) -> Result<Vec<(SessionRecord, Vec<Event>
                 dirty_start: None,
                 dirty_end: None,
                 repo_binding_source: None,
+                prompt_fingerprint: None,
             };
             out.push((record, events));
         }
@@ -305,6 +307,7 @@ pub fn scan_session_dir(dir: &Path) -> Result<(SessionRecord, Vec<Event>)> {
         dirty_start: None,
         dirty_end: None,
         repo_binding_source: None,
+        prompt_fingerprint: None,
     };
     Ok((record, events))
 }

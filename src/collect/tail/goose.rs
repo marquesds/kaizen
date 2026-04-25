@@ -255,6 +255,7 @@ pub fn scan_goose_sqlite(
             dirty_start: None,
             dirty_end: None,
             repo_binding_source: None,
+            prompt_fingerprint: None,
         };
 
         if let (Some(ti), Some(to)) = (in_tok, out_tok)
@@ -359,6 +360,7 @@ pub fn scan_goose_legacy_jsonl_dir(
                 dirty_start: None,
                 dirty_end: None,
                 repo_binding_source: None,
+                prompt_fingerprint: None,
             },
             events,
         ));

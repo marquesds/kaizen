@@ -61,6 +61,7 @@ pub struct SessionRecord {
     pub dirty_start: Option<bool>,
     pub dirty_end: Option<bool>,
     pub repo_binding_source: Option<String>,
+    pub prompt_fingerprint: Option<String>,
 }
 
 #[cfg(test)]
@@ -109,6 +110,7 @@ mod tests {
             dirty_start: Some(false),
             dirty_end: Some(true),
             repo_binding_source: Some("git".to_string()),
+            prompt_fingerprint: None,
         };
         let s = serde_json::to_string(&r).unwrap();
         let r2: SessionRecord = serde_json::from_str(&s).unwrap();

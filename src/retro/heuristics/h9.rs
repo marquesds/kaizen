@@ -79,6 +79,7 @@ mod tests {
             dirty_start: None,
             dirty_end: None,
             repo_binding_source: None,
+            prompt_fingerprint: None,
         }
     }
 
@@ -125,6 +126,7 @@ mod tests {
             file_facts: Default::default(),
             eval_scores: vec![],
             aggregates: agg,
+            prompt_fingerprints: vec![],
         };
         let bets = run(&inputs);
         assert_eq!(bets.len(), 1);
@@ -167,6 +169,7 @@ mod tests {
             file_facts: Default::default(),
             eval_scores: vec![],
             aggregates: agg,
+            prompt_fingerprints: vec![],
         };
         assert!(run(&inputs).is_empty());
     }

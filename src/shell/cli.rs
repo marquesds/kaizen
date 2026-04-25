@@ -269,6 +269,14 @@ pub fn session_show_text(id: &str, workspace: Option<&Path>) -> Result<String> {
             .unwrap();
             writeln!(&mut out, "status:       {:?}", s.status).unwrap();
             writeln!(&mut out, "trace_path:   {}", s.trace_path).unwrap();
+            if let Some(fp) = &s.prompt_fingerprint {
+                writeln!(&mut out, "prompt_fp:    {fp}").unwrap();
+                if let Ok(Some(snap)) = store.get_prompt_snapshot(fp) {
+                    for f in snap.files() {
+                        writeln!(&mut out, "  - {}", f.path).unwrap();
+                    }
+                }
+            }
         }
         None => anyhow::bail!("session not found: {id} — try `kaizen sessions list`"),
     }

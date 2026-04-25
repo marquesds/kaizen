@@ -133,6 +133,7 @@ mod tests {
             dirty_start: None,
             dirty_end: None,
             repo_binding_source: None,
+            prompt_fingerprint: None,
         };
         let ev = Event {
             session_id: "sid".into(),

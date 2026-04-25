@@ -212,6 +212,12 @@ const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX IF NOT EXISTS session_evals_session ON session_evals(session_id);
     CREATE INDEX IF NOT EXISTS session_evals_rubric  ON session_evals(rubric_id, score)",
+    "CREATE TABLE IF NOT EXISTS prompt_snapshots (
+        fingerprint   TEXT    PRIMARY KEY,
+        captured_at_ms INTEGER NOT NULL,
+        files_json    TEXT    NOT NULL,
+        total_bytes   INTEGER NOT NULL
+    )",
 ];
 
 /// Per-workspace activity dashboard stats.
@@ -334,16 +340,18 @@ impl Store {
         self.conn.execute(
             "INSERT INTO sessions (
                 id, agent, model, workspace, started_at_ms, ended_at_ms, status, trace_path,
-                start_commit, end_commit, branch, dirty_start, dirty_end, repo_binding_source
+                start_commit, end_commit, branch, dirty_start, dirty_end, repo_binding_source,
+                prompt_fingerprint
              )
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
              ON CONFLICT(id) DO UPDATE SET
                agent=excluded.agent, model=excluded.model, workspace=excluded.workspace,
                started_at_ms=excluded.started_at_ms, ended_at_ms=excluded.ended_at_ms,
                status=excluded.status, trace_path=excluded.trace_path,
                start_commit=excluded.start_commit, end_commit=excluded.end_commit,
                branch=excluded.branch, dirty_start=excluded.dirty_start,
-               dirty_end=excluded.dirty_end, repo_binding_source=excluded.repo_binding_source",
+               dirty_end=excluded.dirty_end, repo_binding_source=excluded.repo_binding_source,
+               prompt_fingerprint=excluded.prompt_fingerprint",
             params![
                 s.id,
                 s.agent,
@@ -359,6 +367,7 @@ impl Store {
                 s.dirty_start.map(bool_to_i64),
                 s.dirty_end.map(bool_to_i64),
                 s.repo_binding_source.clone().unwrap_or_default(),
+                s.prompt_fingerprint.as_deref(),
             ],
         )?;
         self.conn.execute(
@@ -720,7 +729,8 @@ impl Store {
     pub fn list_sessions(&self, workspace: &str) -> Result<Vec<SessionRecord>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, agent, model, workspace, started_at_ms, ended_at_ms, status, trace_path,
-                    start_commit, end_commit, branch, dirty_start, dirty_end, repo_binding_source
+                    start_commit, end_commit, branch, dirty_start, dirty_end, repo_binding_source,
+                    prompt_fingerprint
              FROM sessions WHERE workspace = ?1 ORDER BY started_at_ms DESC",
         )?;
         let rows = stmt.query_map(params![workspace], |row| {
@@ -739,6 +749,7 @@ impl Store {
                 row.get::<_, Option<i64>>(11)?,
                 row.get::<_, Option<i64>>(12)?,
                 row.get::<_, String>(13)?,
+                row.get::<_, Option<String>>(14)?,
             ))
         })?;
 
@@ -759,6 +770,7 @@ impl Store {
                 dirty_start,
                 dirty_end,
                 source,
+                prompt_fingerprint,
             ) = row?;
             out.push(SessionRecord {
                 id,
@@ -775,6 +787,7 @@ impl Store {
                 dirty_start: dirty_start.map(i64_to_bool),
                 dirty_end: dirty_end.map(i64_to_bool),
                 repo_binding_source: empty_to_none(source),
+                prompt_fingerprint,
             });
         }
         Ok(out)
@@ -978,6 +991,7 @@ impl Store {
                         dirty_start: row.get::<_, Option<i64>>(24)?.map(i64_to_bool),
                         dirty_end: row.get::<_, Option<i64>>(25)?.map(i64_to_bool),
                         repo_binding_source: empty_to_none(row.get::<_, String>(26)?),
+                        prompt_fingerprint: None,
                     },
                     Event {
                         session_id: row.get(0)?,
@@ -1366,7 +1380,8 @@ impl Store {
     pub fn get_session(&self, id: &str) -> Result<Option<SessionRecord>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, agent, model, workspace, started_at_ms, ended_at_ms, status, trace_path,
-                    start_commit, end_commit, branch, dirty_start, dirty_end, repo_binding_source
+                    start_commit, end_commit, branch, dirty_start, dirty_end, repo_binding_source,
+                    prompt_fingerprint
              FROM sessions WHERE id = ?1",
         )?;
         let mut rows = stmt.query_map(params![id], |row| {
@@ -1385,6 +1400,7 @@ impl Store {
                 row.get::<_, Option<i64>>(11)?,
                 row.get::<_, Option<i64>>(12)?,
                 row.get::<_, String>(13)?,
+                row.get::<_, Option<String>>(14)?,
             ))
         })?;
 
@@ -1404,6 +1420,7 @@ impl Store {
                 dirty_start,
                 dirty_end,
                 source,
+                prompt_fingerprint,
             ) = row?;
             Ok(Some(SessionRecord {
                 id,
@@ -1420,6 +1437,7 @@ impl Store {
                 dirty_start: dirty_start.map(i64_to_bool),
                 dirty_end: dirty_end.map(i64_to_bool),
                 repo_binding_source: empty_to_none(source),
+                prompt_fingerprint,
             }))
         } else {
             Ok(None)
@@ -1720,7 +1738,7 @@ impl Store {
         let mut stmt = self.conn.prepare(
             "SELECT s.id, s.agent, s.model, s.workspace, s.started_at_ms, s.ended_at_ms,
                     s.status, s.trace_path, s.start_commit, s.end_commit, s.branch,
-                    s.dirty_start, s.dirty_end, s.repo_binding_source
+                    s.dirty_start, s.dirty_end, s.repo_binding_source, s.prompt_fingerprint
              FROM sessions s
              WHERE s.started_at_ms >= ?1
                AND COALESCE((SELECT SUM(e.cost_usd_e6) FROM events e WHERE e.session_id = s.id), 0) >= ?2
@@ -1743,6 +1761,7 @@ impl Store {
                 r.get::<_, Option<i64>>(11)?,
                 r.get::<_, Option<i64>>(12)?,
                 r.get::<_, Option<String>>(13)?,
+                r.get::<_, Option<String>>(14)?,
             ))
         })?;
         let mut out = Vec::new();
@@ -1762,6 +1781,7 @@ impl Store {
                 dirty_start,
                 dirty_end,
                 source,
+                prompt_fingerprint,
             ) = row?;
             out.push(crate::core::event::SessionRecord {
                 id,
@@ -1778,9 +1798,82 @@ impl Store {
                 dirty_start: dirty_start.map(i64_to_bool),
                 dirty_end: dirty_end.map(i64_to_bool),
                 repo_binding_source: source.and_then(|s| if s.is_empty() { None } else { Some(s) }),
+                prompt_fingerprint,
             });
         }
         Ok(out)
+    }
+
+    pub fn upsert_prompt_snapshot(&self, snap: &crate::prompt::PromptSnapshot) -> Result<()> {
+        self.conn.execute(
+            "INSERT OR IGNORE INTO prompt_snapshots
+             (fingerprint, captured_at_ms, files_json, total_bytes)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![
+                snap.fingerprint,
+                snap.captured_at_ms as i64,
+                snap.files_json,
+                snap.total_bytes as i64
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_prompt_snapshot(
+        &self,
+        fingerprint: &str,
+    ) -> Result<Option<crate::prompt::PromptSnapshot>> {
+        self.conn
+            .query_row(
+                "SELECT fingerprint, captured_at_ms, files_json, total_bytes
+                 FROM prompt_snapshots WHERE fingerprint = ?1",
+                params![fingerprint],
+                |r| {
+                    Ok(crate::prompt::PromptSnapshot {
+                        fingerprint: r.get(0)?,
+                        captured_at_ms: r.get::<_, i64>(1)? as u64,
+                        files_json: r.get(2)?,
+                        total_bytes: r.get::<_, i64>(3)? as u64,
+                    })
+                },
+            )
+            .optional()
+            .map_err(Into::into)
+    }
+
+    pub fn list_prompt_snapshots(&self) -> Result<Vec<crate::prompt::PromptSnapshot>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT fingerprint, captured_at_ms, files_json, total_bytes
+             FROM prompt_snapshots ORDER BY captured_at_ms DESC",
+        )?;
+        let rows = stmt.query_map([], |r| {
+            Ok(crate::prompt::PromptSnapshot {
+                fingerprint: r.get(0)?,
+                captured_at_ms: r.get::<_, i64>(1)? as u64,
+                files_json: r.get(2)?,
+                total_bytes: r.get::<_, i64>(3)? as u64,
+            })
+        })?;
+        Ok(rows.filter_map(|r| r.ok()).collect())
+    }
+
+    /// Sessions with a non-null prompt_fingerprint in the given window.
+    pub fn sessions_with_prompt_fingerprint(
+        &self,
+        workspace: &str,
+        start_ms: u64,
+        end_ms: u64,
+    ) -> Result<Vec<(String, String)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, prompt_fingerprint FROM sessions
+             WHERE workspace = ?1
+               AND started_at_ms >= ?2 AND started_at_ms < ?3
+               AND prompt_fingerprint IS NOT NULL",
+        )?;
+        let rows = stmt.query_map(params![workspace, start_ms as i64, end_ms as i64], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+        })?;
+        Ok(rows.filter_map(|r| r.ok()).collect())
     }
 }
 
@@ -1858,6 +1951,7 @@ fn recent_sessions_3(conn: &Connection, workspace: &str) -> Result<Vec<(SessionR
                     dirty_start: r.get::<_, Option<i64>>(11)?.map(i64_to_bool),
                     dirty_end: r.get::<_, Option<i64>>(12)?.map(i64_to_bool),
                     repo_binding_source: empty_to_none(r.get::<_, String>(13)?),
+                    prompt_fingerprint: None,
                 },
                 r.get::<_, i64>(14)? as u64,
             ))
@@ -1937,6 +2031,7 @@ fn ensure_schema_columns(conn: &Connection) -> Result<()> {
         "TEXT NOT NULL DEFAULT 'Draft'",
     )?;
     ensure_column(conn, "experiments", "concluded_at_ms", "INTEGER")?;
+    ensure_column(conn, "sessions", "prompt_fingerprint", "TEXT")?;
     Ok(())
 }
 
@@ -1992,6 +2087,7 @@ mod tests {
             dirty_start: None,
             dirty_end: None,
             repo_binding_source: None,
+            prompt_fingerprint: None,
         }
     }
 
