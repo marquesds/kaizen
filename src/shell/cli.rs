@@ -292,6 +292,25 @@ pub fn session_show_text(id: &str, workspace: Option<&Path>) -> Result<String> {
             .unwrap();
         }
     }
+    let fb = store
+        .feedback_for_sessions(&[id.to_string()])
+        .unwrap_or_default();
+    if let Some(r) = fb.get(id) {
+        let score = r
+            .score
+            .as_ref()
+            .map(|s| s.0.to_string())
+            .unwrap_or_else(|| "-".into());
+        let label = r
+            .label
+            .as_ref()
+            .map(|l| l.to_string())
+            .unwrap_or_else(|| "-".into());
+        writeln!(&mut out, "feedback:     score={score} label={label}").unwrap();
+        if let Some(n) = &r.note {
+            writeln!(&mut out, "  note: {n}").unwrap();
+        }
+    }
     Ok(out)
 }
 

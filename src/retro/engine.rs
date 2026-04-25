@@ -168,6 +168,7 @@ mod tests {
             eval_scores: vec![],
             aggregates: agg,
             prompt_fingerprints: vec![],
+            feedback: vec![],
         }
     }
 

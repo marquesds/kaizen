@@ -216,6 +216,22 @@ struct ExpReportArg {
     json: bool,
 }
 
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct AnnotateSessionArg {
+    /// Target session id.
+    session_id: String,
+    /// Score 1..=5.
+    #[serde(default)]
+    score: Option<u8>,
+    /// good | bad | interesting | bug | regression
+    #[serde(default)]
+    label: Option<String>,
+    #[serde(default)]
+    note: Option<String>,
+    #[serde(flatten)]
+    ws: WorkspaceArg,
+}
+
 #[derive(Clone, Debug)]
 pub struct KaizenMcp;
 
@@ -570,6 +586,48 @@ impl KaizenMcp {
         })
         .await?;
         ok_str(t)
+    }
+
+    #[tool(
+        name = "kaizen_annotate_session",
+        description = "Attach human feedback (score 1-5, label, free-text note) to a session."
+    )]
+    async fn kaizen_annotate_session(
+        &self,
+        Parameters(AnnotateSessionArg {
+            session_id,
+            score,
+            label,
+            note,
+            ws,
+        }): Parameters<AnnotateSessionArg>,
+    ) -> Result<CallToolResult, ErrorData> {
+        use crate::feedback::types::FeedbackLabel;
+        let parsed_label = match label.as_deref() {
+            Some(s) => {
+                let l = FeedbackLabel::from_str_opt(s);
+                if l.is_none() {
+                    return Err(ErrorData::invalid_params(
+                        format!("unknown label: {s}"),
+                        None,
+                    ));
+                }
+                l
+            }
+            None => None,
+        };
+        let w = opt_path(&ws.workspace);
+        run_blocking(move || {
+            crate::shell::feedback::cmd_sessions_annotate(
+                &session_id,
+                score,
+                parsed_label,
+                note,
+                w.as_deref(),
+            )
+        })
+        .await?;
+        ok_str("annotated".into())
     }
 }
 

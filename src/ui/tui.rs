@@ -56,6 +56,8 @@ struct App {
     pulse: bool,
     store: Store,
     workspace: String,
+    /// session_id -> score (1..=5) for visible sessions; populated each refresh.
+    feedback_scores: HashMap<String, u8>,
 }
 
 impl App {
@@ -85,6 +87,7 @@ impl App {
             pulse: false,
             store,
             workspace: ws,
+            feedback_scores: HashMap::new(),
         };
         app.reapply_filter();
         app.refresh()?;
@@ -124,6 +127,14 @@ impl App {
         }
         self.sel_event = self.sel_event.min(self.events.len().saturating_sub(1));
         self.metrics = report::build_report(&self.store, &self.workspace, 7).ok();
+        let ids: Vec<String> = self.sessions.iter().map(|s| s.id.clone()).collect();
+        self.feedback_scores = self
+            .store
+            .feedback_for_sessions(&ids)
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|(sid, r)| r.score.map(|s| (sid, s.0)))
+            .collect();
         Ok(())
     }
 
@@ -286,7 +297,15 @@ fn draw_sessions(f: &mut ratatui::Frame, app: &App, area: ratatui::layout::Rect)
             let age = time_ago_label(now, s.started_at_ms);
             let tag = session_status_letter(s);
             let m = model_suffix(&s.model);
-            let line = Line::from(vec![
+            let score_span = app.feedback_scores.get(&s.id).map(|&sc| {
+                let color = match sc {
+                    1..=2 => Color::Red,
+                    3 => Color::Yellow,
+                    _ => Color::Green,
+                };
+                Span::styled(format!("★{sc}"), Style::default().fg(color))
+            });
+            let mut spans = vec![
                 Span::styled(format!("{:.10}", s.id), Style::default().fg(Color::Gray)),
                 Span::raw(" "),
                 Span::styled(
@@ -298,7 +317,12 @@ fn draw_sessions(f: &mut ratatui::Frame, app: &App, area: ratatui::layout::Rect)
                 Span::raw(" "),
                 Span::styled(age, Style::default().fg(Color::White)),
                 Span::styled(m, Style::default().fg(Color::Gray)),
-            ]);
+            ];
+            if let Some(s) = score_span {
+                spans.push(Span::raw(" "));
+                spans.push(s);
+            }
+            let line = Line::from(spans);
             ListItem::new(line)
         })
         .collect();

@@ -236,3 +236,27 @@ kaizen prompt diff <fp_a> <fp_b>         # lines added (+), removed (-), changed
 ```
 
 **H16** in `kaizen retro` surfaces when ≥2 prompt versions each have ≥5 sessions and one underperforms the other by >20% on cost or >15% on error rate.
+
+## `kaizen sessions annotate` and `kaizen feedback`
+
+Attach human feedback (score 1–5, label, free-text note) to any session, then query the collected feedback.
+
+```bash
+# Annotate a session
+kaizen sessions annotate <id> --score 2 --label bad --note "hallucinated file path"
+kaizen sessions annotate <id> --label interesting
+
+# List feedback
+kaizen feedback list                     # all records
+kaizen feedback list --label bad         # filter by label
+kaizen feedback list --since 7d          # last 7 days
+kaizen feedback list --since 7d --json   # JSON array
+```
+
+**Labels:** `good`, `bad`, `interesting`, `bug`, `regression`.
+
+**Score:** integer 1–5 (1 = worst, 5 = best).
+
+**`kaizen sessions show <id>`** appends any feedback record for that session when present.
+
+**H17** in `kaizen retro` fires when ≥2 bad/regression records are present in the window, or when ≥5 scored sessions have a mean score ≤ 2.5.

@@ -164,6 +164,7 @@ mod tests {
             eval_scores: vec![],
             aggregates: agg,
             prompt_fingerprints: vec![],
+            feedback: vec![],
         };
         let bets = run(&inputs);
         assert!(bets.iter().any(|b| b.id == "H13:mcp"));
@@ -216,6 +217,7 @@ mod tests {
             eval_scores: vec![],
             aggregates: agg,
             prompt_fingerprints: vec![],
+            feedback: vec![],
         };
         let bets = run(&inputs);
         assert!(bets.iter().any(|b| b.id == "H13:subagents"));

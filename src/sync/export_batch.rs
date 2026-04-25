@@ -1,12 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Redacted batch payload shared by Kaizen sync POST and pluggable exporter fan-out.
 
+use crate::feedback::types::FeedbackRecord;
 use crate::sync::outbound::EventsBatchBody;
 use crate::sync::smart::{RepoSnapshotsBatchBody, ToolSpansBatchBody, WorkspaceFactsBatchBody};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SessionEvalsBatchBody {
     pub evals: Vec<crate::eval::types::EvalRow>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct SessionFeedbackBatchBody {
+    pub feedback: Vec<FeedbackRecord>,
 }
 
 /// Same JSON bodies as the ingest API; used for both primary sync and optional exporters.
@@ -17,6 +23,7 @@ pub enum IngestExportBatch {
     RepoSnapshots(RepoSnapshotsBatchBody),
     WorkspaceFacts(WorkspaceFactsBatchBody),
     SessionEvals(SessionEvalsBatchBody),
+    SessionFeedback(SessionFeedbackBatchBody),
 }
 
 impl IngestExportBatch {
@@ -27,6 +34,7 @@ impl IngestExportBatch {
             IngestExportBatch::RepoSnapshots(_) => "repo_snapshots",
             IngestExportBatch::WorkspaceFacts(_) => "workspace_facts",
             IngestExportBatch::SessionEvals(_) => "session_evals",
+            IngestExportBatch::SessionFeedback(_) => "session_feedback",
         }
     }
 
@@ -37,6 +45,7 @@ impl IngestExportBatch {
             IngestExportBatch::RepoSnapshots(b) => b.snapshots.len(),
             IngestExportBatch::WorkspaceFacts(b) => b.facts.len(),
             IngestExportBatch::SessionEvals(b) => b.evals.len(),
+            IngestExportBatch::SessionFeedback(b) => b.feedback.len(),
         }
     }
 }
