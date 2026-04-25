@@ -25,6 +25,17 @@ glossary. For a **guided tour** with exercises, start at [tutorial/README.md](tu
 | [retro-tuning.md](retro-tuning.md) | Tuning heuristic thresholds |
 | [experiments.md](experiments.md) | Experiments v0 |
 
+## Roadmap
+
+| Doc | Purpose |
+|---|---|
+| [roadmap/README.md](roadmap/README.md) | Langfuse-inspired improvements: overview and sequencing |
+| [roadmap/f1-llm-as-judge.md](roadmap/f1-llm-as-judge.md) | LLM-as-a-Judge evaluations |
+| [roadmap/f2-prompt-version-tracking.md](roadmap/f2-prompt-version-tracking.md) | Prompt/system-prompt version tracking |
+| [roadmap/f3-human-feedback.md](roadmap/f3-human-feedback.md) | Session-level human feedback |
+| [roadmap/f4-trace-hierarchy.md](roadmap/f4-trace-hierarchy.md) | Trace hierarchy (nested spans) |
+| [roadmap/f5-dataset-curation.md](roadmap/f5-dataset-curation.md) | Dataset curation from production traces |
+
 ## For contributors
 
 | Doc | Purpose |
