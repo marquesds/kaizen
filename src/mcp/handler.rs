@@ -93,6 +93,15 @@ struct SessionIdArg {
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct GetSpanTreeArg {
+    #[serde(flatten)]
+    ws: WorkspaceArg,
+    id: String,
+    #[serde(default)]
+    json: bool,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
 struct MetricsArg {
     #[serde(flatten)]
     ws: WorkspaceArg,
@@ -628,6 +637,22 @@ impl KaizenMcp {
         })
         .await?;
         ok_str("annotated".into())
+    }
+
+    #[tool(
+        name = "get_session_span_tree",
+        description = "Return the nested tool-span tree for a session. Each node carries tool name, status, subtree cost, depth, and children. Use json=true for structured output."
+    )]
+    async fn get_session_span_tree(
+        &self,
+        Parameters(GetSpanTreeArg { ws, id, json }): Parameters<GetSpanTreeArg>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let w = opt_path(&ws.workspace);
+        let t = run_blocking(move || {
+            crate::shell::cli::cmd_sessions_tree_text(&id, 999, json, w.as_deref())
+        })
+        .await?;
+        ok_str(t)
     }
 }
 

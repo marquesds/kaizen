@@ -320,6 +320,78 @@ pub fn cmd_session_show(id: &str, workspace: Option<&Path>) -> Result<()> {
     Ok(())
 }
 
+pub fn sessions_tree_text(
+    id: &str,
+    max_depth: u32,
+    workspace: Option<&Path>,
+) -> Result<String> {
+    let ws = workspace_path(workspace)?;
+    let store = open_workspace_store(&ws)?;
+    let nodes = store.session_span_tree(id)?;
+    let total_cost: i64 = nodes.iter().map(|n| n.subtree_cost_usd_e6).sum();
+    let mut out = String::new();
+    for node in &nodes {
+        render_node(&mut out, node, 0, max_depth, total_cost);
+    }
+    Ok(out)
+}
+
+fn render_node(
+    out: &mut String,
+    node: &crate::store::span_tree::SpanNode,
+    depth: u32,
+    max_depth: u32,
+    session_total: i64,
+) {
+    use std::fmt::Write;
+    if depth > max_depth {
+        return;
+    }
+    let indent = "│  ".repeat(depth as usize);
+    let prefix = if depth == 0 { "┌─ " } else { "├─ " };
+    let cost_str = match node.span.subtree_cost_usd_e6 {
+        Some(c) => {
+            let pct = if session_total > 0 { c * 100 / session_total } else { 0 };
+            let flag = if pct > 40 { " ⚡" } else { "" };
+            format!(" ${:.4}{}", c as f64 / 1_000_000.0, flag)
+        }
+        None => String::new(),
+    };
+    writeln!(out, "{}{}{} [{}]{}", indent, prefix, node.span.tool, node.span.status, cost_str)
+        .unwrap();
+    for child in &node.children {
+        render_node(out, child, depth + 1, max_depth, session_total);
+    }
+}
+
+/// `kaizen sessions tree <id>` — produce text output (ASCII or JSON).
+pub fn cmd_sessions_tree_text(
+    id: &str,
+    depth: u32,
+    json: bool,
+    workspace: Option<&Path>,
+) -> Result<String> {
+    if json {
+        let ws = workspace_path(workspace)?;
+        let store = open_workspace_store(&ws)?;
+        let nodes = store.session_span_tree(id)?;
+        Ok(serde_json::to_string_pretty(&nodes)?)
+    } else {
+        sessions_tree_text(id, depth, workspace)
+    }
+}
+
+/// `kaizen sessions tree <id>` — print ASCII span tree.
+pub fn cmd_sessions_tree(
+    id: &str,
+    depth: u32,
+    json: bool,
+    workspace: Option<&Path>,
+) -> Result<()> {
+    print!("{}", cmd_sessions_tree_text(id, depth, json, workspace)?);
+    Ok(())
+}
+
 /// `kaizen summary` — same output as CLI stdout.
 pub fn summary_text(
     workspace: Option<&Path>,

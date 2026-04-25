@@ -35,6 +35,7 @@ When to add or extend a spec: see [`.cursor/rules/quint-before-code.mdc`](../.cu
 | [`specs/openclaw-ingest.qnt`](../specs/openclaw-ingest.qnt) | `tests/spec/openclaw_ingest_spec.rs` | OpenClaw workspace filter (accept/reject) |
 | [`specs/prompt-tracking.qnt`](../specs/prompt-tracking.qnt) | `tests/spec/prompt_tracking_spec.rs` | prompt snapshot lifecycle (SessionStart capture, Stop re-capture, prompt_changed event) |
 | [`specs/session-feedback.qnt`](../specs/session-feedback.qnt) | `tests/spec/session_feedback_spec.rs` | H17 human feedback trigger (bad/regression count, mean score threshold) |
+| [`specs/span-hierarchy.qnt`](../specs/span-hierarchy.qnt) | `tests/spec/span_hierarchy_spec.rs` | `assign_parents` invariants: containment, depth consistency, no cycles, root depth=0 |
 
 **Hook / init models:** [`hook-ingest.qnt`](../specs/hook-ingest.qnt) treats `codex`, `copilot-cli`, and `openclaw` as known hook sources alongside `cursor` and `claude`. [`init-setup.qnt`](../specs/init-setup.qnt) includes five hook-host slots (added `openclaw`); runtime `kaizen init` patches Cursor, Claude Code, and OpenClaw.
 

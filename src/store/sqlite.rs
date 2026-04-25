@@ -1613,8 +1613,9 @@ impl Store {
         end_ms: u64,
     ) -> Result<Vec<ToolSpanView>> {
         let mut stmt = self.conn.prepare(
-            "SELECT ts.tool, ts.status, ts.lead_time_ms, ts.tokens_in, ts.tokens_out,
-                    ts.reasoning_tokens, ts.cost_usd_e6, ts.paths_json
+            "SELECT ts.span_id, ts.tool, ts.status, ts.lead_time_ms, ts.tokens_in, ts.tokens_out,
+                    ts.reasoning_tokens, ts.cost_usd_e6, ts.paths_json,
+                    ts.parent_span_id, ts.depth, ts.subtree_cost_usd_e6, ts.subtree_token_count
              FROM tool_spans ts
              JOIN sessions s ON s.id = ts.session_id
              WHERE s.workspace = ?1
@@ -1623,21 +1624,62 @@ impl Store {
              ORDER BY COALESCE(ts.started_at_ms, ts.ended_at_ms, 0) DESC",
         )?;
         let rows = stmt.query_map(params![workspace, start_ms as i64, end_ms as i64], |row| {
-            let paths_json: String = row.get(7)?;
+            let paths_json: String = row.get(8)?;
             Ok(ToolSpanView {
+                span_id: row.get::<_, Option<String>>(0)?.unwrap_or_default(),
                 tool: row
-                    .get::<_, Option<String>>(0)?
+                    .get::<_, Option<String>>(1)?
                     .unwrap_or_else(|| "unknown".into()),
-                status: row.get(1)?,
-                lead_time_ms: row.get::<_, Option<i64>>(2)?.map(|v| v as u64),
-                tokens_in: row.get::<_, Option<i64>>(3)?.map(|v| v as u32),
-                tokens_out: row.get::<_, Option<i64>>(4)?.map(|v| v as u32),
-                reasoning_tokens: row.get::<_, Option<i64>>(5)?.map(|v| v as u32),
-                cost_usd_e6: row.get(6)?,
+                status: row.get(2)?,
+                lead_time_ms: row.get::<_, Option<i64>>(3)?.map(|v| v as u64),
+                tokens_in: row.get::<_, Option<i64>>(4)?.map(|v| v as u32),
+                tokens_out: row.get::<_, Option<i64>>(5)?.map(|v| v as u32),
+                reasoning_tokens: row.get::<_, Option<i64>>(6)?.map(|v| v as u32),
+                cost_usd_e6: row.get(7)?,
                 paths: serde_json::from_str(&paths_json).unwrap_or_default(),
+                parent_span_id: row.get(9)?,
+                depth: row.get::<_, Option<i64>>(10)?.unwrap_or(0) as u32,
+                subtree_cost_usd_e6: row.get(11)?,
+                subtree_token_count: row.get::<_, Option<i64>>(12)?.map(|v| v as u32),
             })
         })?;
         Ok(rows.filter_map(|row| row.ok()).collect())
+    }
+
+    pub fn session_span_tree(
+        &self,
+        session_id: &str,
+    ) -> Result<Vec<crate::store::span_tree::SpanNode>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT span_id, tool, status, lead_time_ms, tokens_in, tokens_out,
+                    reasoning_tokens, cost_usd_e6, paths_json,
+                    parent_span_id, depth, subtree_cost_usd_e6, subtree_token_count
+             FROM tool_spans
+             WHERE session_id = ?1
+             ORDER BY depth ASC, started_at_ms ASC",
+        )?;
+        let rows = stmt.query_map(params![session_id], |row| {
+            let paths_json: String = row.get(8)?;
+            Ok(crate::metrics::types::ToolSpanView {
+                span_id: row.get::<_, Option<String>>(0)?.unwrap_or_default(),
+                tool: row
+                    .get::<_, Option<String>>(1)?
+                    .unwrap_or_else(|| "unknown".into()),
+                status: row.get(2)?,
+                lead_time_ms: row.get::<_, Option<i64>>(3)?.map(|v| v as u64),
+                tokens_in: row.get::<_, Option<i64>>(4)?.map(|v| v as u32),
+                tokens_out: row.get::<_, Option<i64>>(5)?.map(|v| v as u32),
+                reasoning_tokens: row.get::<_, Option<i64>>(6)?.map(|v| v as u32),
+                cost_usd_e6: row.get(7)?,
+                paths: serde_json::from_str(&paths_json).unwrap_or_default(),
+                parent_span_id: row.get(9)?,
+                depth: row.get::<_, Option<i64>>(10)?.unwrap_or(0) as u32,
+                subtree_cost_usd_e6: row.get(11)?,
+                subtree_token_count: row.get::<_, Option<i64>>(12)?.map(|v| v as u32),
+            })
+        })?;
+        let spans: Vec<_> = rows.filter_map(|r| r.ok()).collect();
+        Ok(crate::store::span_tree::build_tree(spans))
     }
 
     pub fn tool_spans_for_session(&self, session_id: &str) -> Result<Vec<ToolSpanSyncRow>> {
@@ -2127,6 +2169,14 @@ fn ensure_schema_columns(conn: &Connection) -> Result<()> {
     )?;
     ensure_column(conn, "experiments", "concluded_at_ms", "INTEGER")?;
     ensure_column(conn, "sessions", "prompt_fingerprint", "TEXT")?;
+    ensure_column(conn, "tool_spans", "parent_span_id", "TEXT")?;
+    ensure_column(conn, "tool_spans", "depth", "INTEGER NOT NULL DEFAULT 0")?;
+    ensure_column(conn, "tool_spans", "subtree_cost_usd_e6", "INTEGER")?;
+    ensure_column(conn, "tool_spans", "subtree_token_count", "INTEGER")?;
+    conn.execute_batch(
+        "CREATE INDEX IF NOT EXISTS tool_spans_parent ON tool_spans(parent_span_id);
+         CREATE INDEX IF NOT EXISTS tool_spans_session_depth ON tool_spans(session_id, depth);",
+    )?;
     Ok(())
 }
 

@@ -3,7 +3,8 @@
 
 use crate::core::data_source::DataSource;
 use crate::core::event::{Event, EventKind, EventSource, SessionRecord, SessionStatus};
-use crate::retro::types::{Inputs, RetroAggregates, SkillFileOnDisk};
+use crate::metrics::types::ToolSpanView;
+use crate::retro::types::{Inputs, RetroAggregates, SkillFileOnDisk, SpanTreeStats};
 use crate::store::Store;
 use crate::sync::outbound::OutboundEvent;
 use anyhow::Result;
@@ -38,7 +39,8 @@ pub fn load_inputs(
     let rule_files_on_disk = scan_rule_files(workspace_root, window_end_ms)?;
     let file_facts = latest_file_facts(store, workspace_key)?;
 
-    let aggregates = build_aggregates(&events);
+    let mut aggregates = build_aggregates(&events);
+    aggregates.span_tree_stats = compute_span_tree_stats(&tool_spans);
     let eval_scores = store
         .list_evals_in_window(window_start_ms, window_end_ms)
         .unwrap_or_default()
@@ -118,7 +120,9 @@ pub fn load_inputs_for_data_source(
                         .then_with(|| a.id.cmp(&b.id))
                         .then_with(|| ea.seq.cmp(&eb.seq))
                 });
-                i.aggregates = build_aggregates(&i.events);
+                let mut agg = build_aggregates(&i.events);
+                agg.span_tree_stats = compute_span_tree_stats(&i.tool_spans);
+                i.aggregates = agg;
             }
             Ok(i)
         }
@@ -322,6 +326,30 @@ pub fn scan_rule_files(workspace_root: &Path, now_ms: u64) -> Result<Vec<SkillFi
     }
     out.sort_by(|a, b| a.slug.cmp(&b.slug));
     Ok(out)
+}
+
+fn compute_span_tree_stats(spans: &[ToolSpanView]) -> Option<SpanTreeStats> {
+    if spans.is_empty() {
+        return None;
+    }
+    use std::collections::HashMap;
+    let max_depth = spans.iter().map(|s| s.depth).max().unwrap_or(0);
+    let deepest = spans
+        .iter()
+        .filter(|s| s.depth == max_depth)
+        .max_by_key(|s| s.subtree_cost_usd_e6.unwrap_or(0))?;
+    let mut children_counts: HashMap<&str, u32> = HashMap::new();
+    for s in spans {
+        if let Some(ref pid) = s.parent_span_id {
+            *children_counts.entry(pid.as_str()).or_default() += 1;
+        }
+    }
+    let max_fan_out = children_counts.values().copied().max().unwrap_or(0);
+    Some(SpanTreeStats {
+        max_depth,
+        max_fan_out,
+        deepest_span_id: deepest.span_id.clone(),
+    })
 }
 
 fn build_aggregates(events: &[(SessionRecord, crate::core::event::Event)]) -> RetroAggregates {
