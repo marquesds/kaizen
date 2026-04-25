@@ -7,8 +7,8 @@ Code, and Codex. One SQLite store and one CLI; **redact before** any
 sync, and only sync on **your** terms.
 
 Narrative guides and references live in this repository under [`docs/`](docs/README.md). The
-**CLI** is published on [crates.io](https://crates.io/crates/kaizen-cli) as **`kaizen-cli`**
-(see the crate page for the current version, e.g. [0.1.0](https://crates.io/crates/kaizen-cli/0.1.0)). Install with **`cargo install kaizen-cli --locked`**, or
+**CLI** is published on [crates.io](https://crates.io/crates/kaizen-cli) as **`kaizen-cli`**. 
+Install with **`cargo install kaizen-cli --locked`**, or
 [build from a git clone](#install) if you are developing the project. The **Rust API** is on
 [docs.rs/kaizen-cli](https://docs.rs/kaizen-cli). Long-form markdown stays in this repo. See
 [Install](#install) for `PATH`, Homebrew, and troubleshooting.
