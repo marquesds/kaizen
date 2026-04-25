@@ -41,6 +41,13 @@ output_per_mtok = 15000000
 avg_tokens_per_turn = 5000
 
 # Heuristic rows for extra agents when model id is unknown (treat like Sonnet-scale).
+# openclaw: local models route here when usage block absent or zero.
+[[models]]
+id = "openclaw"
+input_per_mtok = 3000000
+output_per_mtok = 15000000
+avg_tokens_per_turn = 5000
+
 [[models]]
 id = "goose"
 input_per_mtok = 3000000

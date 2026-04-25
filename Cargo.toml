@@ -155,6 +155,14 @@ path = "tests/spec/workspace_facts_sync.rs"
 name = "provider_pull_event_keys"
 path = "tests/spec/provider_pull_event_keys.rs"
 
+[[test]]
+name = "openclaw_ingest_spec"
+path = "tests/spec/openclaw_ingest_spec.rs"
+
+[[test]]
+name = "openclaw_ingest"
+path = "tests/openclaw_ingest.rs"
+
 [features]
 default = []
 # Optional fan-out targets (lean default build)

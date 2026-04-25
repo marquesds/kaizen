@@ -1,0 +1,2 @@
+{"message":{"content":[{"type":"tool_use","id":"c1","name":"bash","input":{"cwd":"__WORKSPACE__","command":"cargo build"}}]},"usage":{"input_tokens":1200,"output_tokens":300}}
+{"message":{"content":[{"type":"tool_result","tool_use_id":"c1","content":[{"type":"text","text":"Compiling..."}]}]}}

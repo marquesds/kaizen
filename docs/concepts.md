@@ -26,11 +26,18 @@ Two tiers:
 
 - **Tier 1 — transcript tail.** Watches agent transcript dirs with
   `notify`, parses JSONL. Rotation and partial-line safe. Optional tail
-  agents: Goose, OpenCode, GitHub Copilot CLI, VS Code Copilot chat (see
+  agents: Goose, OpenClaw, OpenCode, GitHub Copilot CLI, VS Code Copilot chat (see
   `sources.tail` in [config.md](config.md#sources), resolved from
   `~/.kaizen/config.toml`).
-- **Tier 2 — hooks.** `kaizen init` patches Cursor + Claude Code hooks
+- **Tier 2 — hooks.** `kaizen init` patches Cursor, Claude Code, and OpenClaw hooks
   to pipe JSON events into `kaizen ingest hook`.
+
+### Channel meta tag
+
+OpenClaw surfaces a **channel** concept (DM, Slack, sandbox, etc.) alongside sessions. When
+kaizen ingests an OpenClaw session, the channel value from `sessions.json` is stored as
+`meta.channel` on each event payload. Use `sessions show <id>` or the TUI detail view to
+inspect it. The channel is not used for filtering today; it is metadata only.
 
 - **LLM HTTP proxy (optional).** `kaizen proxy run` records
   `EventSource::Proxy` events for requests forwarded to Anthropic-style

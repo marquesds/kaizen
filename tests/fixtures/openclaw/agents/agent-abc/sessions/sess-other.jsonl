@@ -1,0 +1,1 @@
+{"message":{"content":[{"type":"tool_use","id":"c3","name":"bash","input":{"cwd":"/unrelated/path","command":"echo hi"}}]}}

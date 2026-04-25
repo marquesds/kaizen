@@ -49,6 +49,7 @@ fn ensure_config(out: &mut String, ws: &Path) -> Result<()> {
 
 /// Hook command string written to `.cursor/hooks.json`.
 pub const KAIZEN_CURSOR_HOOK_CMD: &str = "kaizen ingest hook --source cursor";
+pub const KAIZEN_OPENCLAW_HOOK_CMD: &str = "kaizen ingest hook --source openclaw";
 /// Hook command string written to `.claude/settings.json`.
 pub const KAIZEN_CLAUDE_HOOK_CMD: &str = "kaizen ingest hook --source claude";
 
@@ -291,6 +292,97 @@ fn write_skill(out: &mut String, ws: &Path) -> Result<()> {
     Ok(())
 }
 
+const OPENCLAW_HOOK_EVENTS: &[&str] = &[
+    "message:received",
+    "message:sent",
+    "command:new",
+    "command:reset",
+    "command:stop",
+    "session:compact:before",
+    "session:compact:after",
+    "session:patch",
+];
+
+const OPENCLAW_HANDLER_TS: &str = r#"import { spawn } from "child_process";
+
+export async function handler(event: Record<string, unknown>) {
+  const payload = JSON.stringify({
+    event: event["type"] ?? event["event"],
+    session_id: event["sessionId"] ?? event["session_id"] ?? "",
+    timestamp_ms: typeof event["timestamp"] === "number" ? event["timestamp"] : Date.now(),
+    ...event,
+  });
+  const child = spawn("kaizen", ["ingest", "hook", "--source", "openclaw"], {
+    stdio: ["pipe", "ignore", "ignore"],
+  });
+  child.stdin?.write(payload + "\n");
+  child.stdin?.end();
+}
+"#;
+
+const OPENCLAW_HOOK_MD: &str = "# kaizen-events\n\nCaptures OpenClaw sessions for kaizen.\n";
+
+fn openclaw_hooks_dir() -> Option<PathBuf> {
+    std::env::var("HOME")
+        .ok()
+        .map(|h| PathBuf::from(h).join(".openclaw/hooks/kaizen-events"))
+}
+
+/// Write (or idempotently skip) the OpenClaw TS hook handler.
+///
+/// Backs up any pre-existing `handler.ts` that does not already reference kaizen.
+pub fn patch_openclaw_handlers(out: &mut String, ws: &Path) -> Result<()> {
+    let Some(hook_dir) = openclaw_hooks_dir() else {
+        writeln!(
+            out,
+            "  skipped  ~/.openclaw/hooks/kaizen-events (HOME unset)"
+        )
+        .unwrap();
+        return Ok(());
+    };
+    let handler_path = hook_dir.join("handler.ts");
+    if handler_path.exists() {
+        let existing = std::fs::read_to_string(&handler_path)?;
+        if existing.contains(KAIZEN_OPENCLAW_HOOK_CMD) {
+            writeln!(out, "  skipped  ~/.openclaw/hooks/kaizen-events/handler.ts").unwrap();
+            return Ok(());
+        }
+        let bak = backup_path(ws, "openclaw_hook");
+        std::fs::create_dir_all(bak.parent().unwrap())?;
+        std::fs::copy(&handler_path, &bak)?;
+    }
+    std::fs::create_dir_all(&hook_dir)?;
+    std::fs::write(&handler_path, OPENCLAW_HANDLER_TS)?;
+    std::fs::write(hook_dir.join("HOOK.md"), OPENCLAW_HOOK_MD)?;
+    writeln!(out, "  created  ~/.openclaw/hooks/kaizen-events/handler.ts").unwrap();
+    let _ = std::process::Command::new("openclaw")
+        .args(["hooks", "enable", "kaizen-events"])
+        .status();
+    for event in OPENCLAW_HOOK_EVENTS {
+        let _ = std::process::Command::new("openclaw")
+            .args(["hooks", "subscribe", "kaizen-events", event])
+            .status();
+    }
+    Ok(())
+}
+
+/// Read-only: `~/.openclaw/hooks/kaizen-events` absent / wired / partial.
+pub fn openclaw_kaizen_hook_wiring(_ws: &Path) -> Result<Option<bool>, String> {
+    let Some(hook_dir) = openclaw_hooks_dir() else {
+        return Ok(None);
+    };
+    if !hook_dir.is_dir() {
+        return Ok(None);
+    }
+    let handler_path = hook_dir.join("handler.ts");
+    let hook_md = hook_dir.join("HOOK.md");
+    if !handler_path.exists() || !hook_md.exists() {
+        return Ok(Some(false));
+    }
+    let raw = std::fs::read_to_string(&handler_path).map_err(|e| e.to_string())?;
+    Ok(Some(raw.contains(KAIZEN_OPENCLAW_HOOK_CMD)))
+}
+
 /// Text that `kaizen init` would print to stdout.
 pub fn init_text(workspace: Option<&std::path::Path>) -> Result<String> {
     let ws = match workspace {
@@ -301,6 +393,7 @@ pub fn init_text(workspace: Option<&std::path::Path>) -> Result<String> {
     ensure_config(&mut out, &ws)?;
     patch_cursor_hooks(&mut out, &ws)?;
     patch_claude_settings(&mut out, &ws)?;
+    patch_openclaw_handlers(&mut out, &ws)?;
     write_skill(&mut out, &ws)?;
     write_eval_skill(&mut out, &ws)?;
     let cws = crate::core::workspace::canonical(&ws);
@@ -310,7 +403,7 @@ pub fn init_text(workspace: Option<&std::path::Path>) -> Result<String> {
     writeln!(out).unwrap();
     writeln!(
         out,
-        "kaizen init complete — Cursor + Claude Code hooks wired."
+        "kaizen init complete — Cursor + Claude Code + OpenClaw hooks wired."
     )
     .unwrap();
     writeln!(out).unwrap();

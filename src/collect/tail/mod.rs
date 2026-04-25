@@ -5,6 +5,7 @@ pub mod copilot_cli;
 pub mod copilot_vscode;
 pub mod cursor;
 pub mod goose;
+pub mod openclaw;
 pub mod opencode;
 
 use std::path::Path;
