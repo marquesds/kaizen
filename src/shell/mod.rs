@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pub mod cli;
 pub mod doctor;
+pub mod eval;
 pub mod exp;
 pub mod fmt;
 pub mod gc;

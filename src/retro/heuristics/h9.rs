@@ -123,6 +123,7 @@ mod tests {
             rule_files_on_disk: vec![],
             rules_used_recent_slugs: HashSet::new(),
             file_facts: Default::default(),
+            eval_scores: vec![],
             aggregates: agg,
         };
         let bets = run(&inputs);
@@ -164,6 +165,7 @@ mod tests {
             rule_files_on_disk: vec![],
             rules_used_recent_slugs: HashSet::new(),
             file_facts: Default::default(),
+            eval_scores: vec![],
             aggregates: agg,
         };
         assert!(run(&inputs).is_empty());

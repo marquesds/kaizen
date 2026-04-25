@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! HTTP sync client: gzip JSON, retries, batch split on 413.
 
+use crate::sync::export_batch::SessionEvalsBatchBody;
 use crate::sync::outbound::EventsBatchBody;
 use crate::sync::smart::{RepoSnapshotsBatchBody, ToolSpansBatchBody, WorkspaceFactsBatchBody};
 use anyhow::{Context, Result};
@@ -74,6 +75,14 @@ impl SyncHttpClient {
         idempotency_key: &Uuid,
     ) -> Result<PostBatchOutcome> {
         self.post_json_gzip("/v1/workspace-facts", body, idempotency_key)
+    }
+
+    pub fn post_session_evals_batch(
+        &self,
+        body: &SessionEvalsBatchBody,
+        idempotency_key: &Uuid,
+    ) -> Result<PostBatchOutcome> {
+        self.post_json_gzip("/v1/session-evals", body, idempotency_key)
     }
 
     fn post_json_gzip<T: serde::Serialize>(

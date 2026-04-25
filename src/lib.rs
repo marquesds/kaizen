@@ -15,6 +15,7 @@
 
 pub mod collect;
 pub mod core;
+pub mod eval;
 
 pub use crate::core::DataSource;
 pub mod experiment;

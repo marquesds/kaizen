@@ -25,6 +25,8 @@ pub struct Inputs {
     pub rules_used_recent_slugs: HashSet<String>,
     pub file_facts: HashMap<String, FileFact>,
     pub aggregates: RetroAggregates,
+    /// LLM-as-Judge eval scores for sessions in the window: (session_id, score 0..1).
+    pub eval_scores: Vec<(String, f64)>,
 }
 
 #[derive(Debug, Clone)]

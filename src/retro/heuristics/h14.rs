@@ -75,6 +75,7 @@ mod tests {
             rule_files_on_disk: vec![],
             rules_used_recent_slugs: HashSet::new(),
             file_facts: Default::default(),
+            eval_scores: vec![],
             aggregates: RetroAggregates::default(),
         };
         let bets = run(&inputs);
