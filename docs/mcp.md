@@ -124,12 +124,14 @@ Set any value to `false` to skip that agent’s local scan (useful if a VS Code 
 | `kaizen_metrics_index` | `kaizen metrics index` | |
 | `kaizen_sync_run` | `kaizen sync run` | **Only `once: true` is supported** (default). Continuous sync must use a real shell / service. |
 | `kaizen_sync_status` | `kaizen sync status` | |
-| `kaizen_exp_new` | `kaizen exp new` | Same long options as the CLI. |
+| `kaizen_exp_new` | `kaizen exp new` | Creates in Draft state. Same long options as the CLI (includes `--bind branch`). |
+| `kaizen_exp_start` | `kaizen exp start` | Draft → Running. |
 | `kaizen_exp_list` | `kaizen exp list` | |
 | `kaizen_exp_status` | `kaizen exp status` | |
 | `kaizen_exp_tag` | `kaizen exp tag` | |
-| `kaizen_exp_report` | `kaizen exp report` | `json` flag supported. |
-| `kaizen_exp_conclude` | `kaizen exp conclude` | |
+| `kaizen_exp_report` | `kaizen exp report` | `json` flag supported. Includes `sequential_decision` and `srm_warning`. |
+| `kaizen_exp_conclude` | `kaizen exp conclude` | Running → Concluded. |
+| `kaizen_exp_archive` | `kaizen exp archive` | Concluded → Archived. |
 | `kaizen_retro` | `kaizen retro` | `json`, `refresh`, etc. Set `json: true` for the same `Report` JSON as `kaizen retro --json`. |
 
 ## Behavior notes

@@ -187,6 +187,8 @@ struct ExpNewArg {
     target_pct: f64,
     control_commit: Option<String>,
     treatment_commit: Option<String>,
+    control_branch: Option<String>,
+    treatment_branch: Option<String>,
 }
 
 fn default_bind() -> String {
@@ -477,6 +479,8 @@ impl KaizenMcp {
             target_pct,
             control_commit,
             treatment_commit,
+            control_branch,
+            treatment_branch,
         }): Parameters<ExpNewArg>,
     ) -> Result<CallToolResult, ErrorData> {
         let w = opt_path(&ws.workspace);
@@ -490,6 +494,8 @@ impl KaizenMcp {
             target_pct,
             control_commit,
             treatment_commit,
+            control_branch,
+            treatment_branch,
         };
         let t = run_blocking(move || exp::exp_new_text(w.as_deref(), args)).await?;
         ok_str(t)
@@ -563,6 +569,32 @@ impl KaizenMcp {
     ) -> Result<CallToolResult, ErrorData> {
         let w = opt_path(&ws.workspace);
         let t = run_blocking(move || exp::exp_conclude_text(w.as_deref(), &id)).await?;
+        ok_str(t)
+    }
+
+    #[tool(
+        name = "kaizen_exp_start",
+        description = "Start experiment — transition Draft → Running (kaizen exp start)"
+    )]
+    async fn kaizen_exp_start(
+        &self,
+        Parameters(ExpIdArg { ws, id }): Parameters<ExpIdArg>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let w = opt_path(&ws.workspace);
+        let t = run_blocking(move || exp::exp_start_text(w.as_deref(), &id)).await?;
+        ok_str(t)
+    }
+
+    #[tool(
+        name = "kaizen_exp_archive",
+        description = "Archive experiment — transition Concluded → Archived (kaizen exp archive)"
+    )]
+    async fn kaizen_exp_archive(
+        &self,
+        Parameters(ExpIdArg { ws, id }): Parameters<ExpIdArg>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let w = opt_path(&ws.workspace);
+        let t = run_blocking(move || exp::exp_archive_text(w.as_deref(), &id)).await?;
         ok_str(t)
     }
 

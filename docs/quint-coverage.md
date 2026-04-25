@@ -21,7 +21,9 @@ When to add or extend a spec: see [`.cursor/rules/quint-before-code.mdc`](../.cu
 | [`specs/provider-pull-event-keys.qnt`](../specs/provider-pull-event-keys.qnt) | `tests/spec/provider_pull_event_keys.rs` | pull upsert dedupes `(session_id_hash, event_seq)` composite keys |
 | [`specs/mcp-server.qnt`](../specs/mcp-server.qnt) | `tests/spec/mcp_server.rs` | MCP |
 | [`specs/llm-proxy.qnt`](../specs/llm-proxy.qnt) | `tests/spec/llm_proxy.rs` | proxy |
-| [`specs/experiment-lifecycle.qnt`](../specs/experiment-lifecycle.qnt) | `tests/spec/experiment_lifecycle.rs` | experiments |
+| [`specs/experiment-lifecycle.qnt`](../specs/experiment-lifecycle.qnt) | `tests/spec/experiment_lifecycle.rs` | experiment lifecycle (Draft→Running→Concluded→Archived) |
+| [`specs/experiment-binding.qnt`](../specs/experiment-binding.qnt) | `tests/spec/experiment_binding.rs` | classification resolution: manual precedence, reclassification safety |
+| [`specs/experiment-sequential.qnt`](../specs/experiment-sequential.qnt) | `tests/spec/experiment_sequential.rs` | sequential testing: Significant-is-sticky monotonicity invariant |
 | [`specs/auto-update.qnt`](../specs/auto-update.qnt) | `tests/spec/auto_update.rs` | auto-update |
 | [`specs/redaction-completeness.qnt`](../specs/redaction-completeness.qnt) | `tests/spec/redaction_completeness.rs` | redaction (forbidden content vs allowlisted labels) |
 | [`specs/retro-pipeline.qnt`](../specs/retro-pipeline.qnt) | `tests/spec/retro_pipeline.rs` | retro pipeline (source + optional `RemotePull`) |

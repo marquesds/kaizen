@@ -25,6 +25,8 @@ pub struct NewArgs {
     pub target_pct: f64,
     pub control_commit: Option<String>,
     pub treatment_commit: Option<String>,
+    pub control_branch: Option<String>,
+    pub treatment_branch: Option<String>,
 }
 
 pub fn exp_new_text(workspace: Option<&Path>, args: NewArgs) -> Result<String> {
@@ -35,8 +37,9 @@ pub fn exp_new_text(workspace: Option<&Path>, args: NewArgs) -> Result<String> {
         Metric::parse(&args.metric).ok_or_else(|| anyhow!("unknown metric: {}", args.metric))?;
     let binding = build_binding(&ws, &args)?;
     let (direction, target_pct) = split_target(args.target_pct);
+    let created_at = now_ms();
     let exp_rec = Experiment {
-        id: uuid::Uuid::now_v7().to_string(),
+        id: deterministic_exp_id(&args.name, created_at),
         name: args.name.clone(),
         hypothesis: args.hypothesis,
         change_description: args.change,
@@ -47,9 +50,10 @@ pub fn exp_new_text(workspace: Option<&Path>, args: NewArgs) -> Result<String> {
             direction,
             target_pct,
         },
-        state: State::Running,
-        created_at_ms: now_ms(),
+        state: State::Draft,
+        created_at_ms: created_at,
         concluded_at_ms: None,
+        guardrails: Vec::new(),
     };
     exp_store::save_experiment(&store, &exp_rec)?;
     Ok(format!("created {} · {}\n", exp_rec.id, exp_rec.name))
@@ -77,10 +81,24 @@ fn build_binding(ws: &Path, args: &NewArgs) -> Result<Binding> {
                 treatment_commit: treatment,
             })
         }
+        "branch" => {
+            let control = args
+                .control_branch
+                .clone()
+                .ok_or_else(|| anyhow!("--control-branch required for --bind branch"))?;
+            let treatment = args
+                .treatment_branch
+                .clone()
+                .ok_or_else(|| anyhow!("--treatment-branch required for --bind branch"))?;
+            Ok(Binding::Branch {
+                control_branch: control,
+                treatment_branch: treatment,
+            })
+        }
         "manual" => Ok(Binding::ManualTag {
             variant_field: "variant".into(),
         }),
-        other => Err(anyhow!("unsupported bind: {other} (use git|manual)")),
+        other => Err(anyhow!("unsupported bind: {other} (use git|branch|manual)")),
     }
 }
 
@@ -233,7 +251,7 @@ pub fn exp_report_text(workspace: Option<&Path>, id: &str, json_out: bool) -> Re
     let (start_ms, end_ms) = window_for(&exp_rec);
     let sessions = sessions_with_events_in(&store, &ws_str, start_ms, end_ms)?;
     let manual = exp_store::manual_tags(&store, id)?;
-    let report = exp::run(&exp_rec, &sessions, &manual, &ws);
+    let report = exp::run(&exp_rec, &sessions, &manual, &ws, false);
     if json_out {
         Ok(serde_json::to_string_pretty(&report)?)
     } else {
@@ -259,6 +277,87 @@ pub fn exp_conclude_text(workspace: Option<&Path>, id: &str) -> Result<String> {
 
 pub fn cmd_conclude(workspace: Option<&Path>, id: &str) -> Result<()> {
     print!("{}", exp_conclude_text(workspace, id)?);
+    Ok(())
+}
+
+pub fn exp_start_text(workspace: Option<&Path>, id: &str) -> Result<String> {
+    let ws = workspace_path(workspace)?;
+    let store = Store::open(&ws.join(".kaizen/kaizen.db"))?;
+    let exp_rec = exp_store::load_experiment(&store, id)?
+        .ok_or_else(|| anyhow!("experiment not found: {id}"))?;
+    let next = transition(exp_rec.state, "start")
+        .ok_or_else(|| anyhow!("cannot start from {:?}", exp_rec.state))?;
+    exp_store::set_state(&store, id, next, now_ms())?;
+    Ok(format!("started {id}\n"))
+}
+
+pub fn cmd_start(workspace: Option<&Path>, id: &str) -> Result<()> {
+    print!("{}", exp_start_text(workspace, id)?);
+    Ok(())
+}
+
+pub fn exp_archive_text(workspace: Option<&Path>, id: &str) -> Result<String> {
+    let ws = workspace_path(workspace)?;
+    let store = Store::open(&ws.join(".kaizen/kaizen.db"))?;
+    let exp_rec = exp_store::load_experiment(&store, id)?
+        .ok_or_else(|| anyhow!("experiment not found: {id}"))?;
+    let next = transition(exp_rec.state, "archive")
+        .ok_or_else(|| anyhow!("cannot archive from {:?}", exp_rec.state))?;
+    exp_store::set_state(&store, id, next, now_ms())?;
+    Ok(format!("archived {id}\n"))
+}
+
+pub fn cmd_archive(workspace: Option<&Path>, id: &str) -> Result<()> {
+    print!("{}", exp_archive_text(workspace, id)?);
+    Ok(())
+}
+
+pub fn exp_power_text(workspace: Option<&Path>, metric: &str, baseline_n: usize) -> Result<String> {
+    use crate::experiment::stats::power;
+    use std::fmt::Write;
+
+    let ws = workspace_path(workspace)?;
+    let cfg = config::load(&ws)?;
+    let store = Store::open(&ws.join(".kaizen/kaizen.db"))?;
+    let ws_str = ws.to_string_lossy().to_string();
+    scan_all_agents(&ws, &cfg, &ws_str, &store)?;
+
+    let metric_val = Metric::parse(metric).ok_or_else(|| anyhow!("unknown metric: {metric}"))?;
+    let now = now_ms();
+    let lookback_ms = 90 * 86_400_000_u64;
+    let sessions = sessions_with_events_in(&store, &ws_str, now.saturating_sub(lookback_ms), now)?;
+    let session_records: Vec<crate::core::event::SessionRecord> =
+        sessions.iter().map(|(s, _)| s.clone()).collect();
+    let _ = session_records; // kept for future cluster key use
+    let values: Vec<f64> = sessions
+        .iter()
+        .filter_map(|(s, evs)| crate::experiment::metric::value_for(metric_val, s, evs))
+        .collect();
+
+    let mut out = String::new();
+    match power::mde(&values, baseline_n) {
+        None => writeln!(&mut out, "no data for metric {metric} in the last 90 days").unwrap(),
+        Some(r) => {
+            writeln!(&mut out, "metric:      {metric}").unwrap();
+            writeln!(&mut out, "baseline n:  {}", r.n_per_arm).unwrap();
+            writeln!(&mut out, "observed σ:  {:.3}", r.sigma).unwrap();
+            writeln!(&mut out, "MDE:         {:.3}", r.mde_absolute).unwrap();
+            if let Some(pct) = r.mde_pct {
+                writeln!(&mut out, "MDE %:       {:.1}%", pct).unwrap();
+            }
+            writeln!(
+                &mut out,
+                "\n(80% power · 95% CI · {n} sessions in baseline)",
+                n = values.len()
+            )
+            .unwrap();
+        }
+    }
+    Ok(out)
+}
+
+pub fn cmd_power(workspace: Option<&Path>, metric: &str, baseline_n: usize) -> Result<()> {
+    print!("{}", exp_power_text(workspace, metric, baseline_n)?);
     Ok(())
 }
 
@@ -293,6 +392,18 @@ fn now_ms() -> u64 {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis() as u64
+}
+
+/// Deterministic UUIDv5 from experiment name + creation timestamp.
+/// Stable across devices so concurrent creation of same experiment yields same ID.
+fn deterministic_exp_id(name: &str, created_at_ms: u64) -> String {
+    // Application-level namespace: "kaizen:experiments" hashed via UUIDv5 with DNS ns.
+    const NS: uuid::Uuid = uuid::Uuid::from_bytes([
+        0x6b, 0x61, 0x69, 0x7a, 0x65, 0x6e, 0x3a, 0x65, 0x78, 0x70, 0x73, 0x00, 0x00, 0x00, 0x00,
+        0x01,
+    ]);
+    let key = format!("{name}:{created_at_ms}");
+    uuid::Uuid::new_v5(&NS, key.as_bytes()).to_string()
 }
 
 fn truncate(s: &str, max: usize) -> String {

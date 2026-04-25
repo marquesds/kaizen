@@ -1,0 +1,135 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+use kaizen::experiment::types::Classification;
+use quint_connect::*;
+use serde::Deserialize;
+
+// --- Quint classification type (mirrors the Quint enum) ---
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Deserialize)]
+#[serde(tag = "tag")]
+enum SpecClass {
+    Control,
+    Treatment,
+    Excluded,
+}
+
+impl From<SpecClass> for Classification {
+    fn from(s: SpecClass) -> Self {
+        match s {
+            SpecClass::Control   => Classification::Control,
+            SpecClass::Treatment => Classification::Treatment,
+            SpecClass::Excluded  => Classification::Excluded,
+        }
+    }
+}
+
+// --- State (mirrors Quint vars manual_tag, git_class, conflict) ---
+
+#[derive(Debug, Eq, PartialEq, Deserialize)]
+struct BindingState {
+    manual_tag: SpecClass,
+    git_class:  SpecClass,
+    conflict:   bool,
+}
+
+// --- Driver ---
+
+#[derive(Debug)]
+struct BindingDriver {
+    manual_tag: Classification,
+    git_class:  Classification,
+    conflict:   bool,
+}
+
+impl Default for BindingDriver {
+    fn default() -> Self {
+        Self {
+            manual_tag: Classification::Excluded,
+            git_class:  Classification::Excluded,
+            conflict:   false,
+        }
+    }
+}
+
+fn resolve(manual: &Classification, git: &Classification) -> Classification {
+    if *manual != Classification::Excluded {
+        manual.clone()
+    } else {
+        git.clone()
+    }
+}
+
+impl State<BindingDriver> for BindingState {
+    fn from_driver(d: &BindingDriver) -> Result<Self> {
+        Ok(BindingState {
+            manual_tag: match d.manual_tag {
+                Classification::Control   => SpecClass::Control,
+                Classification::Treatment => SpecClass::Treatment,
+                Classification::Excluded  => SpecClass::Excluded,
+            },
+            git_class: match d.git_class {
+                Classification::Control   => SpecClass::Control,
+                Classification::Treatment => SpecClass::Treatment,
+                Classification::Excluded  => SpecClass::Excluded,
+            },
+            conflict: d.conflict,
+        })
+    }
+}
+
+impl Driver for BindingDriver {
+    type State = BindingState;
+
+    fn step(&mut self, step: &Step) -> Result {
+        switch!(step {
+            init => {
+                self.manual_tag = Classification::Excluded;
+                self.git_class  = Classification::Excluded;
+                self.conflict   = false;
+            },
+            step => {
+                self.manual_tag = Classification::Excluded;
+                self.git_class  = Classification::Excluded;
+                self.conflict   = false;
+            },
+            classify_via_git(g: SpecClass) => {
+                self.git_class = g.into();
+            },
+            apply_manual_tag(v: SpecClass) => {
+                let incoming: Classification = v.into();
+                self.conflict = self.manual_tag != Classification::Excluded
+                    && self.manual_tag != incoming;
+                if self.manual_tag == Classification::Excluded || self.manual_tag == incoming {
+                    self.manual_tag = incoming;
+                }
+            }
+        })
+    }
+}
+
+// Spot-check: manual always wins over git in the resolved classification.
+#[test]
+fn manual_beats_git() {
+    let mut d = BindingDriver::default();
+    d.git_class  = Classification::Treatment;
+    d.manual_tag = Classification::Control;
+    assert_eq!(resolve(&d.manual_tag, &d.git_class), Classification::Control);
+}
+
+// Spot-check: git used when no manual tag.
+#[test]
+fn git_used_without_manual() {
+    let mut d = BindingDriver::default();
+    d.git_class = Classification::Treatment;
+    assert_eq!(resolve(&d.manual_tag, &d.git_class), Classification::Treatment);
+}
+
+#[quint_run(
+    spec = "specs/experiment-binding.qnt",
+    max_samples = 20,
+    max_steps = 6,
+    seed = "0x2"
+)]
+fn experiment_binding_run() -> impl Driver {
+    BindingDriver::default()
+}

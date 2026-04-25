@@ -15,6 +15,8 @@ enum SpecState {
 #[derive(Debug, Eq, PartialEq, Deserialize)]
 struct ExpState {
     state: SpecState,
+    #[serde(with = "itf::de::As::<itf::de::Integer>")]
+    step_count: i64,
 }
 
 impl State<ExpDriver> for ExpState {
@@ -26,6 +28,7 @@ impl State<ExpDriver> for ExpState {
                 ExpLifecycle::Concluded => SpecState::Concluded,
                 ExpLifecycle::Archived => SpecState::Archived,
             },
+            step_count: d.step_count,
         })
     }
 }
@@ -33,12 +36,14 @@ impl State<ExpDriver> for ExpState {
 #[derive(Debug)]
 struct ExpDriver {
     state: ExpLifecycle,
+    step_count: i64,
 }
 
 impl Default for ExpDriver {
     fn default() -> Self {
         Self {
             state: ExpLifecycle::Draft,
+            step_count: 0,
         }
     }
 }
@@ -50,23 +55,28 @@ impl Driver for ExpDriver {
         switch!(step {
             init => {
                 self.state = ExpLifecycle::Draft;
+                self.step_count = 0;
             },
             // See `specs/session-lifecycle` driver: outer `any{}` can emit a `step` before the
             // concrete action; keep the same baseline as that pattern.
             step => {
                 self.state = ExpLifecycle::Draft;
+                self.step_count = 0;
             },
             start => {
                 self.state = transition(self.state, "start")
                     .ok_or_else(|| anyhow::anyhow!("start not enabled"))?;
+                self.step_count += 1;
             },
             conclude => {
                 self.state = transition(self.state, "conclude")
                     .ok_or_else(|| anyhow::anyhow!("conclude not enabled"))?;
+                self.step_count += 1;
             },
             archive => {
                 self.state = transition(self.state, "archive")
                     .ok_or_else(|| anyhow::anyhow!("archive not enabled"))?;
+                self.step_count += 1;
             }
         })
     }

@@ -64,6 +64,27 @@ pub enum State {
     Archived,
 }
 
+/// Guardrail: a secondary metric that must not regress.
+///
+/// If the CI shows a regression beyond `threshold_pct` in the specified
+/// direction, the report flags the guardrail as violated.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GuardrailSpec {
+    pub metric: Metric,
+    /// Direction of *regression* (e.g. `Increase` for cost = cost going up is bad).
+    pub regression_direction: Direction,
+    /// Flag if CI endpoint crosses this threshold.
+    pub threshold_pct: f64,
+}
+
+/// Per-guardrail result in the experiment report.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GuardrailResult {
+    pub metric: Metric,
+    pub delta_pct: Option<f64>,
+    pub violated: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Experiment {
     pub id: String,
@@ -77,6 +98,8 @@ pub struct Experiment {
     pub state: State,
     pub created_at_ms: u64,
     pub concluded_at_ms: Option<u64>,
+    #[serde(default)]
+    pub guardrails: Vec<GuardrailSpec>,
 }
 
 impl Metric {

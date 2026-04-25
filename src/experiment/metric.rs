@@ -15,7 +15,8 @@ pub fn value_for(metric: Metric, session: &SessionRecord, events: &[Event]) -> O
         Metric::ToolLoops => Some(tool_loops(events)),
         Metric::DurationMinutes => duration_minutes(session),
         Metric::FilesPerSession => Some(files_touched(events)),
-        Metric::SuccessRateByPrompt | Metric::CostByPrompt => todo!(),
+        Metric::SuccessRateByPrompt => success_rate_by_prompt(events),
+        Metric::CostByPrompt => cost_by_prompt(events),
     }
 }
 
@@ -70,6 +71,37 @@ fn tool_loops(events: &[Event]) -> f64 {
 fn duration_minutes(session: &SessionRecord) -> Option<f64> {
     let end = session.ended_at_ms?;
     Some((end.saturating_sub(session.started_at_ms) as f64) / 60_000.0)
+}
+
+/// Fraction of message turns that saw no errors.
+/// Returns `None` when the session has no message events.
+fn success_rate_by_prompt(events: &[Event]) -> Option<f64> {
+    let msg_count = events
+        .iter()
+        .filter(|e| matches!(e.kind, EventKind::Message))
+        .count();
+    if msg_count == 0 {
+        return None;
+    }
+    let error_count = events
+        .iter()
+        .filter(|e| matches!(e.kind, EventKind::Error))
+        .count();
+    let err_frac = (error_count.min(msg_count) as f64) / msg_count as f64;
+    Some(1.0 - err_frac)
+}
+
+/// Cost in USD per message turn.
+/// Returns `None` when the session has no message events.
+fn cost_by_prompt(events: &[Event]) -> Option<f64> {
+    let msg_count = events
+        .iter()
+        .filter(|e| matches!(e.kind, EventKind::Message))
+        .count();
+    if msg_count == 0 {
+        return None;
+    }
+    Some(cost_usd(events) / msg_count as f64)
 }
 
 fn files_touched(events: &[Event]) -> f64 {
@@ -176,5 +208,40 @@ mod tests {
         let mut c = ev(EventKind::ToolCall, None);
         c.payload = json!({"path":"src/b.rs"});
         assert_eq!(files_touched(&[a, b, c]), 2.0);
+    }
+
+    #[test]
+    fn cost_by_prompt_none_without_messages() {
+        let s = session(0, None);
+        assert!(cost_by_prompt(&[]).is_none());
+        let _ = s;
+    }
+
+    #[test]
+    fn cost_by_prompt_divides_by_message_count() {
+        let s = session(0, None);
+        let mut e = ev(EventKind::ToolCall, None);
+        e.cost_usd_e6 = Some(2_000_000); // $2.00
+        let m = ev(EventKind::Message, None);
+        // 1 message event → $2.00 / 1 = $2.00
+        assert_eq!(cost_by_prompt(&[e, m]), Some(2.0));
+        let _ = s;
+    }
+
+    #[test]
+    fn success_rate_by_prompt_none_without_messages() {
+        assert!(success_rate_by_prompt(&[]).is_none());
+    }
+
+    #[test]
+    fn success_rate_by_prompt_perfect_when_no_errors() {
+        let events = vec![ev(EventKind::Message, None), ev(EventKind::Message, None)];
+        assert_eq!(success_rate_by_prompt(&events), Some(1.0));
+    }
+
+    #[test]
+    fn success_rate_by_prompt_degraded_on_errors() {
+        let events = vec![ev(EventKind::Message, None), ev(EventKind::Error, None)];
+        assert_eq!(success_rate_by_prompt(&events), Some(0.0));
     }
 }

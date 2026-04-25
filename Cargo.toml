@@ -196,7 +196,7 @@ ratatui = "0.30"
 crossterm = "0.29"
 reqwest = { version = "0.13", default-features = false, features = ["json", "gzip", "blocking", "rustls"] }
 flate2 = "1"
-uuid = { version = "1", features = ["v7"] }
+uuid = { version = "1", features = ["v5", "v7"] }
 blake3 = "1"
 aho-corasick = "1"
 regex = "1"
