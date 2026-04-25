@@ -17,11 +17,8 @@ pub fn run(inputs: &Inputs) -> Vec<Bet> {
         .iter()
         .find(|s| s.span_id == stats.deepest_span_id);
     let tool_label = deepest.map(|s| s.tool.as_str()).unwrap_or("unknown");
-    let subtree_cost = deepest
-        .and_then(|s| s.subtree_cost_usd_e6)
-        .unwrap_or(0);
-    let savings = subtree_cost as f64 / 1_000.0
-        + stats.max_depth as f64 * TOKENS_PER_DEPTH;
+    let subtree_cost = deepest.and_then(|s| s.subtree_cost_usd_e6).unwrap_or(0);
+    let savings = subtree_cost as f64 / 1_000.0 + stats.max_depth as f64 * TOKENS_PER_DEPTH;
     vec![Bet {
         id: format!("H18:depth{}:{}", stats.max_depth, tool_label),
         heuristic_id: "H18".into(),

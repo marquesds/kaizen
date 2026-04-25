@@ -4,8 +4,8 @@
 use crate::core::event::{Event, SessionRecord, SessionStatus};
 use crate::metrics::types::MetricsReport;
 use crate::metrics::{index, report};
-use crate::store::span_tree::SpanNode;
 use crate::store::Store;
+use crate::store::span_tree::SpanNode;
 use crate::ui::theme;
 use anyhow::Result;
 use crossterm::{
@@ -403,7 +403,12 @@ fn draw_events(f: &mut ratatui::Frame, app: &App, area: ratatui::layout::Rect) {
         return;
     }
     if !app.span_nodes.is_empty() {
-        let max_depth: u32 = app.span_nodes.iter().map(|n| n.span.depth).max().unwrap_or(0);
+        let max_depth: u32 = app
+            .span_nodes
+            .iter()
+            .map(|n| n.span.depth)
+            .max()
+            .unwrap_or(0);
         let strip_h = (max_depth + 3).min(8) as u16;
         let split = Layout::default()
             .direction(Direction::Vertical)
@@ -433,7 +438,9 @@ fn draw_events(f: &mut ratatui::Frame, app: &App, area: ratatui::layout::Rect) {
             .borders(Borders::ALL)
             .border_style(Style::default().fg(theme::BORDER_INACTIVE));
         f.render_widget(
-            Paragraph::new(span_text).block(span_block).wrap(Wrap { trim: false }),
+            Paragraph::new(span_text)
+                .block(span_block)
+                .wrap(Wrap { trim: false }),
             split[1],
         );
         return;

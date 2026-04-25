@@ -162,14 +162,14 @@ fn compute_subtree_costs(spans: &mut [SpanBuilder]) {
             spans[i].parent_span_id.clone(),
         );
         let Some(parent_id) = pid else { continue };
-        let Some(pi) = ids.iter().position(|id| id == &parent_id) else { continue };
+        let Some(pi) = ids.iter().position(|id| id == &parent_id) else {
+            continue;
+        };
         if let Some(c) = cost {
-            spans[pi].subtree_cost_usd_e6 =
-                Some(spans[pi].subtree_cost_usd_e6.unwrap_or(0) + c);
+            spans[pi].subtree_cost_usd_e6 = Some(spans[pi].subtree_cost_usd_e6.unwrap_or(0) + c);
         }
         if let Some(t) = tokens {
-            spans[pi].subtree_token_count =
-                Some(spans[pi].subtree_token_count.unwrap_or(0) + t);
+            spans[pi].subtree_token_count = Some(spans[pi].subtree_token_count.unwrap_or(0) + t);
         }
     }
 }

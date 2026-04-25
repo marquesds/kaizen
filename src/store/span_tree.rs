@@ -21,7 +21,15 @@ pub fn build_tree(spans: Vec<ToolSpanView>) -> Vec<SpanNode> {
         .map(|s| {
             let cost = s.subtree_cost_usd_e6.unwrap_or(0);
             let tokens = s.subtree_token_count.unwrap_or(0) as u64;
-            (s.span_id.clone(), SpanNode { span: s, children: vec![], subtree_cost_usd_e6: cost, subtree_token_count: tokens })
+            (
+                s.span_id.clone(),
+                SpanNode {
+                    span: s,
+                    children: vec![],
+                    subtree_cost_usd_e6: cost,
+                    subtree_token_count: tokens,
+                },
+            )
         })
         .collect();
     let mut roots: Vec<String> = Vec::new();
@@ -30,10 +38,17 @@ pub fn build_tree(spans: Vec<ToolSpanView>) -> Vec<SpanNode> {
         match pid {
             Some(p) if nodes.contains_key(&p) => {
                 let child = nodes.remove(id).expect("id present");
-                nodes.get_mut(&p).expect("parent present").children.push(child);
+                nodes
+                    .get_mut(&p)
+                    .expect("parent present")
+                    .children
+                    .push(child);
             }
             _ => roots.push(id.clone()),
         }
     }
-    roots.into_iter().filter_map(|id| nodes.remove(&id)).collect()
+    roots
+        .into_iter()
+        .filter_map(|id| nodes.remove(&id))
+        .collect()
 }

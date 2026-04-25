@@ -595,7 +595,13 @@ fn main() -> anyhow::Result<()> {
             workspace.as_deref(),
         ),
         Command::Sessions {
-            subcmd: SessionsCommand::Tree { id, depth, json, workspace },
+            subcmd:
+                SessionsCommand::Tree {
+                    id,
+                    depth,
+                    json,
+                    workspace,
+                },
         } => kaizen::shell::cli::cmd_sessions_tree(&id, depth, json, workspace.as_deref()),
         Command::Feedback {
             subcmd:
