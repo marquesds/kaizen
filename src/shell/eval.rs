@@ -44,11 +44,7 @@ pub fn cmd_eval_list(workspace: Option<&Path>, min_score: f64, json: bool) -> Re
     Ok(())
 }
 
-pub fn cmd_eval_prompt(
-    workspace: Option<&Path>,
-    session_id: &str,
-    rubric_id: &str,
-) -> Result<()> {
+pub fn cmd_eval_prompt(workspace: Option<&Path>, session_id: &str, rubric_id: &str) -> Result<()> {
     let ws = resolve_ws(workspace)?;
     let store = open_store(&ws)?;
     let session = store
@@ -57,7 +53,10 @@ pub fn cmd_eval_prompt(
     let events = store.list_events_for_session(session_id)?;
     let rubric = crate::eval::rubric::by_id(rubric_id)
         .ok_or_else(|| anyhow::anyhow!("unknown rubric: {rubric_id}"))?;
-    println!("{}", crate::eval::judge::build_prompt(rubric, &session, &events));
+    println!(
+        "{}",
+        crate::eval::judge::build_prompt(rubric, &session, &events)
+    );
     Ok(())
 }
 
