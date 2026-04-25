@@ -56,6 +56,7 @@ pub struct RepoSnapshotRecord {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ToolSpanView {
+    pub span_id: String,
     pub tool: String,
     pub status: String,
     pub lead_time_ms: Option<u64>,
@@ -64,6 +65,10 @@ pub struct ToolSpanView {
     pub reasoning_tokens: Option<u32>,
     pub cost_usd_e6: Option<i64>,
     pub paths: Vec<String>,
+    pub parent_span_id: Option<String>,
+    pub depth: u32,
+    pub subtree_cost_usd_e6: Option<i64>,
+    pub subtree_token_count: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

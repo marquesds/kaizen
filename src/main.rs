@@ -521,6 +521,16 @@ enum SessionsCommand {
         #[arg(long)]
         workspace: Option<PathBuf>,
     },
+    /// Render nested tool-span tree for a session.
+    Tree {
+        id: String,
+        #[arg(long, default_value = "999")]
+        depth: u32,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -584,6 +594,9 @@ fn main() -> anyhow::Result<()> {
             note,
             workspace.as_deref(),
         ),
+        Command::Sessions {
+            subcmd: SessionsCommand::Tree { id, depth, json, workspace },
+        } => kaizen::shell::cli::cmd_sessions_tree(&id, depth, json, workspace.as_deref()),
         Command::Feedback {
             subcmd:
                 FeedbackCommand::List {

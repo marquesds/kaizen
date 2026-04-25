@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pub mod event_index;
 pub mod remote_cache;
+pub mod span_tree;
 pub mod sqlite;
 pub mod tool_span_index;
+pub use span_tree::{SpanNode, build_tree};
 pub use remote_cache::{
     RemoteCacheStore, RemoteEventAgg, RemotePullState, clear_remote_cache_tables,
 };

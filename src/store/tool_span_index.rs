@@ -26,12 +26,18 @@ struct SpanBuilder {
     paths: BTreeSet<String>,
     has_call: bool,
     has_end: bool,
+    parent_span_id: Option<String>,
+    depth: u32,
+    subtree_cost_usd_e6: Option<i64>,
+    subtree_token_count: Option<u32>,
 }
 
 pub fn rebuild_tool_spans_for_session(conn: &Connection, session_id: &str) -> Result<()> {
     let events = load_session_events(conn, session_id)?;
     clear_session_spans(conn, session_id)?;
-    let spans = build_spans(&events);
+    let mut spans = build_spans(&events);
+    assign_parents(&mut spans);
+    compute_subtree_costs(&mut spans);
     for span in spans {
         let lead = span
             .hook_start_ms
@@ -57,8 +63,9 @@ pub fn rebuild_tool_spans_for_session(conn: &Connection, session_id: &str) -> Re
             "INSERT INTO tool_spans (
                 span_id, session_id, tool, tool_call_id, status,
                 started_at_ms, ended_at_ms, lead_time_ms,
-                tokens_in, tokens_out, reasoning_tokens, cost_usd_e6, paths_json
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                tokens_in, tokens_out, reasoning_tokens, cost_usd_e6, paths_json,
+                parent_span_id, depth, subtree_cost_usd_e6, subtree_token_count
+             ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)",
             params![
                 span.span_id,
                 span.session_id,
@@ -73,6 +80,10 @@ pub fn rebuild_tool_spans_for_session(conn: &Connection, session_id: &str) -> Re
                 span.reasoning_tokens.map(|v| v as i64),
                 span.cost_usd_e6,
                 serde_json::to_string(&span.paths.iter().cloned().collect::<Vec<_>>())?,
+                span.parent_span_id,
+                span.depth as i64,
+                span.subtree_cost_usd_e6,
+                span.subtree_token_count.map(|v| v as i64),
             ],
         )?;
         for path in span.paths {
@@ -83,6 +94,84 @@ pub fn rebuild_tool_spans_for_session(conn: &Connection, session_id: &str) -> Re
         }
     }
     Ok(())
+}
+
+fn span_start(s: &SpanBuilder) -> Option<u64> {
+    s.hook_start_ms.or(s.call_start_ms)
+}
+
+fn span_end(s: &SpanBuilder) -> Option<u64> {
+    s.hook_end_ms.or(s.result_end_ms)
+}
+
+fn assign_parents(spans: &mut [SpanBuilder]) {
+    // Sort: start ASC, end DESC so outer spans appear before inner spans.
+    spans.sort_by(|a, b| {
+        let sa = span_start(a).unwrap_or(u64::MAX);
+        let sb = span_start(b).unwrap_or(u64::MAX);
+        sa.cmp(&sb).then_with(|| {
+            let ea = span_end(a).unwrap_or(0);
+            let eb = span_end(b).unwrap_or(0);
+            eb.cmp(&ea)
+        })
+    });
+    for i in 0..spans.len() {
+        let (s_start, s_end) = match (span_start(&spans[i]), span_end(&spans[i])) {
+            (Some(s), Some(e)) => (s, e),
+            _ => continue,
+        };
+        let mut best: Option<(usize, u32)> = None;
+        for (j, candidate) in spans[..i].iter().enumerate() {
+            let (p_start, p_end) = match (span_start(candidate), span_end(candidate)) {
+                (Some(s), Some(e)) => (s, e),
+                _ => continue,
+            };
+            if p_start <= s_start && s_end <= p_end {
+                let d = candidate.depth;
+                if best.is_none_or(|(_, bd)| d > bd) {
+                    best = Some((j, d));
+                }
+            }
+        }
+        if let Some((pi, pd)) = best {
+            let pid = spans[pi].span_id.clone();
+            spans[i].parent_span_id = Some(pid);
+            spans[i].depth = pd + 1;
+        }
+    }
+}
+
+fn compute_subtree_costs(spans: &mut [SpanBuilder]) {
+    // Seed each span's subtree with its own cost/tokens.
+    for s in spans.iter_mut() {
+        s.subtree_cost_usd_e6 = s.cost_usd_e6;
+        s.subtree_token_count = s.tokens_in.map(|i| i + s.tokens_out.unwrap_or(0));
+    }
+    // Build an index: span_id → index in vec.
+    let ids: Vec<String> = spans.iter().map(|s| s.span_id.clone()).collect();
+    // Bottom-up: iterate in reverse depth order (deepest first).
+    let order: Vec<usize> = {
+        let mut v: Vec<usize> = (0..spans.len()).collect();
+        v.sort_by_key(|&i| u32::MAX - spans[i].depth);
+        v
+    };
+    for i in order {
+        let (cost, tokens, pid) = (
+            spans[i].subtree_cost_usd_e6,
+            spans[i].subtree_token_count,
+            spans[i].parent_span_id.clone(),
+        );
+        let Some(parent_id) = pid else { continue };
+        let Some(pi) = ids.iter().position(|id| id == &parent_id) else { continue };
+        if let Some(c) = cost {
+            spans[pi].subtree_cost_usd_e6 =
+                Some(spans[pi].subtree_cost_usd_e6.unwrap_or(0) + c);
+        }
+        if let Some(t) = tokens {
+            spans[pi].subtree_token_count =
+                Some(spans[pi].subtree_token_count.unwrap_or(0) + t);
+        }
+    }
 }
 
 fn clear_session_spans(conn: &Connection, session_id: &str) -> Result<()> {

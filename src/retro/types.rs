@@ -49,6 +49,14 @@ pub struct RetroAggregates {
     pub tool_cost_usd_e6: HashMap<String, i64>,
     pub model_session_counts: HashMap<String, u64>,
     pub total_cost_usd_e6: i64,
+    pub span_tree_stats: Option<SpanTreeStats>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SpanTreeStats {
+    pub max_depth: u32,
+    pub max_fan_out: u32,
+    pub deepest_span_id: String,
 }
 
 /// One ranked improvement bet.

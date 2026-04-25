@@ -115,6 +115,7 @@ Set any value to `false` to skip that agent’s local scan (useful if a VS Code 
 | `kaizen_ingest_hook` | `kaizen ingest hook` | Pass hook JSON in `payload` (not stdin). `source`: `cursor` or `claude`. |
 | `kaizen_sessions_list` | `kaizen sessions list` | Optional `json: true`, `refresh: true` (full transcript rescan; matches `--refresh`), `all_workspaces: true` for machine-wide aggregation. |
 | `kaizen_session_show` | `kaizen sessions show` | `id` + optional `workspace`. |
+| `get_session_span_tree` | `kaizen sessions tree` | `id` + optional `workspace`, `json: true` returns `SpanNode[]` JSON; default returns ASCII tree with subtree-cost flags. |
 | `kaizen_summary` | `kaizen summary` | Optional `json: true`, `refresh: true`, `all_workspaces: true`. |
 | `kaizen_tui` | `kaizen tui` | Not runnable over MCP; returns a structured “use CLI” payload with `is_error` semantics. |
 | `kaizen_init` | `kaizen init` | Writes/updates workspace files, same as CLI. |

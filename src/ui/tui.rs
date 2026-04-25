@@ -4,6 +4,7 @@
 use crate::core::event::{Event, SessionRecord, SessionStatus};
 use crate::metrics::types::MetricsReport;
 use crate::metrics::{index, report};
+use crate::store::span_tree::SpanNode;
 use crate::store::Store;
 use crate::ui::theme;
 use anyhow::Result;
@@ -58,6 +59,8 @@ struct App {
     workspace: String,
     /// session_id -> score (1..=5) for visible sessions; populated each refresh.
     feedback_scores: HashMap<String, u8>,
+    /// Flat span nodes for selected session (depth-indented in detail pane).
+    span_nodes: Vec<SpanNode>,
 }
 
 impl App {
@@ -88,6 +91,7 @@ impl App {
             store,
             workspace: ws,
             feedback_scores: HashMap::new(),
+            span_nodes: vec![],
         };
         app.reapply_filter();
         app.refresh()?;
@@ -121,9 +125,11 @@ impl App {
                     self.tool_lead_by_call.insert(id, lt);
                 }
             }
+            self.span_nodes = self.store.session_span_tree(&s.id).unwrap_or_default();
         } else {
             self.events.clear();
             self.tool_lead_by_call.clear();
+            self.span_nodes.clear();
         }
         self.sel_event = self.sel_event.min(self.events.len().saturating_sub(1));
         self.metrics = report::build_report(&self.store, &self.workspace, 7).ok();
@@ -396,6 +402,42 @@ fn draw_events(f: &mut ratatui::Frame, app: &App, area: ratatui::layout::Rect) {
         );
         return;
     }
+    if !app.span_nodes.is_empty() {
+        let max_depth: u32 = app.span_nodes.iter().map(|n| n.span.depth).max().unwrap_or(0);
+        let strip_h = (max_depth + 3).min(8) as u16;
+        let split = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(2), Constraint::Length(strip_h)])
+            .split(area);
+        let block = Block::default()
+            .title(title)
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(border_color));
+        let items: Vec<ListItem> = app
+            .events
+            .iter()
+            .map(|e| ListItem::new(event_row_text(now, e, &app.tool_lead_by_call)))
+            .collect();
+        let mut state = ListState::default();
+        state.select(Some(app.sel_event));
+        f.render_stateful_widget(
+            List::new(items)
+                .block(block)
+                .highlight_style(Style::default().bg(Color::Blue).fg(Color::White)),
+            split[0],
+            &mut state,
+        );
+        let span_text: Vec<Line> = span_depth_lines(&app.span_nodes);
+        let span_block = Block::default()
+            .title("Span tree")
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(theme::BORDER_INACTIVE));
+        f.render_widget(
+            Paragraph::new(span_text).block(span_block).wrap(Wrap { trim: false }),
+            split[1],
+        );
+        return;
+    }
     let block = Block::default()
         .title(title)
         .borders(Borders::ALL)
@@ -417,6 +459,29 @@ fn draw_events(f: &mut ratatui::Frame, app: &App, area: ratatui::layout::Rect) {
         area,
         &mut state,
     );
+}
+
+fn span_depth_lines(nodes: &[SpanNode]) -> Vec<Line<'static>> {
+    let mut lines = Vec::new();
+    for n in nodes {
+        push_span_line(&mut lines, n, 0);
+    }
+    lines
+}
+
+fn push_span_line(lines: &mut Vec<Line<'static>>, node: &SpanNode, depth: u32) {
+    let indent = "  ".repeat(depth as usize);
+    let prefix = if depth == 0 { "┌ " } else { "├ " };
+    let cost = node
+        .span
+        .subtree_cost_usd_e6
+        .map(|c| format!(" ${:.4}", c as f64 / 1_000_000.0))
+        .unwrap_or_default();
+    let text = format!("{}{}{}{}", indent, prefix, node.span.tool, cost);
+    lines.push(Line::from(Span::raw(text)));
+    for child in &node.children {
+        push_span_line(lines, child, depth + 1);
+    }
 }
 
 fn event_detail_text(ev: &Event, lead: &HashMap<String, u64>) -> String {

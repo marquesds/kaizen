@@ -32,14 +32,19 @@ Re-running is safe. Codex, Goose, OpenCode, Copilot, and OpenClaw sessions are i
 ## `kaizen sessions`
 
 ```bash
-kaizen sessions list           # all sessions in workspace
-kaizen sessions list --json   # machine-readable
+kaizen sessions list                     # all sessions in workspace
+kaizen sessions list --json             # machine-readable
 kaizen sessions list --refresh
 kaizen sessions list --all-workspaces
-kaizen sessions show <id>      # session metadata (id, agent, model, times, status, trace_path)
+kaizen sessions show <id>               # session metadata (id, agent, model, times, status, trace_path)
+kaizen sessions tree <id>               # ASCII nested tool-span tree
+kaizen sessions tree <id> --depth 3     # limit display depth
+kaizen sessions tree <id> --json        # JSON SpanNode tree (subtree costs + hierarchy)
 ```
 
 `sessions show` prints **one session row**, not the full event stream. For turns, tools, and live tail, use **`kaizen tui`** (or inspect the transcript path shown in `trace_path`).
+
+`sessions tree` renders the nested tool-span tree built from `assign_parents()` during ingest. Each node shows tool name, status, and subtree cost; spans consuming >40% of session cost are flagged. The TUI shows the same tree as a depth-indented strip below the event list.
 
 ## `kaizen summary`
 

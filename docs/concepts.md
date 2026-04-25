@@ -91,6 +91,18 @@ Price table in bundled `cost.toml`. Claude / Codex: native token
 counts. Cursor: model+turns heuristic (no native tokens). Adjust the
 table to match your contract prices.
 
+## Span Hierarchy
+
+A **tool span** covers one tool call/result pair (or hook pair). During ingest, `assign_parents()` determines containment: span P contains span C when `P.start ≤ C.start && C.end ≤ P.end`. The deepest containing ancestor becomes the parent; `depth = parent.depth + 1`.
+
+`compute_subtree_costs()` rolls up cost and token counts bottom-up so each node carries the total cost of its entire subtree.
+
+The hierarchy is stored in four columns on `tool_spans`: `parent_span_id`, `depth`, `subtree_cost_usd_e6`, `subtree_token_count`.
+
+`kaizen sessions tree <id>` renders this as an ASCII forest. `get_session_span_tree` (MCP) returns the `SpanNode` JSON tree. The TUI shows a depth-indented strip below the event list.
+
+Heuristic **H18** fires when `max_depth ≥ 4` or `max_fan_out ≥ 8`, indicating a nested tool-call loop that inflates context cost.
+
 ## Human Feedback
 
 A `FeedbackRecord` links a score (1–5), label (`good` | `bad` | `interesting` | `bug` | `regression`), and optional free-text note to a session. Records are written to the local SQLite store and queued in the sync outbox.
