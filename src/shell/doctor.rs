@@ -177,6 +177,27 @@ pub fn doctor_text(workspace: Option<&Path>) -> Result<(i32, String)> {
         }
         Err(e) => writeln!(&mut out, "hooks: .claude/settings.json — read error: {e}").unwrap(),
     }
+    let openclaw = init::openclaw_kaizen_hook_wiring(&ws);
+    match &openclaw {
+        Ok(None) => writeln!(
+            &mut out,
+            "hooks: ~/.openclaw/hooks/kaizen-events — absent (run `kaizen init` to wire OpenClaw)"
+        )
+        .unwrap(),
+        Ok(Some(true)) => {
+            writeln!(&mut out, "hooks: ~/.openclaw/hooks/kaizen-events — wired").unwrap()
+        }
+        Ok(Some(false)) => writeln!(
+            &mut out,
+            "hooks: ~/.openclaw/hooks/kaizen-events — present but partial (run: kaizen init)"
+        )
+        .unwrap(),
+        Err(e) => writeln!(
+            &mut out,
+            "hooks: ~/.openclaw/hooks/kaizen-events — read error: {e}"
+        )
+        .unwrap(),
+    }
     writeln!(&mut out).unwrap();
     if std::io::stdout().is_terminal() {
         writeln!(&mut out, "If sessions list is empty, run a short agent session in this repo and `kaizen sessions list` again; see https://github.com/marquesds/kaizen/blob/main/docs/config.md#sources.").unwrap();

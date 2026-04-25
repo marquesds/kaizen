@@ -13,6 +13,7 @@ use std::path::PathBuf;
 pub enum IngestSource {
     Cursor,
     Claude,
+    Openclaw,
 }
 
 impl IngestSource {
@@ -20,6 +21,7 @@ impl IngestSource {
         match s.to_lowercase().as_str() {
             "cursor" => Some(Self::Cursor),
             "claude" => Some(Self::Claude),
+            "openclaw" => Some(Self::Openclaw),
             _ => None,
         }
     }
@@ -28,6 +30,7 @@ impl IngestSource {
         match self {
             Self::Cursor => "cursor",
             Self::Claude => "claude",
+            Self::Openclaw => "openclaw",
         }
     }
 }
@@ -51,6 +54,7 @@ pub fn ingest_hook_text(
     let event = match source {
         IngestSource::Cursor => collect::hooks::cursor::parse_cursor_hook(input)?,
         IngestSource::Claude => collect::hooks::claude::parse_claude_hook(input)?,
+        IngestSource::Openclaw => collect::hooks::openclaw::parse_openclaw_hook(input)?,
     };
     let ws = workspace.unwrap_or_else(|| std::env::current_dir().expect("cwd"));
     let cfg = config::load(&ws)?;

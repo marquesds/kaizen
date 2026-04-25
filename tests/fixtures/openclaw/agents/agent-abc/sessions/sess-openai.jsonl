@@ -1,0 +1,1 @@
+{"tool_calls":[{"id":"call_1","function":{"name":"read_file","arguments":"{\"path\":\"src/main.rs\",\"cwd\":\"__WORKSPACE__\"}"}}],"usage":{"prompt_tokens":800,"completion_tokens":150}}

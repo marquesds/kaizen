@@ -4,6 +4,7 @@
 pub mod claude;
 pub mod cursor;
 pub mod normalize;
+pub mod openclaw;
 
 /// Normalized event emitted by any hook parser.
 #[derive(Debug, Clone, PartialEq, Eq)]

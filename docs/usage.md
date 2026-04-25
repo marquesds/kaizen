@@ -27,7 +27,7 @@ Idempotent workspace setup. Typical effects:
 | `.cursor/skills/kaizen-eval/SKILL.md` | Written (or skipped if you already replaced the placeholder skill). |
 | `.kaizen/backup/*.bak` | Timestamped copy before patching an existing hooks/settings file. |
 
-Re-running is safe. Codex, Goose, OpenCode, and Copilot sessions are ingested via **transcript tail** (and optional hooks elsewhere); `init` only patches **Cursor** and **Claude Code** hook files today.
+Re-running is safe. Codex, Goose, OpenCode, Copilot, and OpenClaw sessions are ingested via **transcript tail** and hooks; `init` patches **Cursor**, **Claude Code**, and **OpenClaw** hook files (writes `~/.openclaw/hooks/kaizen-events/handler.ts`).
 
 ## `kaizen sessions`
 

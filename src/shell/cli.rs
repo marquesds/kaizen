@@ -7,6 +7,7 @@ use crate::collect::tail::copilot_cli::scan_copilot_cli_workspace;
 use crate::collect::tail::copilot_vscode::scan_copilot_vscode_workspace;
 use crate::collect::tail::cursor::scan_session_dir_all;
 use crate::collect::tail::goose::scan_goose_workspace;
+use crate::collect::tail::openclaw::scan_openclaw_workspace;
 use crate::collect::tail::opencode::scan_opencode_workspace;
 use crate::core::config;
 use crate::core::event::{Event, SessionRecord};
@@ -513,6 +514,10 @@ pub(crate) fn scan_all_agents(
     let home_pb = PathBuf::from(&home);
     if tail.goose {
         let sessions = scan_goose_workspace(&home_pb, ws)?;
+        persist_session_batch(store, sessions, sync_ctx.as_ref())?;
+    }
+    if tail.openclaw {
+        let sessions = scan_openclaw_workspace(ws)?;
         persist_session_batch(store, sessions, sync_ctx.as_ref())?;
     }
     if tail.opencode {

@@ -23,6 +23,8 @@ LLM HTTP proxy: [llm-proxy.md](llm-proxy.md).
 | `RUST_LOG` | (unset) | Log filter for the `tracing` stack (e.g. `info`, `kaizen=debug`) |
 | `HOME` | (required) | Resolves `~` paths and the user config location |
 | `KAIZEN_HOME` | (unset) | Overrides the machine-local Kaizen home used for the workspace registry and other non-workspace files |
+| `OPENCLAW_STATE_DIR` | `~/.openclaw` | Override OpenClaw state directory (used by `tail.openclaw` and tests) |
+| `OPENCLAW_HOME` | (unset) | Secondary override for OpenClaw home (resolved before `~/.openclaw` fallback) |
 
 ## Machine-local registry
 
@@ -54,6 +56,7 @@ When you pass **`--all-workspaces`** (or MCP `all_workspaces: true`), Kaizen loa
 | `cursor.enabled` | `true` | Tier-1 Cursor transcript discovery |
 | `cursor.transcript_glob` | `*/agent-transcripts` | Glob under each scan root |
 | `tail.goose` | `true` | Tail Goose JSONL / paths (see [concepts](concepts.md#collection)) |
+| `tail.openclaw` | `true` | Tail OpenClaw sessions from `~/.openclaw/agents/*/sessions/` |
 | `tail.opencode` | `true` | Tail OpenCode agent data |
 | `tail.copilot_cli` | `true` | Tail GitHub Copilot CLI sessions |
 | `tail.copilot_vscode` | `true` | Tail VS Code Copilot chat exports |

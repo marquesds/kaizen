@@ -50,6 +50,39 @@ pub fn from_value(v: &Value) -> Option<String> {
     v.as_object().and_then(from_object)
 }
 
+/// Extract channel from a JSON object (OpenClaw `origin.channel`, `channel`, or `source`).
+pub fn channel_from_object(obj: &serde_json::Map<String, Value>) -> Option<String> {
+    if let Some(s) = obj
+        .get("origin")
+        .and_then(|o| o.get("channel"))
+        .and_then(|v| v.as_str())
+        .and_then(non_empty)
+    {
+        return Some(s);
+    }
+    for key in ["channel", "source"] {
+        if let Some(s) = obj.get(key).and_then(|v| v.as_str()).and_then(non_empty) {
+            return Some(s);
+        }
+    }
+    None
+}
+
+/// Extract provider from a JSON object (OpenClaw `provider` or `message.provider`).
+pub fn provider_from_object(obj: &serde_json::Map<String, Value>) -> Option<String> {
+    if let Some(s) = obj
+        .get("provider")
+        .and_then(|v| v.as_str())
+        .and_then(non_empty)
+    {
+        return Some(s);
+    }
+    obj.get("message")
+        .and_then(|m| m.get("provider"))
+        .and_then(|v| v.as_str())
+        .and_then(non_empty)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1,6 +1,6 @@
 # kaizen
 
-Kaizen captures every coding agent session — Cursor, Claude Code, Codex — into a local SQLite database, then closes the feedback loop that most observability tools skip: a **heuristic retro engine** that ranks concrete improvement bets by tokens-saved-per-effort, and an **A/B experiment framework** that measures whether each bet worked. Nothing leaves disk until you say so.
+Kaizen captures every coding agent session — Cursor, Claude Code, Codex, OpenClaw, Goose, OpenCode, Copilot — into a local SQLite database, then closes the feedback loop that most observability tools skip: a **heuristic retro engine** that ranks concrete improvement bets by tokens-saved-per-effort, and an **A/B experiment framework** that measures whether each bet worked. Nothing leaves disk until you say so.
 
 Narrative guides and references live in this repository under [`docs/`](docs/README.md). The
 **CLI** is published on [crates.io](https://crates.io/crates/kaizen-cli) as **`kaizen-cli`**. 
@@ -133,7 +133,7 @@ kaizen exp new --name add-skill \
   --duration-days 14 --target-pct=-10
 ```
 
-`kaizen init` creates both hook files when absent and patches them idempotently when present. Re-running is safe; originals back up under `.kaizen/backup/`.
+`kaizen init` creates Cursor, Claude Code, and OpenClaw hook files when absent and patches them idempotently when present. Re-running is safe; originals back up under `.kaizen/backup/`.
 
 Full CLI reference: [docs/usage.md](docs/usage.md). Guided walkthrough: [docs/tutorial/README.md](docs/tutorial/README.md).
 

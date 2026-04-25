@@ -48,6 +48,8 @@ pub struct TailAgentToggles {
     #[serde(default = "default_true")]
     pub goose: bool,
     #[serde(default = "default_true")]
+    pub openclaw: bool,
+    #[serde(default = "default_true")]
     pub opencode: bool,
     #[serde(default = "default_true")]
     pub copilot_cli: bool,
@@ -59,6 +61,7 @@ impl Default for TailAgentToggles {
     fn default() -> Self {
         Self {
             goose: true,
+            openclaw: true,
             opencode: true,
             copilot_cli: true,
             copilot_vscode: true,

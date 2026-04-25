@@ -1,0 +1,29 @@
+[
+  {
+    "id": "sess-anthropic",
+    "agentId": "agent-abc",
+    "model": "claude-sonnet-4",
+    "channel": "dm",
+    "started_at": 1714000000000
+  },
+  {
+    "id": "sess-openai",
+    "agentId": "agent-abc",
+    "model": "gpt-4o",
+    "channel": "dm",
+    "started_at": 1714001000000
+  },
+  {
+    "id": "sess-local",
+    "agentId": "agent-abc",
+    "model": "llama3-local",
+    "channel": "dm",
+    "started_at": 1714002000000
+  },
+  {
+    "id": "sess-other",
+    "agentId": "agent-abc",
+    "channel": "dm",
+    "started_at": 1714003000000
+  }
+]

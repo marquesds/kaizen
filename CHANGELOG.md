@@ -10,6 +10,22 @@ here explicitly.
 
 ## [Unreleased]
 
+### Added
+
+- **OpenClaw integration** — full tail + hook support for [OpenClaw](https://openclaw.ai) (local
+  AI gateway, multi-provider). `kaizen init` writes
+  `~/.openclaw/hooks/kaizen-events/handler.ts` (TS webhook handler) and backs up any prior
+  handler. `kaizen doctor` reports hook wiring. `kaizen sessions list` / `summary` include
+  OpenClaw sessions. Workspace filter mirrors the OpenCode strategy: sessions are admitted only
+  when a tool-call payload contains a `cwd` / `directory` / `projectPath` field matching the
+  current repo. Channel metadata (`dm`, `slack`, etc.) is stored as `meta.channel` on every
+  event. Pricing: Anthropic and OpenAI models use their respective named cost rows; local
+  models fall back to the new `openclaw` heuristic row (Sonnet-scale, 5 000 avg tokens/turn).
+  New config toggle: `sources.tail.openclaw` (default `true`). New env vars:
+  `OPENCLAW_STATE_DIR`, `OPENCLAW_HOME`. Formally modelled in
+  `specs/openclaw-ingest.qnt` (workspace filter invariants); `specs/hook-ingest.qnt` and
+  `specs/init-setup.qnt` extended with openclaw as a fifth hook-host slot.
+
 ### Changed
 
 - **Machine-local project registry** lives in `~/.kaizen/machine.db` (SQLite) instead of `workspaces.json`; `kaizen init` upserts the current repo. Legacy `workspaces.json` is imported once and renamed to `workspaces.json.migrated`. `kaizen doctor` reports registry status. `--all-workspaces` still merges per-repo stores and now includes inited projects that do not yet have `.kaizen/kaizen.db`.

@@ -17,6 +17,9 @@ struct InitState {
     copilot_cli_present: bool,
     copilot_cli_patched: bool,
     copilot_cli_backup: bool,
+    openclaw_present: bool,
+    openclaw_patched: bool,
+    openclaw_backup: bool,
     skill_ready: bool,
 }
 
@@ -35,6 +38,9 @@ struct InitDriver {
     copilot_cli_present: bool,
     copilot_cli_patched: bool,
     copilot_cli_backup: bool,
+    openclaw_present: bool,
+    openclaw_patched: bool,
+    openclaw_backup: bool,
     skill_ready: bool,
 }
 
@@ -49,6 +55,7 @@ impl InitDriver {
         self.claude_present = true;
         self.codex_present = true;
         self.copilot_cli_present = true;
+        self.openclaw_present = true;
     }
 
     fn seed_ready(&mut self) {
@@ -62,6 +69,8 @@ impl InitDriver {
         self.codex_backup = true;
         self.copilot_cli_patched = true;
         self.copilot_cli_backup = true;
+        self.openclaw_patched = true;
+        self.openclaw_backup = true;
         self.skill_ready = true;
     }
 
@@ -80,7 +89,9 @@ impl InitDriver {
         if self.copilot_cli_present && !self.copilot_cli_patched {
             self.copilot_cli_backup = true;
         }
-        // init now scaffolds hook files when absent.
+        if self.openclaw_present && !self.openclaw_patched {
+            self.openclaw_backup = true;
+        }
         self.cursor_present = true;
         self.cursor_patched = true;
         self.claude_present = true;
@@ -89,6 +100,8 @@ impl InitDriver {
         self.codex_patched = true;
         self.copilot_cli_present = true;
         self.copilot_cli_patched = true;
+        self.openclaw_present = true;
+        self.openclaw_patched = true;
     }
 }
 
@@ -108,6 +121,9 @@ impl State<InitDriver> for InitState {
             copilot_cli_present: d.copilot_cli_present,
             copilot_cli_patched: d.copilot_cli_patched,
             copilot_cli_backup: d.copilot_cli_backup,
+            openclaw_present: d.openclaw_present,
+            openclaw_patched: d.openclaw_patched,
+            openclaw_backup: d.openclaw_backup,
             skill_ready: d.skill_ready,
         })
     }

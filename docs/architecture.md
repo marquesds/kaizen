@@ -28,6 +28,10 @@
 ## External Boundaries
 
 - Agent transcript dirs: Cursor, Claude Code, Codex.
+- Tail agents: Goose (`~/.config/goose/`), OpenClaw (`~/.openclaw/agents/*/sessions/`),
+  OpenCode (`~/.local/share/opencode/`), Copilot CLI, Copilot VS Code.
+- OpenClaw hook handler: `~/.openclaw/hooks/kaizen-events/handler.ts` (written by `kaizen init`,
+  subscribes to `command:new`, `command:stop`, `message:received`, and related events).
 - Git CLI for commit/churn/dirty facts.
 - LadybugDB embedded sidecar for graph detail.
 - HTTP ingest server for sync.

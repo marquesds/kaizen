@@ -32,8 +32,9 @@ When to add or extend a spec: see [`.cursor/rules/quint-before-code.mdc`](../.cu
 | [`specs/metrics-pipeline.qnt`](../specs/metrics-pipeline.qnt) | `tests/spec/metrics_pipeline.rs` | `metrics` |
 | [`specs/tui-app.qnt`](../specs/tui-app.qnt) | `tests/spec/tui_app.rs` | TUI lifecycle |
 | [`specs/eval-h15.qnt`](../specs/eval-h15.qnt) | `tests/spec/eval_h15.rs` | H15 eval trigger invariants |
+| [`specs/openclaw-ingest.qnt`](../specs/openclaw-ingest.qnt) | `tests/spec/openclaw_ingest_spec.rs` | OpenClaw workspace filter (accept/reject) |
 
-**Hook / init models:** [`hook-ingest.qnt`](../specs/hook-ingest.qnt) treats `codex` and `copilot-cli` as known hook sources alongside `cursor` and `claude`. [`init-setup.qnt`](../specs/init-setup.qnt) includes four hook-host slots on the same pattern; runtime `kaizen init` may still only patch Cursor and Claude until extended.
+**Hook / init models:** [`hook-ingest.qnt`](../specs/hook-ingest.qnt) treats `codex`, `copilot-cli`, and `openclaw` as known hook sources alongside `cursor` and `claude`. [`init-setup.qnt`](../specs/init-setup.qnt) includes five hook-host slots (added `openclaw`); runtime `kaizen init` patches Cursor, Claude Code, and OpenClaw.
 
 ## Integration tests without `quint-connect`
 
