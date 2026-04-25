@@ -221,4 +221,18 @@ and prints a summary. Sessions with `score < 0.4` are flagged and surfaced by **
 **`kaizen eval prompt`** renders the full judge prompt for any session without making any LLM
 call — useful for manual review, piping to an external model, or debugging rubric output.
 
-**`kaizen sessions show <id>`** appends eval rows when present.
+**`kaizen sessions show <id>`** appends eval rows when present, and prints the active `prompt_fingerprint` plus the list of tracked files when a snapshot is stored.
+
+## `kaizen prompt`
+
+Prompt/system-prompt version tracking. Each `SessionStart` hook captures a Blake3 fingerprint of your `CLAUDE.md`, `AGENTS.md`, `.cursor/rules/*.mdc`, and `.cursor/skills/*/SKILL.md` files. If the prompt changes between session start and session end, a `prompt_changed` event is recorded.
+
+```bash
+kaizen prompt list                       # list all stored prompt snapshots
+kaizen prompt list --json                # JSON array
+kaizen prompt show <fingerprint>         # show files in a snapshot
+kaizen prompt show <fingerprint> --json
+kaizen prompt diff <fp_a> <fp_b>         # lines added (+), removed (-), changed (~)
+```
+
+**H16** in `kaizen retro` surfaces when ≥2 prompt versions each have ≥5 sessions and one underperforms the other by >20% on cost or >15% on error rate.

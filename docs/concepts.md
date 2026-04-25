@@ -90,3 +90,11 @@ See [experiments.md](experiments.md).
 Price table in bundled `cost.toml`. Claude / Codex: native token
 counts. Cursor: model+turns heuristic (no native tokens). Adjust the
 table to match your contract prices.
+
+## Prompt Snapshot
+
+At `SessionStart`, Kaizen computes a Blake3 fingerprint over the sorted contents of `CLAUDE.md`, `AGENTS.md`, `.cursor/rules/*.mdc`, and `.cursor/skills/*/SKILL.md` files. The snapshot (fingerprint + file list + sizes) is stored once per unique fingerprint. Each `SessionRecord` carries the fingerprint active when the session started.
+
+At `SessionStop`, the prompt files are re-captured. If the fingerprint changed during the session, a `prompt_changed` event is appended with `{from_fingerprint, to_fingerprint}`.
+
+This lets `kaizen retro` compare session outcomes (cost, error rate) across prompt versions via heuristic **H16**. See `kaizen prompt --help` and [usage.md#kaizen-prompt](usage.md#kaizen-prompt).

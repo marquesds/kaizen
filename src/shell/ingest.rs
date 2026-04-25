@@ -3,7 +3,7 @@
 
 use crate::core::config;
 use crate::store::Store;
-use crate::{collect, core::event::SessionRecord};
+use crate::{collect, core::event::SessionRecord, prompt};
 use anyhow::Result;
 use std::path::PathBuf;
 
@@ -75,6 +75,11 @@ pub fn ingest_hook_text(
     let ev = collect::hooks::normalize::hook_to_event(&event, 0);
     if let Some(status) = collect::hooks::normalize::hook_to_status(&event.kind) {
         if matches!(event.kind, collect::hooks::EventKind::SessionStart) {
+            let snap = prompt::snapshot::capture(&ws, now_ms).ok();
+            let fingerprint = snap.as_ref().map(|s| s.fingerprint.clone());
+            if let Some(ref s) = snap {
+                let _ = store.upsert_prompt_snapshot(s);
+            }
             let model = collect::model_from_json::from_value(&event.payload);
             let record = SessionRecord {
                 id: event.session_id.clone(),
@@ -91,6 +96,7 @@ pub fn ingest_hook_text(
                 dirty_start: None,
                 dirty_end: None,
                 repo_binding_source: None,
+                prompt_fingerprint: fingerprint,
             };
             store.upsert_session(&record)?;
         } else {
@@ -100,6 +106,16 @@ pub fn ingest_hook_text(
                 &ws.to_string_lossy(),
                 event.ts_ms,
             )?;
+            if matches!(event.kind, collect::hooks::EventKind::Stop) {
+                maybe_emit_prompt_changed(
+                    &store,
+                    &event.session_id,
+                    &ws,
+                    now_ms,
+                    &ev,
+                    sync_ctx.as_ref(),
+                )?;
+            }
             store.update_session_status(&event.session_id, status)?;
         }
     } else {
@@ -111,6 +127,49 @@ pub fn ingest_hook_text(
         )?;
     }
     store.append_event_with_sync(&ev, sync_ctx.as_ref())?;
+    Ok(())
+}
+
+fn maybe_emit_prompt_changed(
+    store: &Store,
+    session_id: &str,
+    ws: &std::path::Path,
+    now_ms: u64,
+    trigger_ev: &crate::core::event::Event,
+    sync_ctx: Option<&crate::sync::context::SyncIngestContext>,
+) -> Result<()> {
+    let Some(session) = store.get_session(session_id)? else {
+        return Ok(());
+    };
+    let Some(from_fp) = session.prompt_fingerprint else {
+        return Ok(());
+    };
+    let snap = prompt::snapshot::capture(ws, now_ms).ok();
+    let Some(snap) = snap else { return Ok(()) };
+    if snap.fingerprint == from_fp {
+        return Ok(());
+    }
+    let _ = store.upsert_prompt_snapshot(&snap);
+    let changed_ev = crate::core::event::Event {
+        session_id: session_id.to_string(),
+        seq: trigger_ev.seq + 1,
+        ts_ms: now_ms,
+        ts_exact: true,
+        kind: crate::core::event::EventKind::Hook,
+        source: crate::core::event::EventSource::Hook,
+        tool: None,
+        tool_call_id: None,
+        tokens_in: None,
+        tokens_out: None,
+        reasoning_tokens: None,
+        cost_usd_e6: None,
+        payload: serde_json::json!({
+            "kind": "prompt_changed",
+            "from_fingerprint": from_fp,
+            "to_fingerprint": snap.fingerprint,
+        }),
+    };
+    store.append_event_with_sync(&changed_ev, sync_ctx)?;
     Ok(())
 }
 

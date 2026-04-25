@@ -15,6 +15,7 @@ pub fn value_for(metric: Metric, session: &SessionRecord, events: &[Event]) -> O
         Metric::ToolLoops => Some(tool_loops(events)),
         Metric::DurationMinutes => duration_minutes(session),
         Metric::FilesPerSession => Some(files_touched(events)),
+        Metric::SuccessRateByPrompt | Metric::CostByPrompt => todo!(),
     }
 }
 
@@ -128,6 +129,7 @@ mod tests {
             dirty_start: None,
             dirty_end: None,
             repo_binding_source: None,
+            prompt_fingerprint: None,
         }
     }
 

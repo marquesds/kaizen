@@ -211,6 +211,12 @@ enum Command {
         #[command(subcommand)]
         subcmd: EvalCommand,
     },
+    /// Prompt/system-prompt version tracking. See docs/usage.md.
+    #[command(next_help_heading = "Improve")]
+    Prompt {
+        #[command(subcommand)]
+        subcmd: PromptCommand,
+    },
 }
 
 #[derive(Subcommand)]
@@ -249,6 +255,37 @@ enum EvalCommand {
         /// Rubric to use.
         #[arg(long, default_value = "tool-efficiency-v1")]
         rubric: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum PromptCommand {
+    /// List all recorded prompt snapshots.
+    List {
+        /// workspace root (default: cwd)
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        /// Emit JSON array.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Show files in a snapshot by fingerprint prefix.
+    Show {
+        fingerprint: String,
+        /// workspace root (default: cwd)
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        /// Emit JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Diff two snapshots.
+    Diff {
+        fingerprint_a: String,
+        fingerprint_b: String,
+        /// workspace root (default: cwd)
+        #[arg(long)]
+        workspace: Option<PathBuf>,
     },
 }
 
@@ -669,6 +706,25 @@ fn main() -> anyhow::Result<()> {
                 session_id,
                 rubric,
             } => kaizen::shell::eval::cmd_eval_prompt(workspace.as_deref(), &session_id, &rubric),
+        },
+        Command::Prompt { subcmd } => match subcmd {
+            PromptCommand::List { workspace, json } => {
+                kaizen::shell::prompt::cmd_prompt_list(workspace.as_deref(), json)
+            }
+            PromptCommand::Show {
+                fingerprint,
+                workspace,
+                json,
+            } => kaizen::shell::prompt::cmd_prompt_show(&fingerprint, workspace.as_deref(), json),
+            PromptCommand::Diff {
+                fingerprint_a,
+                fingerprint_b,
+                workspace,
+            } => kaizen::shell::prompt::cmd_prompt_diff(
+                &fingerprint_a,
+                &fingerprint_b,
+                workspace.as_deref(),
+            ),
         },
     }
 }

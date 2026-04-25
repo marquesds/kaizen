@@ -182,6 +182,7 @@ pub fn scan_claude_session_dir(dir: &Path) -> Result<(SessionRecord, Vec<Event>)
         dirty_start: None,
         dirty_end: None,
         repo_binding_source: None,
+        prompt_fingerprint: None,
     };
     Ok((record, events))
 }

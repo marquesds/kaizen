@@ -101,6 +101,7 @@ team_salt_hex = "{salt_hex}"
         dirty_start: None,
         dirty_end: None,
         repo_binding_source: None,
+        prompt_fingerprint: None,
     };
     store.upsert_session(&session).unwrap();
 

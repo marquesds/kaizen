@@ -34,6 +34,7 @@ fn seed_session(workspace: &Path, id: &str, tool: &str) -> anyhow::Result<()> {
         dirty_start: None,
         dirty_end: None,
         repo_binding_source: None,
+        prompt_fingerprint: None,
     })?;
     store.append_event(&Event {
         session_id: id.into(),

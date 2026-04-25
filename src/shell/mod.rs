@@ -10,6 +10,7 @@ pub mod ingest;
 pub mod init;
 pub mod insights;
 pub mod metrics;
+pub mod prompt;
 pub mod proxy;
 pub mod remote_observe;
 pub mod remote_pull;

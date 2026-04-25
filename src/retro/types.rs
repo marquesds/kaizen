@@ -27,6 +27,8 @@ pub struct Inputs {
     pub aggregates: RetroAggregates,
     /// LLM-as-Judge eval scores for sessions in the window: (session_id, score 0..1).
     pub eval_scores: Vec<(String, f64)>,
+    /// Sessions with a recorded prompt fingerprint: (session_id, fingerprint).
+    pub prompt_fingerprints: Vec<(String, String)>,
 }
 
 #[derive(Debug, Clone)]

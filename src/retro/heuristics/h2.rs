@@ -115,6 +115,7 @@ mod tests {
             file_facts: HashMap::new(),
             eval_scores: vec![],
             aggregates: agg,
+            prompt_fingerprints: vec![],
         };
         let bets = run(&inputs);
         assert_eq!(bets.len(), 1);

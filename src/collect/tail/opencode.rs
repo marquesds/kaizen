@@ -330,6 +330,7 @@ pub fn parse_opencode_session_file(
             dirty_start: None,
             dirty_end: None,
             repo_binding_source: None,
+            prompt_fingerprint: None,
         },
         events,
     )))
