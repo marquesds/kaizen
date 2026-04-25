@@ -49,6 +49,9 @@ pub fn load_inputs(
         .sessions_with_prompt_fingerprint(workspace_key, window_start_ms, window_end_ms)
         .unwrap_or_default();
 
+    let feedback = store
+        .list_feedback_in_window(window_start_ms, window_end_ms)
+        .unwrap_or_default();
     Ok(Inputs {
         window_start_ms,
         window_end_ms,
@@ -65,6 +68,7 @@ pub fn load_inputs(
         aggregates,
         eval_scores,
         prompt_fingerprints,
+        feedback,
     })
 }
 
@@ -227,6 +231,7 @@ fn load_inputs_from_remote_cache(
         aggregates,
         eval_scores: vec![],
         prompt_fingerprints: vec![],
+        feedback: vec![],
     })
 }
 

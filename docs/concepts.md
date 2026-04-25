@@ -91,6 +91,14 @@ Price table in bundled `cost.toml`. Claude / Codex: native token
 counts. Cursor: model+turns heuristic (no native tokens). Adjust the
 table to match your contract prices.
 
+## Human Feedback
+
+A `FeedbackRecord` links a score (1–5), label (`good` | `bad` | `interesting` | `bug` | `regression`), and optional free-text note to a session. Records are written to the local SQLite store and queued in the sync outbox.
+
+Heuristic **H17** reads feedback in the retro window and fires when: ≥2 records are labelled `bad` or `regression`, or ≥5 scored sessions have a mean score ≤ 2.5. The bet surfaces the affected session ids and estimates 800 tokens saved per bad session per week.
+
+The TUI session list shows a colored `★N` badge (red 1–2, yellow 3, green 4–5) next to sessions with feedback.
+
 ## Prompt Snapshot
 
 At `SessionStart`, Kaizen computes a Blake3 fingerprint over the sorted contents of `CLAUDE.md`, `AGENTS.md`, `.cursor/rules/*.mdc`, and `.cursor/skills/*/SKILL.md` files. The snapshot (fingerprint + file list + sizes) is stored once per unique fingerprint. Each `SessionRecord` carries the fingerprint active when the session started.

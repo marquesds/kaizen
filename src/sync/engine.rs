@@ -151,6 +151,19 @@ fn build_batch(
                 }),
             )))
         }
+        "session_feedback" => {
+            let (ids, feedback) =
+                pack_batch_payloads::<crate::feedback::types::FeedbackRecord>(rows, cfg, kind)?;
+            if ids.is_empty() {
+                return Ok(None);
+            }
+            Ok(Some((
+                ids,
+                IngestExportBatch::SessionFeedback(
+                    crate::sync::export_batch::SessionFeedbackBatchBody { feedback },
+                ),
+            )))
+        }
         _ => Ok(None),
     }
 }
@@ -216,6 +229,10 @@ fn post_with_fanout(
                     client.post_workspace_facts_batch(b, key)?
                 }
                 IngestExportBatch::SessionEvals(b) => client.post_session_evals_batch(b, key)?,
+                IngestExportBatch::SessionFeedback(_) => PostBatchOutcome::Accepted {
+                    received: 0,
+                    deduped: 0,
+                },
             };
             Ok(o)
         })();
@@ -389,6 +406,18 @@ fn split_batch(body: IngestExportBatch, mid: usize) -> (IngestExportBatch, Inges
             IngestExportBatch::SessionEvals(crate::sync::export_batch::SessionEvalsBatchBody {
                 evals: body.evals[mid..].to_vec(),
             }),
+        ),
+        IngestExportBatch::SessionFeedback(body) => (
+            IngestExportBatch::SessionFeedback(
+                crate::sync::export_batch::SessionFeedbackBatchBody {
+                    feedback: body.feedback[..mid].to_vec(),
+                },
+            ),
+            IngestExportBatch::SessionFeedback(
+                crate::sync::export_batch::SessionFeedbackBatchBody {
+                    feedback: body.feedback[mid..].to_vec(),
+                },
+            ),
         ),
     }
 }

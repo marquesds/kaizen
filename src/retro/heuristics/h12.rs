@@ -175,6 +175,7 @@ mod tests {
             eval_scores: vec![],
             aggregates: agg,
             prompt_fingerprints: vec![],
+            feedback: vec![],
         };
         let bets = run(&inputs);
         assert_eq!(bets.len(), 1);

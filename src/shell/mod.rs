@@ -3,6 +3,7 @@ pub mod cli;
 pub mod doctor;
 pub mod eval;
 pub mod exp;
+pub mod feedback;
 pub mod fmt;
 pub mod gc;
 pub mod guidance;

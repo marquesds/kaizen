@@ -2,6 +2,7 @@
 //! Pure data for the retro engine (`Report`, `Bet`, `Inputs`).
 
 use crate::core::event::{Event, SessionRecord};
+use crate::feedback::types::FeedbackRecord;
 use crate::metrics::types::{FileFact, ToolSpanView};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -29,6 +30,8 @@ pub struct Inputs {
     pub eval_scores: Vec<(String, f64)>,
     /// Sessions with a recorded prompt fingerprint: (session_id, fingerprint).
     pub prompt_fingerprints: Vec<(String, String)>,
+    /// Human feedback records in the window.
+    pub feedback: Vec<FeedbackRecord>,
 }
 
 #[derive(Debug, Clone)]

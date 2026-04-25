@@ -2,6 +2,7 @@
 use clap::CommandFactory;
 use clap::{Parser, Subcommand, ValueEnum};
 use kaizen::DataSource;
+use kaizen::feedback::types::FeedbackLabel;
 use std::io::Read;
 use std::io::Write;
 use std::path::PathBuf;
@@ -216,6 +217,12 @@ enum Command {
     Prompt {
         #[command(subcommand)]
         subcmd: PromptCommand,
+    },
+    /// Human feedback on agent sessions (score/label/note).
+    #[command(next_help_heading = "Improve")]
+    Feedback {
+        #[command(subcommand)]
+        subcmd: FeedbackCommand,
     },
 }
 
@@ -502,6 +509,33 @@ enum SessionsCommand {
         #[arg(long)]
         workspace: Option<PathBuf>,
     },
+    /// Attach human feedback (score/label/note) to a session.
+    Annotate {
+        id: String,
+        #[arg(long, value_parser = clap::value_parser!(u8).range(1..=5))]
+        score: Option<u8>,
+        #[arg(long, value_enum)]
+        label: Option<FeedbackLabel>,
+        #[arg(long)]
+        note: Option<String>,
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand)]
+enum FeedbackCommand {
+    /// List feedback records for the workspace.
+    List {
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        #[arg(long, value_enum)]
+        label: Option<FeedbackLabel>,
+        #[arg(long)]
+        since: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(ValueEnum, Clone, Debug)]
@@ -534,6 +568,31 @@ fn main() -> anyhow::Result<()> {
         Command::Sessions {
             subcmd: SessionsCommand::Show { id, workspace },
         } => kaizen::shell::cli::cmd_session_show(&id, workspace.as_deref()),
+        Command::Sessions {
+            subcmd:
+                SessionsCommand::Annotate {
+                    id,
+                    score,
+                    label,
+                    note,
+                    workspace,
+                },
+        } => kaizen::shell::feedback::cmd_sessions_annotate(
+            &id,
+            score,
+            label,
+            note,
+            workspace.as_deref(),
+        ),
+        Command::Feedback {
+            subcmd:
+                FeedbackCommand::List {
+                    workspace,
+                    label,
+                    since,
+                    json,
+                },
+        } => kaizen::shell::feedback::cmd_feedback_list(workspace.as_deref(), label, since, json),
         Command::Summary {
             workspace,
             all_workspaces,
