@@ -5,31 +5,21 @@
 use quint_connect::*;
 use serde::Deserialize;
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, Eq, PartialEq, Deserialize)]
 #[serde(tag = "tag")]
 enum SpecPhase {
+    #[default]
     Live,
     Stopped,
 }
 
-impl Default for SpecPhase {
-    fn default() -> Self {
-        SpecPhase::Live
-    }
-}
-
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, Eq, PartialEq, Deserialize)]
 #[serde(tag = "tag")]
 enum SpecOutcome {
+    #[default]
     None,
     Measuring,
     Measured,
-}
-
-impl Default for SpecOutcome {
-    fn default() -> Self {
-        SpecOutcome::None
-    }
 }
 
 #[derive(Debug, Eq, PartialEq, Deserialize)]

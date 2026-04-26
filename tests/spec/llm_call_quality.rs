@@ -7,9 +7,10 @@ use serde::Deserialize;
 
 const MAX_RETRIES: i64 = 5;
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, Eq, PartialEq, Deserialize)]
 #[serde(tag = "tag")]
 enum SpecOutcome {
+    #[default]
     Pending,
     Inflight,
     Succeeded,
@@ -32,12 +33,6 @@ struct LlmCallQualityDriver {
     outcome: SpecOutcome,
     retry_count: i64,
     event_emitted: bool,
-}
-
-impl Default for SpecOutcome {
-    fn default() -> Self {
-        SpecOutcome::Pending
-    }
 }
 
 impl State<LlmCallQualityDriver> for LlmCallQualityState {
@@ -92,8 +87,10 @@ impl Driver for LlmCallQualityDriver {
 
 #[test]
 fn retry_count_bounded() {
-    let mut d = LlmCallQualityDriver::default();
-    d.outcome = SpecOutcome::RateLimited;
+    let mut d = LlmCallQualityDriver {
+        outcome: SpecOutcome::RateLimited,
+        ..Default::default()
+    };
     for _ in 0..MAX_RETRIES {
         d.outcome = SpecOutcome::Inflight;
         d.retry_count += 1;

@@ -110,9 +110,11 @@ impl Driver for BindingDriver {
 // Spot-check: manual always wins over git in the resolved classification.
 #[test]
 fn manual_beats_git() {
-    let mut d = BindingDriver::default();
-    d.git_class = Classification::Treatment;
-    d.manual_tag = Classification::Control;
+    let d = BindingDriver {
+        manual_tag: Classification::Control,
+        git_class: Classification::Treatment,
+        ..Default::default()
+    };
     assert_eq!(
         resolve(&d.manual_tag, &d.git_class),
         Classification::Control
@@ -122,8 +124,10 @@ fn manual_beats_git() {
 // Spot-check: git used when no manual tag.
 #[test]
 fn git_used_without_manual() {
-    let mut d = BindingDriver::default();
-    d.git_class = Classification::Treatment;
+    let d = BindingDriver {
+        git_class: Classification::Treatment,
+        ..Default::default()
+    };
     assert_eq!(
         resolve(&d.manual_tag, &d.git_class),
         Classification::Treatment

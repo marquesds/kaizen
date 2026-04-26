@@ -312,13 +312,18 @@ mod tests {
             direction: Direction::Decrease,
             target_pct: -10.0,
         };
-        let mut s = Summary::default();
-        s.ci95_lo = Some(-20.0);
-        s.ci95_hi = Some(-5.0);
+        let s = Summary {
+            ci95_lo: Some(-20.0),
+            ci95_hi: Some(-5.0),
+            ..Default::default()
+        };
         assert_eq!(evaluate_criterion(&c, &s), Some(true)); // entire CI < 0
 
-        s.ci95_lo = Some(-20.0);
-        s.ci95_hi = Some(2.0);
+        let s = Summary {
+            ci95_lo: Some(-20.0),
+            ci95_hi: Some(2.0),
+            ..Default::default()
+        };
         assert_eq!(evaluate_criterion(&c, &s), Some(false)); // CI straddles zero
     }
 
@@ -328,13 +333,18 @@ mod tests {
             direction: Direction::Increase,
             target_pct: 10.0,
         };
-        let mut s = Summary::default();
-        s.ci95_lo = Some(5.0);
-        s.ci95_hi = Some(20.0);
+        let s = Summary {
+            ci95_lo: Some(5.0),
+            ci95_hi: Some(20.0),
+            ..Default::default()
+        };
         assert_eq!(evaluate_criterion(&c, &s), Some(true)); // entire CI > 0
 
-        s.ci95_lo = Some(-2.0);
-        s.ci95_hi = Some(20.0);
+        let s = Summary {
+            ci95_lo: Some(-2.0),
+            ci95_hi: Some(20.0),
+            ..Default::default()
+        };
         assert_eq!(evaluate_criterion(&c, &s), Some(false)); // CI straddles zero
     }
 

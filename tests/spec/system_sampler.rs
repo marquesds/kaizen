@@ -5,18 +5,13 @@
 use quint_connect::*;
 use serde::Deserialize;
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, Eq, PartialEq, Deserialize)]
 #[serde(tag = "tag")]
 enum SpecSamplerState {
+    #[default]
     Off,
     Tracking,
     Stopped,
-}
-
-impl Default for SpecSamplerState {
-    fn default() -> Self {
-        SpecSamplerState::Off
-    }
 }
 
 #[derive(Debug, Eq, PartialEq, Deserialize)]
