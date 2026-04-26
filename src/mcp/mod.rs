@@ -4,7 +4,7 @@
 mod handler;
 
 use anyhow::Result;
-use handler::KaizenMcp;
+pub use handler::KaizenMcp;
 use rmcp::ServiceExt;
 use rmcp::transport::stdio;
 

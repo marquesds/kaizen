@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Heuristic bets H1–H32.
+//! Heuristic bets H1–H33.
 
 mod h1;
 mod h10;
@@ -26,6 +26,7 @@ mod h3;
 mod h30;
 mod h31;
 mod h32;
+mod h33;
 mod h4;
 mod h5;
 mod h6;
@@ -68,5 +69,6 @@ pub fn all_bets(inputs: &Inputs) -> Vec<Bet> {
     v.extend(h30::run(inputs));
     v.extend(h31::run(inputs));
     v.extend(h32::run(inputs));
+    v.extend(h33::run(inputs));
     v
 }

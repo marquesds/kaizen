@@ -172,6 +172,10 @@ name = "eval_h15"
 path = "tests/spec/eval_h15.rs"
 
 [[test]]
+name = "h33_automation"
+path = "tests/spec/h33_automation.rs"
+
+[[test]]
 name = "experiment_binding"
 path = "tests/spec/experiment_binding.rs"
 
@@ -264,6 +268,7 @@ sysinfo = { version = "0.38.4", default-features = false, features = ["system"] 
 [dev-dependencies]
 quint-connect = "0.1"
 itf = "0.4"
+rmcp = { version = "1", features = ["server", "client", "transport-io", "schemars", "macros"] }
 tempfile = "3"
 tower = { version = "0.5", features = ["util"] }
 

@@ -27,6 +27,7 @@ Heuristic thresholds live in `src/retro/heuristics/h*.rs`. Change constants ther
 | H12 | `MIN_LOC`, `MIN_BYTES`, `MIN_READS_ON_PATH` | Read-like tool on path with LOC/bytes thresholds, ≥ 2 reads |
 | H13 | `MIN_TOOL_CALLS`, `MIN_MCP_SHARE`, `MIN_SESSIONS_TOTAL`, `MIN_SUBAGENT_SESSION_SHARE` | MCP share or subagent session share thresholds |
 | H14 | `MIN_COMBINED_ITEMS`, `MIN_TOTAL_BYTES`, `MIN_ITEMS_WITH_BYTES` | Many on-disk rules/skills or very large combined bytes |
+| H33 | `MIN_RUN_LEN`, `MIN_SESSIONS_WITH_RUN`, `DOUBLE_RUN_LEN`, `TOKENS_PER_EXTRA_CALL` (runs); `MIN_SUBSEQ_REPEATS_LEN2`, `MIN_SUBSEQ_REPEATS_LEN3`, `TOKENS_PER_CYCLE`, `MULTI_SESSION_MULT` (subseq) | Long same-tool streaks vs cross-session / double-length gate; repeating 2-grams / 3-grams and token multiplier when multiple sessions show the pattern |
 
 ## Redaction vs signal
 
