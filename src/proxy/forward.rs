@@ -12,6 +12,7 @@ use axum::response::IntoResponse;
 use axum::response::Response;
 use std::str::from_utf8;
 use std::sync::Arc;
+use std::time::Instant;
 use uuid::Uuid;
 
 /// Core: build URL, transform JSON, send, record, return client response.
@@ -70,6 +71,7 @@ pub async fn run_forward_inner(
     let ureq: reqwest::Url = full
         .parse()
         .map_err(|e| anyhow::anyhow!(r#"bad upstream url "{full}": {e}"#))?;
+    let req_start = Instant::now();
     let sent = st
         .client
         .request(method.clone(), ureq)
@@ -90,6 +92,13 @@ pub async fn run_forward_inner(
                     tokens_in: None,
                     tokens_out: None,
                     reasoning_tokens: None,
+                    cache_creation_tokens: None,
+                    cache_read_tokens: None,
+                    stop_reason: None,
+                    latency_ms: elapsed_ms(&req_start),
+                    ttft_ms: None,
+                    // TODO: add retry loop and count real retries
+                    retry_count: Some(0),
                     upstream_error: Some(format!("{e}")),
                 },
             )
@@ -118,6 +127,12 @@ pub async fn run_forward_inner(
                     tokens_in: None,
                     tokens_out: None,
                     reasoning_tokens: None,
+                    cache_creation_tokens: None,
+                    cache_read_tokens: None,
+                    stop_reason: None,
+                    latency_ms: elapsed_ms(&req_start),
+                    ttft_ms: None,
+                    retry_count: Some(0),
                     upstream_error: Some(format!("read body: {e}")),
                 },
             )
@@ -138,6 +153,12 @@ pub async fn run_forward_inner(
                 tokens_in: None,
                 tokens_out: None,
                 reasoning_tokens: None,
+                cache_creation_tokens: None,
+                cache_read_tokens: None,
+                stop_reason: None,
+                latency_ms: elapsed_ms(&req_start),
+                ttft_ms: None,
+                retry_count: Some(0),
                 upstream_error: Some("upstream body exceeds `proxy.max_response_body_mb`".into()),
             },
         )
@@ -151,7 +172,8 @@ pub async fn run_forward_inner(
     let is_sse = ctype
         .as_deref()
         .is_some_and(|c| c.to_lowercase().contains("text/event-stream"));
-    let (ti, to, tr) = find_usage_in_body(ubytes.as_ref(), is_sse);
+    let usage = find_usage_in_body(ubytes.as_ref(), is_sse);
+    let latency = elapsed_ms(&req_start);
     let rid = res_headers
         .get("x-request-id")
         .or_else(|| res_headers.get("request-id"))
@@ -165,9 +187,17 @@ pub async fn run_forward_inner(
             method: method.to_string(),
             status: status.as_u16(),
             request_id: rid,
-            tokens_in: ti,
-            tokens_out: to,
-            reasoning_tokens: tr,
+            tokens_in: usage.tokens_in,
+            tokens_out: usage.tokens_out,
+            reasoning_tokens: usage.reasoning_tokens,
+            cache_creation_tokens: usage.cache_creation_tokens,
+            cache_read_tokens: usage.cache_read_tokens,
+            stop_reason: usage.stop_reason,
+            latency_ms: latency,
+            // TODO: stream SSE chunks to capture true TTFT
+            ttft_ms: None,
+            // TODO: add retry loop and count real retries
+            retry_count: Some(0),
             upstream_error: if status.is_success() {
                 None
             } else {
@@ -202,6 +232,10 @@ fn session_id_from(headers: &axum::http::HeaderMap) -> String {
         }
     }
     format!("proxy-{}", Uuid::now_v7())
+}
+
+fn elapsed_ms(start: &Instant) -> Option<u32> {
+    u32::try_from(start.elapsed().as_millis()).ok()
 }
 
 fn truncate_err_msg(b: &[u8], n: usize) -> String {

@@ -11,6 +11,8 @@ pub enum EventKind {
     Error,
     Cost,
     Hook,
+    /// Discriminated by `payload["type"]` (e.g. todo_write, mode_transition).
+    Lifecycle,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -34,6 +36,15 @@ pub struct Event {
     pub tokens_out: Option<u32>,
     pub reasoning_tokens: Option<u32>,
     pub cost_usd_e6: Option<i64>,
+    pub stop_reason: Option<String>,
+    pub latency_ms: Option<u32>,
+    pub ttft_ms: Option<u32>,
+    pub retry_count: Option<u16>,
+    pub context_used_tokens: Option<u32>,
+    pub context_max_tokens: Option<u32>,
+    pub cache_creation_tokens: Option<u32>,
+    pub cache_read_tokens: Option<u32>,
+    pub system_prompt_tokens: Option<u32>,
     pub payload: serde_json::Value,
 }
 
@@ -62,6 +73,12 @@ pub struct SessionRecord {
     pub dirty_end: Option<bool>,
     pub repo_binding_source: Option<String>,
     pub prompt_fingerprint: Option<String>,
+    pub parent_session_id: Option<String>,
+    pub agent_version: Option<String>,
+    pub os: Option<String>,
+    pub arch: Option<String>,
+    pub repo_file_count: Option<u32>,
+    pub repo_total_loc: Option<u64>,
 }
 
 #[cfg(test)]
@@ -84,6 +101,15 @@ mod tests {
             tokens_out: None,
             reasoning_tokens: None,
             cost_usd_e6: None,
+            stop_reason: None,
+            latency_ms: None,
+            ttft_ms: None,
+            retry_count: None,
+            context_used_tokens: None,
+            context_max_tokens: None,
+            cache_creation_tokens: None,
+            cache_read_tokens: None,
+            system_prompt_tokens: None,
             payload: json!({"path": "src/main.rs"}),
         };
         let s = serde_json::to_string(&e).unwrap();
@@ -111,6 +137,12 @@ mod tests {
             dirty_end: Some(true),
             repo_binding_source: Some("git".to_string()),
             prompt_fingerprint: None,
+            parent_session_id: None,
+            agent_version: None,
+            os: None,
+            arch: None,
+            repo_file_count: None,
+            repo_total_loc: None,
         };
         let s = serde_json::to_string(&r).unwrap();
         let r2: SessionRecord = serde_json::from_str(&s).unwrap();

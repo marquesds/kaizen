@@ -228,6 +228,28 @@ const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX IF NOT EXISTS session_feedback_session ON session_feedback(session_id);
     CREATE INDEX IF NOT EXISTS session_feedback_label ON session_feedback(label, created_at_ms)",
+    "CREATE TABLE IF NOT EXISTS session_outcomes (
+        session_id TEXT PRIMARY KEY NOT NULL,
+        test_passed INTEGER,
+        test_failed INTEGER,
+        test_skipped INTEGER,
+        build_ok INTEGER,
+        lint_errors INTEGER,
+        revert_lines_14d INTEGER,
+        pr_open INTEGER,
+        ci_ok INTEGER,
+        measured_at_ms INTEGER NOT NULL,
+        measure_error TEXT
+    )",
+    "CREATE TABLE IF NOT EXISTS session_samples (
+        session_id TEXT NOT NULL,
+        ts_ms INTEGER NOT NULL,
+        pid INTEGER NOT NULL,
+        cpu_percent REAL,
+        rss_bytes INTEGER,
+        PRIMARY KEY (session_id, ts_ms, pid)
+    )",
+    "CREATE INDEX IF NOT EXISTS session_samples_session_idx ON session_samples(session_id)",
 ];
 
 /// Per-workspace activity dashboard stats.
@@ -303,6 +325,31 @@ pub struct PruneStats {
     pub events_removed: u64,
 }
 
+/// Row in `session_outcomes` (Tier C — post-stop test/lint snapshot).
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct SessionOutcomeRow {
+    pub session_id: String,
+    pub test_passed: Option<i64>,
+    pub test_failed: Option<i64>,
+    pub test_skipped: Option<i64>,
+    pub build_ok: Option<bool>,
+    pub lint_errors: Option<i64>,
+    pub revert_lines_14d: Option<i64>,
+    pub pr_open: Option<i64>,
+    pub ci_ok: Option<bool>,
+    pub measured_at_ms: u64,
+    pub measure_error: Option<String>,
+}
+
+/// Aggregated process samples for retro (Tier D).
+#[derive(Debug, Clone)]
+pub struct SessionSampleAgg {
+    pub session_id: String,
+    pub sample_count: u64,
+    pub max_cpu_percent: f64,
+    pub max_rss_bytes: u64,
+}
+
 /// `sync_state` keys for agent rescan throttling and auto-prune.
 pub const SYNC_STATE_LAST_AGENT_SCAN_MS: &str = "last_agent_scan_ms";
 pub const SYNC_STATE_LAST_AUTO_PRUNE_MS: &str = "last_auto_prune_ms";
@@ -351,9 +398,11 @@ impl Store {
             "INSERT INTO sessions (
                 id, agent, model, workspace, started_at_ms, ended_at_ms, status, trace_path,
                 start_commit, end_commit, branch, dirty_start, dirty_end, repo_binding_source,
-                prompt_fingerprint
+                prompt_fingerprint, parent_session_id, agent_version, os, arch,
+                repo_file_count, repo_total_loc
              )
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15,
+                ?16, ?17, ?18, ?19, ?20, ?21)
              ON CONFLICT(id) DO UPDATE SET
                agent=excluded.agent, model=excluded.model, workspace=excluded.workspace,
                started_at_ms=excluded.started_at_ms, ended_at_ms=excluded.ended_at_ms,
@@ -361,7 +410,10 @@ impl Store {
                start_commit=excluded.start_commit, end_commit=excluded.end_commit,
                branch=excluded.branch, dirty_start=excluded.dirty_start,
                dirty_end=excluded.dirty_end, repo_binding_source=excluded.repo_binding_source,
-               prompt_fingerprint=excluded.prompt_fingerprint",
+               prompt_fingerprint=excluded.prompt_fingerprint,
+               parent_session_id=excluded.parent_session_id,
+               agent_version=excluded.agent_version, os=excluded.os, arch=excluded.arch,
+               repo_file_count=excluded.repo_file_count, repo_total_loc=excluded.repo_total_loc",
             params![
                 s.id,
                 s.agent,
@@ -378,6 +430,12 @@ impl Store {
                 s.dirty_end.map(bool_to_i64),
                 s.repo_binding_source.clone().unwrap_or_default(),
                 s.prompt_fingerprint.as_deref(),
+                s.parent_session_id.as_deref(),
+                s.agent_version.as_deref(),
+                s.os.as_deref(),
+                s.arch.as_deref(),
+                s.repo_file_count.map(|v| v as i64),
+                s.repo_total_loc.map(|v| v as i64),
             ],
         )?;
         self.conn.execute(
@@ -416,8 +474,10 @@ impl Store {
         self.conn.execute(
             "INSERT OR IGNORE INTO sessions (
                 id, agent, model, workspace, started_at_ms, ended_at_ms, status, trace_path,
-                start_commit, end_commit, branch, dirty_start, dirty_end, repo_binding_source
-             ) VALUES (?1, ?2, NULL, ?3, ?4, NULL, 'Running', '', NULL, NULL, NULL, NULL, NULL, '')",
+                start_commit, end_commit, branch, dirty_start, dirty_end, repo_binding_source,
+                prompt_fingerprint, parent_session_id, agent_version, os, arch, repo_file_count, repo_total_loc
+             ) VALUES (?1, ?2, NULL, ?3, ?4, NULL, 'Running', '', NULL, NULL, NULL, NULL, NULL, '',
+                NULL, NULL, NULL, NULL, NULL, NULL, NULL)",
             params![id, agent, workspace, started_at_ms as i64],
         )?;
         Ok(())
@@ -443,8 +503,14 @@ impl Store {
         self.conn.execute(
             "INSERT INTO events (
                 session_id, seq, ts_ms, ts_exact, kind, source, tool, tool_call_id,
-                tokens_in, tokens_out, reasoning_tokens, cost_usd_e6, payload
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+                tokens_in, tokens_out, reasoning_tokens, cost_usd_e6, payload,
+                stop_reason, latency_ms, ttft_ms, retry_count,
+                context_used_tokens, context_max_tokens,
+                cache_creation_tokens, cache_read_tokens, system_prompt_tokens
+             ) VALUES (
+                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13,
+                ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22
+             )
              ON CONFLICT(session_id, seq) DO UPDATE SET
                 ts_ms = excluded.ts_ms,
                 ts_exact = excluded.ts_exact,
@@ -456,7 +522,16 @@ impl Store {
                 tokens_out = excluded.tokens_out,
                 reasoning_tokens = excluded.reasoning_tokens,
                 cost_usd_e6 = excluded.cost_usd_e6,
-                payload = excluded.payload",
+                payload = excluded.payload,
+                stop_reason = excluded.stop_reason,
+                latency_ms = excluded.latency_ms,
+                ttft_ms = excluded.ttft_ms,
+                retry_count = excluded.retry_count,
+                context_used_tokens = excluded.context_used_tokens,
+                context_max_tokens = excluded.context_max_tokens,
+                cache_creation_tokens = excluded.cache_creation_tokens,
+                cache_read_tokens = excluded.cache_read_tokens,
+                system_prompt_tokens = excluded.system_prompt_tokens",
             params![
                 e.session_id,
                 e.seq as i64,
@@ -471,6 +546,15 @@ impl Store {
                 e.reasoning_tokens.map(|v| v as i64),
                 e.cost_usd_e6,
                 payload,
+                e.stop_reason,
+                e.latency_ms.map(|v| v as i64),
+                e.ttft_ms.map(|v| v as i64),
+                e.retry_count.map(|v| v as i64),
+                e.context_used_tokens.map(|v| v as i64),
+                e.context_max_tokens.map(|v| v as i64),
+                e.cache_creation_tokens.map(|v| v as i64),
+                e.cache_read_tokens.map(|v| v as i64),
+                e.system_prompt_tokens.map(|v| v as i64),
             ],
         )?;
         if self.conn.changes() == 0 {
@@ -720,6 +804,14 @@ impl Store {
             params![cutoff_ms],
         )?;
         tx.execute(
+            &format!("DELETE FROM session_outcomes WHERE session_id IN ({sub_old_sessions})"),
+            params![cutoff_ms],
+        )?;
+        tx.execute(
+            &format!("DELETE FROM session_samples WHERE session_id IN ({sub_old_sessions})"),
+            params![cutoff_ms],
+        )?;
+        tx.execute(
             "DELETE FROM sessions WHERE started_at_ms < ?1",
             params![cutoff_ms],
         )?;
@@ -740,7 +832,8 @@ impl Store {
         let mut stmt = self.conn.prepare(
             "SELECT id, agent, model, workspace, started_at_ms, ended_at_ms, status, trace_path,
                     start_commit, end_commit, branch, dirty_start, dirty_end, repo_binding_source,
-                    prompt_fingerprint
+                    prompt_fingerprint, parent_session_id, agent_version, os, arch,
+                    repo_file_count, repo_total_loc
              FROM sessions WHERE workspace = ?1 ORDER BY started_at_ms DESC",
         )?;
         let rows = stmt.query_map(params![workspace], |row| {
@@ -760,6 +853,12 @@ impl Store {
                 row.get::<_, Option<i64>>(12)?,
                 row.get::<_, String>(13)?,
                 row.get::<_, Option<String>>(14)?,
+                row.get::<_, Option<String>>(15)?,
+                row.get::<_, Option<String>>(16)?,
+                row.get::<_, Option<String>>(17)?,
+                row.get::<_, Option<String>>(18)?,
+                row.get::<_, Option<i64>>(19)?,
+                row.get::<_, Option<i64>>(20)?,
             ))
         })?;
 
@@ -781,6 +880,12 @@ impl Store {
                 dirty_end,
                 source,
                 prompt_fingerprint,
+                parent_session_id,
+                agent_version,
+                os,
+                arch,
+                repo_file_count,
+                repo_total_loc,
             ) = row?;
             out.push(SessionRecord {
                 id,
@@ -798,6 +903,12 @@ impl Store {
                 dirty_end: dirty_end.map(i64_to_bool),
                 repo_binding_source: empty_to_none(source),
                 prompt_fingerprint,
+                parent_session_id,
+                agent_version,
+                os,
+                arch,
+                repo_file_count: repo_file_count.map(|v| v as u32),
+                repo_total_loc: repo_total_loc.map(|v| v as u64),
             });
         }
         Ok(out)
@@ -861,59 +972,43 @@ impl Store {
     pub fn list_events_for_session(&self, session_id: &str) -> Result<Vec<Event>> {
         let mut stmt = self.conn.prepare(
             "SELECT session_id, seq, ts_ms, COALESCE(ts_exact, 0), kind, source, tool, tool_call_id,
-                    tokens_in, tokens_out, reasoning_tokens, cost_usd_e6, payload
+                    tokens_in, tokens_out, reasoning_tokens, cost_usd_e6, payload,
+                    stop_reason, latency_ms, ttft_ms, retry_count,
+                    context_used_tokens, context_max_tokens,
+                    cache_creation_tokens, cache_read_tokens, system_prompt_tokens
              FROM events WHERE session_id = ?1 ORDER BY seq ASC",
         )?;
         let rows = stmt.query_map(params![session_id], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, i64>(1)?,
-                row.get::<_, i64>(2)?,
-                row.get::<_, i64>(3)?,
-                row.get::<_, String>(4)?,
-                row.get::<_, String>(5)?,
-                row.get::<_, Option<String>>(6)?,
-                row.get::<_, Option<String>>(7)?,
-                row.get::<_, Option<i64>>(8)?,
-                row.get::<_, Option<i64>>(9)?,
-                row.get::<_, Option<i64>>(10)?,
-                row.get::<_, Option<i64>>(11)?,
-                row.get::<_, String>(12)?,
-            ))
+            let payload_str: String = row.get(12)?;
+            Ok(Event {
+                session_id: row.get(0)?,
+                seq: row.get::<_, i64>(1)? as u64,
+                ts_ms: row.get::<_, i64>(2)? as u64,
+                ts_exact: row.get::<_, i64>(3)? != 0,
+                kind: kind_from_str(&row.get::<_, String>(4)?),
+                source: source_from_str(&row.get::<_, String>(5)?),
+                tool: row.get(6)?,
+                tool_call_id: row.get(7)?,
+                tokens_in: row.get::<_, Option<i64>>(8)?.map(|v| v as u32),
+                tokens_out: row.get::<_, Option<i64>>(9)?.map(|v| v as u32),
+                reasoning_tokens: row.get::<_, Option<i64>>(10)?.map(|v| v as u32),
+                cost_usd_e6: row.get(11)?,
+                payload: serde_json::from_str(&payload_str).unwrap_or(serde_json::Value::Null),
+                stop_reason: row.get(13)?,
+                latency_ms: row.get::<_, Option<i64>>(14)?.map(|v| v as u32),
+                ttft_ms: row.get::<_, Option<i64>>(15)?.map(|v| v as u32),
+                retry_count: row.get::<_, Option<i64>>(16)?.map(|v| v as u16),
+                context_used_tokens: row.get::<_, Option<i64>>(17)?.map(|v| v as u32),
+                context_max_tokens: row.get::<_, Option<i64>>(18)?.map(|v| v as u32),
+                cache_creation_tokens: row.get::<_, Option<i64>>(19)?.map(|v| v as u32),
+                cache_read_tokens: row.get::<_, Option<i64>>(20)?.map(|v| v as u32),
+                system_prompt_tokens: row.get::<_, Option<i64>>(21)?.map(|v| v as u32),
+            })
         })?;
 
         let mut events = Vec::new();
         for row in rows {
-            let (
-                sid,
-                seq,
-                ts_ms,
-                ts_exact,
-                kind_str,
-                source_str,
-                tool,
-                tool_call_id,
-                tokens_in,
-                tokens_out,
-                reasoning_tokens,
-                cost_usd_e6,
-                payload_str,
-            ) = row?;
-            events.push(Event {
-                session_id: sid,
-                seq: seq as u64,
-                ts_ms: ts_ms as u64,
-                ts_exact: ts_exact != 0,
-                kind: kind_from_str(&kind_str),
-                source: source_from_str(&source_str),
-                tool,
-                tool_call_id,
-                tokens_in: tokens_in.map(|v| v as u32),
-                tokens_out: tokens_out.map(|v| v as u32),
-                reasoning_tokens: reasoning_tokens.map(|v| v as u32),
-                cost_usd_e6,
-                payload: serde_json::from_str(&payload_str).unwrap_or(serde_json::Value::Null),
-            });
+            events.push(row?);
         }
         Ok(events)
     }
@@ -965,7 +1060,12 @@ impl Store {
             "SELECT e.session_id, e.seq, e.ts_ms, COALESCE(e.ts_exact, 0), e.kind, e.source, e.tool, e.tool_call_id,
                     e.tokens_in, e.tokens_out, e.reasoning_tokens, e.cost_usd_e6, e.payload,
                     s.id, s.agent, s.model, s.workspace, s.started_at_ms, s.ended_at_ms, s.status, s.trace_path,
-                    s.start_commit, s.end_commit, s.branch, s.dirty_start, s.dirty_end, s.repo_binding_source
+                    s.start_commit, s.end_commit, s.branch, s.dirty_start, s.dirty_end, s.repo_binding_source,
+                    s.prompt_fingerprint, s.parent_session_id, s.agent_version, s.os, s.arch,
+                    s.repo_file_count, s.repo_total_loc,
+                    e.stop_reason, e.latency_ms, e.ttft_ms, e.retry_count,
+                    e.context_used_tokens, e.context_max_tokens,
+                    e.cache_creation_tokens, e.cache_read_tokens, e.system_prompt_tokens
              FROM events e
              JOIN sessions s ON s.id = e.session_id
              WHERE s.workspace = ?1
@@ -1001,7 +1101,13 @@ impl Store {
                         dirty_start: row.get::<_, Option<i64>>(24)?.map(i64_to_bool),
                         dirty_end: row.get::<_, Option<i64>>(25)?.map(i64_to_bool),
                         repo_binding_source: empty_to_none(row.get::<_, String>(26)?),
-                        prompt_fingerprint: None,
+                        prompt_fingerprint: row.get(27)?,
+                        parent_session_id: row.get(28)?,
+                        agent_version: row.get(29)?,
+                        os: row.get(30)?,
+                        arch: row.get(31)?,
+                        repo_file_count: row.get::<_, Option<i64>>(32)?.map(|v| v as u32),
+                        repo_total_loc: row.get::<_, Option<i64>>(33)?.map(|v| v as u64),
                     },
                     Event {
                         session_id: row.get(0)?,
@@ -1018,6 +1124,15 @@ impl Store {
                         cost_usd_e6: row.get(11)?,
                         payload: serde_json::from_str(&payload_str)
                             .unwrap_or(serde_json::Value::Null),
+                        stop_reason: row.get(34)?,
+                        latency_ms: row.get::<_, Option<i64>>(35)?.map(|v| v as u32),
+                        ttft_ms: row.get::<_, Option<i64>>(36)?.map(|v| v as u32),
+                        retry_count: row.get::<_, Option<i64>>(37)?.map(|v| v as u16),
+                        context_used_tokens: row.get::<_, Option<i64>>(38)?.map(|v| v as u32),
+                        context_max_tokens: row.get::<_, Option<i64>>(39)?.map(|v| v as u32),
+                        cache_creation_tokens: row.get::<_, Option<i64>>(40)?.map(|v| v as u32),
+                        cache_read_tokens: row.get::<_, Option<i64>>(41)?.map(|v| v as u32),
+                        system_prompt_tokens: row.get::<_, Option<i64>>(42)?.map(|v| v as u32),
                     },
                 ))
             },
@@ -1391,7 +1506,8 @@ impl Store {
         let mut stmt = self.conn.prepare(
             "SELECT id, agent, model, workspace, started_at_ms, ended_at_ms, status, trace_path,
                     start_commit, end_commit, branch, dirty_start, dirty_end, repo_binding_source,
-                    prompt_fingerprint
+                    prompt_fingerprint, parent_session_id, agent_version, os, arch,
+                    repo_file_count, repo_total_loc
              FROM sessions WHERE id = ?1",
         )?;
         let mut rows = stmt.query_map(params![id], |row| {
@@ -1411,6 +1527,12 @@ impl Store {
                 row.get::<_, Option<i64>>(12)?,
                 row.get::<_, String>(13)?,
                 row.get::<_, Option<String>>(14)?,
+                row.get::<_, Option<String>>(15)?,
+                row.get::<_, Option<String>>(16)?,
+                row.get::<_, Option<String>>(17)?,
+                row.get::<_, Option<String>>(18)?,
+                row.get::<_, Option<i64>>(19)?,
+                row.get::<_, Option<i64>>(20)?,
             ))
         })?;
 
@@ -1431,6 +1553,12 @@ impl Store {
                 dirty_end,
                 source,
                 prompt_fingerprint,
+                parent_session_id,
+                agent_version,
+                os,
+                arch,
+                repo_file_count,
+                repo_total_loc,
             ) = row?;
             Ok(Some(SessionRecord {
                 id,
@@ -1448,6 +1576,12 @@ impl Store {
                 dirty_end: dirty_end.map(i64_to_bool),
                 repo_binding_source: empty_to_none(source),
                 prompt_fingerprint,
+                parent_session_id,
+                agent_version,
+                os,
+                arch,
+                repo_file_count: repo_file_count.map(|v| v as u32),
+                repo_total_loc: repo_total_loc.map(|v| v as u64),
             }))
         } else {
             Ok(None)
@@ -1848,6 +1982,126 @@ impl Store {
         Ok(map)
     }
 
+    pub fn upsert_session_outcome(&self, row: &SessionOutcomeRow) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO session_outcomes (
+                session_id, test_passed, test_failed, test_skipped, build_ok, lint_errors,
+                revert_lines_14d, pr_open, ci_ok, measured_at_ms, measure_error
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+            ON CONFLICT(session_id) DO UPDATE SET
+                test_passed=excluded.test_passed,
+                test_failed=excluded.test_failed,
+                test_skipped=excluded.test_skipped,
+                build_ok=excluded.build_ok,
+                lint_errors=excluded.lint_errors,
+                revert_lines_14d=excluded.revert_lines_14d,
+                pr_open=excluded.pr_open,
+                ci_ok=excluded.ci_ok,
+                measured_at_ms=excluded.measured_at_ms,
+                measure_error=excluded.measure_error",
+            params![
+                row.session_id,
+                row.test_passed,
+                row.test_failed,
+                row.test_skipped,
+                row.build_ok.map(bool_to_i64),
+                row.lint_errors,
+                row.revert_lines_14d,
+                row.pr_open,
+                row.ci_ok.map(bool_to_i64),
+                row.measured_at_ms as i64,
+                row.measure_error.as_deref(),
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_session_outcome(&self, session_id: &str) -> Result<Option<SessionOutcomeRow>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT session_id, test_passed, test_failed, test_skipped, build_ok, lint_errors,
+                    revert_lines_14d, pr_open, ci_ok, measured_at_ms, measure_error
+             FROM session_outcomes WHERE session_id = ?1",
+        )?;
+        let row = stmt
+            .query_row(params![session_id], outcome_row)
+            .optional()?;
+        Ok(row)
+    }
+
+    /// Outcomes for sessions in `workspace` whose `started_at` falls in the window.
+    pub fn list_session_outcomes_in_window(
+        &self,
+        workspace: &str,
+        start_ms: u64,
+        end_ms: u64,
+    ) -> Result<Vec<SessionOutcomeRow>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT o.session_id, o.test_passed, o.test_failed, o.test_skipped, o.build_ok, o.lint_errors,
+                    o.revert_lines_14d, o.pr_open, o.ci_ok, o.measured_at_ms, o.measure_error
+             FROM session_outcomes o
+             JOIN sessions s ON s.id = o.session_id
+             WHERE s.workspace = ?1 AND s.started_at_ms >= ?2 AND s.started_at_ms <= ?3
+             ORDER BY o.measured_at_ms ASC",
+        )?;
+        let rows = stmt.query_map(
+            params![workspace, start_ms as i64, end_ms as i64],
+            outcome_row,
+        )?;
+        rows.map(|r| r.map_err(anyhow::Error::from)).collect()
+    }
+
+    pub fn append_session_sample(
+        &self,
+        session_id: &str,
+        ts_ms: u64,
+        pid: u32,
+        cpu_percent: Option<f64>,
+        rss_bytes: Option<u64>,
+    ) -> Result<()> {
+        self.conn.execute(
+            "INSERT OR REPLACE INTO session_samples (session_id, ts_ms, pid, cpu_percent, rss_bytes)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                session_id,
+                ts_ms as i64,
+                pid as i64,
+                cpu_percent,
+                rss_bytes.map(|b| b as i64)
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Per-session maxima for retro heuristics.
+    pub fn list_session_sample_aggs_in_window(
+        &self,
+        workspace: &str,
+        start_ms: u64,
+        end_ms: u64,
+    ) -> Result<Vec<SessionSampleAgg>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT ss.session_id, COUNT(*) AS n,
+                    MAX(ss.cpu_percent), MAX(ss.rss_bytes)
+             FROM session_samples ss
+             JOIN sessions s ON s.id = ss.session_id
+             WHERE s.workspace = ?1 AND s.started_at_ms >= ?2 AND s.started_at_ms <= ?3
+             GROUP BY ss.session_id",
+        )?;
+        let rows = stmt.query_map(params![workspace, start_ms as i64, end_ms as i64], |r| {
+            let sid: String = r.get(0)?;
+            let n: i64 = r.get(1)?;
+            let max_cpu: Option<f64> = r.get(2)?;
+            let max_rss: Option<i64> = r.get(3)?;
+            Ok(SessionSampleAgg {
+                session_id: sid,
+                sample_count: n as u64,
+                max_cpu_percent: max_cpu.unwrap_or(0.0),
+                max_rss_bytes: max_rss.map(|x| x as u64).unwrap_or(0),
+            })
+        })?;
+        rows.map(|r| r.map_err(anyhow::Error::from)).collect()
+    }
+
     pub fn list_sessions_for_eval(
         &self,
         since_ms: u64,
@@ -1857,7 +2111,8 @@ impl Store {
         let mut stmt = self.conn.prepare(
             "SELECT s.id, s.agent, s.model, s.workspace, s.started_at_ms, s.ended_at_ms,
                     s.status, s.trace_path, s.start_commit, s.end_commit, s.branch,
-                    s.dirty_start, s.dirty_end, s.repo_binding_source, s.prompt_fingerprint
+                    s.dirty_start, s.dirty_end, s.repo_binding_source, s.prompt_fingerprint,
+                    s.parent_session_id, s.agent_version, s.os, s.arch, s.repo_file_count, s.repo_total_loc
              FROM sessions s
              WHERE s.started_at_ms >= ?1
                AND COALESCE((SELECT SUM(e.cost_usd_e6) FROM events e WHERE e.session_id = s.id), 0) >= ?2
@@ -1881,6 +2136,12 @@ impl Store {
                 r.get::<_, Option<i64>>(12)?,
                 r.get::<_, Option<String>>(13)?,
                 r.get::<_, Option<String>>(14)?,
+                r.get::<_, Option<String>>(15)?,
+                r.get::<_, Option<String>>(16)?,
+                r.get::<_, Option<String>>(17)?,
+                r.get::<_, Option<String>>(18)?,
+                r.get::<_, Option<i64>>(19)?,
+                r.get::<_, Option<i64>>(20)?,
             ))
         })?;
         let mut out = Vec::new();
@@ -1901,6 +2162,12 @@ impl Store {
                 dirty_end,
                 source,
                 prompt_fingerprint,
+                parent_session_id,
+                agent_version,
+                os,
+                arch,
+                repo_file_count,
+                repo_total_loc,
             ) = row?;
             out.push(crate::core::event::SessionRecord {
                 id,
@@ -1918,6 +2185,12 @@ impl Store {
                 dirty_end: dirty_end.map(i64_to_bool),
                 repo_binding_source: source.and_then(|s| if s.is_empty() { None } else { Some(s) }),
                 prompt_fingerprint,
+                parent_session_id,
+                agent_version,
+                os,
+                arch,
+                repo_file_count: repo_file_count.map(|v| v as u32),
+                repo_total_loc: repo_total_loc.map(|v| v as u64),
             });
         }
         Ok(out)
@@ -2019,6 +2292,24 @@ fn cost_stats(conn: &Connection, workspace: &str) -> Result<(i64, u64)> {
     Ok((cost, with_cost as u64))
 }
 
+fn outcome_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<SessionOutcomeRow> {
+    let build_raw: Option<i64> = r.get(4)?;
+    let ci_raw: Option<i64> = r.get(8)?;
+    Ok(SessionOutcomeRow {
+        session_id: r.get(0)?,
+        test_passed: r.get(1)?,
+        test_failed: r.get(2)?,
+        test_skipped: r.get(3)?,
+        build_ok: build_raw.map(|v| v != 0),
+        lint_errors: r.get(5)?,
+        revert_lines_14d: r.get(6)?,
+        pr_open: r.get(7)?,
+        ci_ok: ci_raw.map(|v| v != 0),
+        measured_at_ms: r.get::<_, i64>(9)? as u64,
+        measure_error: r.get(10)?,
+    })
+}
+
 fn feedback_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<crate::feedback::types::FeedbackRecord> {
     use crate::feedback::types::{FeedbackLabel, FeedbackRecord, FeedbackScore};
     let score = r
@@ -2065,7 +2356,9 @@ fn sessions_by_day_7(conn: &Connection, workspace: &str, now: u64) -> Result<Vec
 fn recent_sessions_3(conn: &Connection, workspace: &str) -> Result<Vec<(SessionRecord, u64)>> {
     let sql = "SELECT s.id,s.agent,s.model,s.workspace,s.started_at_ms,s.ended_at_ms,\
                s.status,s.trace_path,s.start_commit,s.end_commit,s.branch,s.dirty_start,\
-               s.dirty_end,s.repo_binding_source,COUNT(e.id) FROM sessions s \
+               s.dirty_end,s.repo_binding_source,s.prompt_fingerprint,s.parent_session_id,\
+               s.agent_version,s.os,s.arch,s.repo_file_count,s.repo_total_loc,\
+               COUNT(e.id) FROM sessions s \
                LEFT JOIN events e ON e.session_id=s.id WHERE s.workspace=?1 \
                GROUP BY s.id ORDER BY s.started_at_ms DESC LIMIT 3";
     let mut stmt = conn.prepare(sql)?;
@@ -2088,9 +2381,15 @@ fn recent_sessions_3(conn: &Connection, workspace: &str) -> Result<Vec<(SessionR
                     dirty_start: r.get::<_, Option<i64>>(11)?.map(i64_to_bool),
                     dirty_end: r.get::<_, Option<i64>>(12)?.map(i64_to_bool),
                     repo_binding_source: empty_to_none(r.get::<_, String>(13)?),
-                    prompt_fingerprint: None,
+                    prompt_fingerprint: r.get(14)?,
+                    parent_session_id: r.get(15)?,
+                    agent_version: r.get(16)?,
+                    os: r.get(17)?,
+                    arch: r.get(18)?,
+                    repo_file_count: r.get::<_, Option<i64>>(19)?.map(|v| v as u32),
+                    repo_total_loc: r.get::<_, Option<i64>>(20)?.map(|v| v as u64),
                 },
-                r.get::<_, i64>(14)? as u64,
+                r.get::<_, i64>(21)? as u64,
             ))
         })?
         .filter_map(|r| r.ok())
@@ -2128,6 +2427,8 @@ fn kind_from_str(s: &str) -> EventKind {
         "Message" => EventKind::Message,
         "Error" => EventKind::Error,
         "Cost" => EventKind::Cost,
+        "Hook" => EventKind::Hook,
+        "Lifecycle" => EventKind::Lifecycle,
         _ => EventKind::Hook,
     }
 }
@@ -2155,6 +2456,15 @@ fn ensure_schema_columns(conn: &Connection) -> Result<()> {
     ensure_column(conn, "events", "ts_exact", "INTEGER NOT NULL DEFAULT 0")?;
     ensure_column(conn, "events", "tool_call_id", "TEXT")?;
     ensure_column(conn, "events", "reasoning_tokens", "INTEGER")?;
+    ensure_column(conn, "events", "stop_reason", "TEXT")?;
+    ensure_column(conn, "events", "latency_ms", "INTEGER")?;
+    ensure_column(conn, "events", "ttft_ms", "INTEGER")?;
+    ensure_column(conn, "events", "retry_count", "INTEGER")?;
+    ensure_column(conn, "events", "context_used_tokens", "INTEGER")?;
+    ensure_column(conn, "events", "context_max_tokens", "INTEGER")?;
+    ensure_column(conn, "events", "cache_creation_tokens", "INTEGER")?;
+    ensure_column(conn, "events", "cache_read_tokens", "INTEGER")?;
+    ensure_column(conn, "events", "system_prompt_tokens", "INTEGER")?;
     ensure_column(
         conn,
         "sync_outbox",
@@ -2169,6 +2479,12 @@ fn ensure_schema_columns(conn: &Connection) -> Result<()> {
     )?;
     ensure_column(conn, "experiments", "concluded_at_ms", "INTEGER")?;
     ensure_column(conn, "sessions", "prompt_fingerprint", "TEXT")?;
+    ensure_column(conn, "sessions", "parent_session_id", "TEXT")?;
+    ensure_column(conn, "sessions", "agent_version", "TEXT")?;
+    ensure_column(conn, "sessions", "os", "TEXT")?;
+    ensure_column(conn, "sessions", "arch", "TEXT")?;
+    ensure_column(conn, "sessions", "repo_file_count", "INTEGER")?;
+    ensure_column(conn, "sessions", "repo_total_loc", "INTEGER")?;
     ensure_column(conn, "tool_spans", "parent_span_id", "TEXT")?;
     ensure_column(conn, "tool_spans", "depth", "INTEGER NOT NULL DEFAULT 0")?;
     ensure_column(conn, "tool_spans", "subtree_cost_usd_e6", "INTEGER")?;
@@ -2233,6 +2549,12 @@ mod tests {
             dirty_end: None,
             repo_binding_source: None,
             prompt_fingerprint: None,
+            parent_session_id: None,
+            agent_version: None,
+            os: None,
+            arch: None,
+            repo_file_count: None,
+            repo_total_loc: None,
         }
     }
 
@@ -2250,6 +2572,15 @@ mod tests {
             tokens_out: None,
             reasoning_tokens: None,
             cost_usd_e6: None,
+            stop_reason: None,
+            latency_ms: None,
+            ttft_ms: None,
+            retry_count: None,
+            context_used_tokens: None,
+            context_max_tokens: None,
+            cache_creation_tokens: None,
+            cache_read_tokens: None,
+            system_prompt_tokens: None,
             payload: json!({}),
         }
     }

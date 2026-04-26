@@ -32,8 +32,8 @@ struct SeqState {
 
 #[derive(Debug, Default)]
 struct SeqDriver {
-    n_control:        i64,
-    n_treatment:      i64,
+    n_control: i64,
+    n_treatment: i64,
     ever_significant: bool,
 }
 
@@ -50,10 +50,10 @@ fn decide(nc: i64, nt: i64, ever_sig: bool) -> SpecDecision {
 impl State<SeqDriver> for SeqState {
     fn from_driver(d: &SeqDriver) -> Result<Self> {
         Ok(SeqState {
-            n_control:        d.n_control,
-            n_treatment:      d.n_treatment,
+            n_control: d.n_control,
+            n_treatment: d.n_treatment,
             ever_significant: d.ever_significant,
-            decision:         decide(d.n_control, d.n_treatment, d.ever_significant),
+            decision: decide(d.n_control, d.n_treatment, d.ever_significant),
         })
     }
 }
@@ -91,13 +91,19 @@ impl Driver for SeqDriver {
 #[test]
 fn significant_is_sticky() {
     let d = SeqDriver {
-        n_control:        MIN_N,
-        n_treatment:      MIN_N,
+        n_control: MIN_N,
+        n_treatment: MIN_N,
         ever_significant: true,
     };
-    assert_eq!(decide(d.n_control, d.n_treatment, d.ever_significant), SpecDecision::Significant);
+    assert_eq!(
+        decide(d.n_control, d.n_treatment, d.ever_significant),
+        SpecDecision::Significant
+    );
     // More observations with no new evidence: still Significant.
-    assert_eq!(decide(d.n_control + 100, d.n_treatment + 100, true), SpecDecision::Significant);
+    assert_eq!(
+        decide(d.n_control + 100, d.n_treatment + 100, true),
+        SpecDecision::Significant
+    );
 }
 
 // Spot-check: insufficient when sample too small.

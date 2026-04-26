@@ -38,6 +38,10 @@ When to add or extend a spec: see [`.cursor/rules/quint-before-code.mdc`](../.cu
 | [`specs/prompt-tracking.qnt`](../specs/prompt-tracking.qnt) | `tests/spec/prompt_tracking_spec.rs` | prompt snapshot lifecycle (SessionStart capture, Stop re-capture, prompt_changed event) |
 | [`specs/session-feedback.qnt`](../specs/session-feedback.qnt) | `tests/spec/session_feedback_spec.rs` | H17 human feedback trigger (bad/regression count, mean score threshold) |
 | [`specs/span-hierarchy.qnt`](../specs/span-hierarchy.qnt) | `tests/spec/span_hierarchy_spec.rs` | `assign_parents` invariants: containment, depth consistency, no cycles, root depth=0 |
+| [`specs/llm-call-quality.qnt`](../specs/llm-call-quality.qnt) | `tests/spec/llm_call_quality.rs` | Phase 1 — per-request retry FSM: retry_count monotonic, event on terminal outcome |
+| [`specs/agent-behavior.qnt`](../specs/agent-behavior.qnt) | `tests/spec/agent_behavior.rs` | Phase 2 — mode transitions, todo lifecycle (created monotonic, completed+cancelled bounded), interrupts |
+| [`specs/session-outcome.qnt`](../specs/session-outcome.qnt) | `tests/spec/session_outcome.rs` | Phase 4 — outcome side-state: measurement never before Stop; Measured is terminal |
+| [`specs/system-sampler.qnt`](../specs/system-sampler.qnt) | `tests/spec/system_sampler.rs` | Phase 5 — sampler lifecycle: Off→Tracking→Stopped; samples only while active; pid valid when tracking |
 
 **Hook / init models:** [`hook-ingest.qnt`](../specs/hook-ingest.qnt) treats `codex`, `copilot-cli`, and `openclaw` as known hook sources alongside `cursor` and `claude`. [`init-setup.qnt`](../specs/init-setup.qnt) includes five hook-host slots (added `openclaw`); runtime `kaizen init` patches Cursor, Claude Code, and OpenClaw.
 

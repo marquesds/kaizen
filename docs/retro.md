@@ -49,10 +49,23 @@ Each heuristic = pure function `Inputs → Vec<Bet>`. Easy to test, easy to spec
 | H10 | Shell / test failures | ≥ 3 failing shell-like `ToolResult`s in one session (`is_error` or exit/test-fail text heuristics) | Stabilize command or CI signal. | failures × constant |
 | H11 | Cost outlier | ≥ 6 sessions; one session’s attributed cost ≥ 4× the per-session mean and ≥ $0.04 | Inspect longest / hottest session. | cost delta proxy |
 | H12 | Large file reads | Read-like tool hits a path with `file_facts` LOC ≥ 500 or bytes ≥ 80k, ≥ 2 reads | Read-hygiene / split file. | reads × LOC |
-| H13 | Delegation load | MCP: ≥ 12% of tool calls are MCP-named (≥ 20 calls). Subagents: ≥ 15% of sessions have `trace_path` under `subagents/` (≥ 6 sessions; local Cursor best) | Reduce MCP chatter or subagent fan-out. | calls or sessions × constant |
+| H13 | Delegation load | MCP: ≥ 12% of tool calls are MCP-named (≥ 20 calls). Subagents: ≥ 15% of sessions have `parent_session_id` set **or** `trace_path` under `subagents/` (≥ 6 sessions; local Cursor best) | Reduce MCP chatter or subagent fan-out. | calls or sessions × constant |
 | H14 | Instruction bloat | ≥ 22 skill + rule files on disk **or** ≥ 140 KiB combined (≥ 10 items) | Consolidate rules/skills. | bytes / 8 proxy |
+| H19 | Context pressure | ≥ 5 sessions with proxy `context_used_tokens / context_max_tokens ≥ 0.8` | Split sessions earlier; prune long instruction files. | sessions × constant |
+| H20 | Cold cache | ≥ 20 Anthropic proxy calls; cache read ratio &lt; 0.2 | Stabilize system prompt for prompt-cache prefix. | calls × constant |
+| H21 | Rate-limit cascade | ≥ 15 retries in one session **or** ≥ 5 sessions with `retry_count ≥ 3` | Route to smaller model or batch requests. | retries × constant |
+| H22 | Truncation rate | ≥ 10% of proxy turns have `stop_reason == max_tokens` | Raise output budget or decompose tasks. | turns × constant |
+| H23 | Todo abandonment | ≥ 3 sessions with `Lifecycle` todo_write snapshots: ≥ 5 todos and &lt; 40% completed | Narrow scope; avoid TodoWrite for tiny tasks. | sessions × constant |
+| H24 | Reject rate | `reject_diff` on ≥ 15% of edit-like `ToolCall`s (from hooks) | Tighten rules; smaller diffs per turn. | rejects × constant |
+| H25 | Mode thrash | Average ≥ 4 `Lifecycle` `mode_transition` events per session (≥ 2 sessions) | Stabilize plan vs agent up front. | transitions × constant |
+| H27 | Outcome test failures | `session_outcomes`: failure rate &gt; 20% with ≥ 5 tests run | Stabilize tests first. | rate × constant |
+| H28 | Revert churn | `revert_lines_14d` ≥ 100 (when column populated) | Smaller steps; rebase more often. | lines × constant |
+| H29 | Lint / test debt | Many clippy `error:` lines or any failed tests in outcome row | Fix top lint; run tests before long sessions. | errors × constant |
+| H30 | High agent CPU | `session_samples` max CPU &gt; 80% | Smaller tasks; check runaway tools. | CPU × constant |
+| H31 | High agent RSS | Peak RSS ≥ ~1 GiB in samples | Trim context; restart session. | GB × constant |
+| H32 | Long sampled session | ≥ 100 process samples in one session | Break work into shorter sessions. | samples × constant |
 
-**Provider-only note:** Remote cache rows omit `tool_spans` / `files_touched` / local indexes; H12 still uses local `file_facts` when indexed. H13 subagent detection relies on `trace_path` (often empty on synthetic remote sessions).
+**Provider-only note:** Remote cache rows omit `tool_spans` / `files_touched` / local indexes; H12 still uses local `file_facts` when indexed. H13 subagent detection uses `parent_session_id` when present, else `trace_path` containing `subagents/` (often empty on synthetic remote sessions).
 
 ## Ranking
 

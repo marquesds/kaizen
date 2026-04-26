@@ -28,11 +28,22 @@ fn contains(outer: &QuintSpan, inner: &QuintSpan) -> bool {
 }
 
 fn assign_parent(candidate_start: i64, candidate_end: i64, id: i64, spans: &[QuintSpan]) -> i64 {
-    let probe = QuintSpan { id, start: candidate_start, end: candidate_end, parent: -1, depth: 0 };
+    let probe = QuintSpan {
+        id,
+        start: candidate_start,
+        end: candidate_end,
+        parent: -1,
+        depth: 0,
+    };
+    // Quint spec uses strict > in foldl, so first-found max wins on ties.
     spans
         .iter()
         .filter(|s| contains(s, &probe))
-        .max_by_key(|s| s.depth)
+        .fold(None::<&QuintSpan>, |best, s| match best {
+            None => Some(s),
+            Some(b) if s.depth > b.depth => Some(s),
+            _ => best,
+        })
         .map(|s| s.id)
         .unwrap_or(-1)
 }
@@ -41,7 +52,11 @@ fn depth_of(pid: i64, spans: &[QuintSpan]) -> i64 {
     if pid == -1 {
         return 0;
     }
-    spans.iter().find(|s| s.id == pid).map(|p| p.depth + 1).unwrap_or(0)
+    spans
+        .iter()
+        .find(|s| s.id == pid)
+        .map(|p| p.depth + 1)
+        .unwrap_or(0)
 }
 
 impl State<SpanHierarchyDriver> for SpanHierarchyState {

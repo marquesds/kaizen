@@ -79,6 +79,15 @@ pub fn parse_codex_line(
             tokens_out,
             reasoning_tokens,
             cost_usd_e6: None,
+            stop_reason: None,
+            latency_ms: None,
+            ttft_ms: None,
+            retry_count: None,
+            context_used_tokens: None,
+            context_max_tokens: None,
+            cache_creation_tokens: None,
+            cache_read_tokens: None,
+            system_prompt_tokens: None,
             payload: first.clone(),
         }));
     }
@@ -162,6 +171,12 @@ pub fn scan_codex_session_dir(dir: &Path) -> Result<(SessionRecord, Vec<Event>)>
         dirty_end: None,
         repo_binding_source: None,
         prompt_fingerprint: None,
+        parent_session_id: None,
+        agent_version: None,
+        os: None,
+        arch: None,
+        repo_file_count: None,
+        repo_total_loc: None,
     };
     Ok((record, events))
 }

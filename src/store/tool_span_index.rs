@@ -337,6 +337,15 @@ fn load_session_events(conn: &Connection, session_id: &str) -> Result<Vec<Event>
             tokens_out: row.get::<_, Option<i64>>(9)?.map(|v| v as u32),
             reasoning_tokens: row.get::<_, Option<i64>>(10)?.map(|v| v as u32),
             cost_usd_e6: row.get(11)?,
+            stop_reason: None,
+            latency_ms: None,
+            ttft_ms: None,
+            retry_count: None,
+            context_used_tokens: None,
+            context_max_tokens: None,
+            cache_creation_tokens: None,
+            cache_read_tokens: None,
+            system_prompt_tokens: None,
             payload: serde_json::from_str(&payload).unwrap_or(serde_json::Value::Null),
         })
     })?;

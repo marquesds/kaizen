@@ -35,6 +35,12 @@ fn seed_session(workspace: &Path, id: &str, tool: &str) -> anyhow::Result<()> {
         dirty_end: None,
         repo_binding_source: None,
         prompt_fingerprint: None,
+        parent_session_id: None,
+        agent_version: None,
+        os: None,
+        arch: None,
+        repo_file_count: None,
+        repo_total_loc: None,
     })?;
     store.append_event(&Event {
         session_id: id.into(),
@@ -49,6 +55,15 @@ fn seed_session(workspace: &Path, id: &str, tool: &str) -> anyhow::Result<()> {
         tokens_out: Some(20),
         reasoning_tokens: Some(5),
         cost_usd_e6: Some(123),
+        stop_reason: None,
+        latency_ms: None,
+        ttft_ms: None,
+        retry_count: None,
+        context_used_tokens: None,
+        context_max_tokens: None,
+        cache_creation_tokens: None,
+        cache_read_tokens: None,
+        system_prompt_tokens: None,
         payload: json!({"tool": tool}),
     })?;
     Ok(())

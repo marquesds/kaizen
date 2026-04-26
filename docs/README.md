@@ -20,6 +20,8 @@ glossary. For a **guided tour** with exercises, start at [tutorial/README.md](tu
 | [mcp.md](mcp.md) | MCP stdio server (agent hosts; most commands as tools) |
 | [llm-proxy.md](llm-proxy.md) | Local HTTP forwarder for LLM APIs (Anthropic) |
 | [concepts.md](concepts.md) | Sessions, events, retro, experiments |
+| [outcomes.md](outcomes.md) | Post-stop test/lint outcomes (opt-in) |
+| [system-telemetry.md](system-telemetry.md) | Per-PID CPU/RSS sampling (opt-in) |
 | [config.md](config.md) | Config file + env vars, sync, proxy, pluggable telemetry |
 | [retro.md](retro.md) | Heuristic retro engine |
 | [retro-tuning.md](retro-tuning.md) | Tuning heuristic thresholds |

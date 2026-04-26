@@ -23,6 +23,8 @@ Transcripts and hooks **capture**; `summary`, `insights`, `guidance`, and `metri
 
 After you have sessions in the store you can run **`kaizen eval run`** to call an LLM judge (requires `[eval].enabled = true` and `ANTHROPIC_API_KEY`). Low-scoring sessions appear as the **H15** bet in `kaizen retro`. See [usage.md#kaizen-eval](../usage.md#kaizen-eval) and [config.md#eval](../config.md#eval) for setup.
 
+Optional: enable **[collect.outcomes]** and **[collect.system_sampler]** in config to attach post-stop test rows and per-PID CPU/RSS samples (local-only); see [outcomes.md](../outcomes.md) and [system-telemetry.md](../system-telemetry.md).
+
 ## What you will know after
 
 - How `init` wires hooks and where data lands on disk.

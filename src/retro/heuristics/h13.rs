@@ -60,7 +60,9 @@ pub fn run(inputs: &Inputs) -> Vec<Bet> {
     if n_sess >= MIN_SESSIONS_TOTAL {
         let mut seen = std::collections::HashSet::new();
         for (s, _) in &inputs.events {
-            if s.trace_path.to_lowercase().contains("subagents") {
+            let subagent_edge = s.parent_session_id.is_some();
+            let legacy_path = s.trace_path.to_lowercase().contains("subagents");
+            if subagent_edge || legacy_path {
                 seen.insert(s.id.clone());
             }
         }
@@ -115,6 +117,12 @@ mod tests {
             dirty_end: None,
             repo_binding_source: None,
             prompt_fingerprint: None,
+            parent_session_id: None,
+            agent_version: None,
+            os: None,
+            arch: None,
+            repo_file_count: None,
+            repo_total_loc: None,
         }
     }
 
@@ -144,6 +152,15 @@ mod tests {
                     tokens_out: None,
                     reasoning_tokens: None,
                     cost_usd_e6: None,
+                    stop_reason: None,
+                    latency_ms: None,
+                    ttft_ms: None,
+                    retry_count: None,
+                    context_used_tokens: None,
+                    context_max_tokens: None,
+                    cache_creation_tokens: None,
+                    cache_read_tokens: None,
+                    system_prompt_tokens: None,
                     payload: serde_json::Value::Null,
                 },
             ));
@@ -165,6 +182,8 @@ mod tests {
             aggregates: agg,
             prompt_fingerprints: vec![],
             feedback: vec![],
+            session_outcomes: vec![],
+            session_sample_aggs: vec![],
         };
         let bets = run(&inputs);
         assert!(bets.iter().any(|b| b.id == "H13:mcp"));
@@ -197,6 +216,15 @@ mod tests {
                     tokens_out: None,
                     reasoning_tokens: None,
                     cost_usd_e6: None,
+                    stop_reason: None,
+                    latency_ms: None,
+                    ttft_ms: None,
+                    retry_count: None,
+                    context_used_tokens: None,
+                    context_max_tokens: None,
+                    cache_creation_tokens: None,
+                    cache_read_tokens: None,
+                    system_prompt_tokens: None,
                     payload: serde_json::Value::Null,
                 },
             ));
@@ -218,6 +246,8 @@ mod tests {
             aggregates: agg,
             prompt_fingerprints: vec![],
             feedback: vec![],
+            session_outcomes: vec![],
+            session_sample_aggs: vec![],
         };
         let bets = run(&inputs);
         assert!(bets.iter().any(|b| b.id == "H13:subagents"));

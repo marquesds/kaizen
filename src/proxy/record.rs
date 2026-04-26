@@ -70,6 +70,12 @@ pub fn record_forward_outcome(
             dirty_end: None,
             repo_binding_source: None,
             prompt_fingerprint: None,
+            parent_session_id: None,
+            agent_version: None,
+            os: None,
+            arch: None,
+            repo_file_count: None,
+            repo_total_loc: None,
         };
         store.upsert_session(&rec)?;
     }
@@ -109,6 +115,15 @@ pub fn record_forward_outcome(
         tokens_out: a.tokens_out,
         reasoning_tokens: a.reasoning_tokens,
         cost_usd_e6: proxy_event_cost_usd_e6(a),
+        stop_reason: a.stop_reason.clone(),
+        latency_ms: a.latency_ms,
+        ttft_ms: a.ttft_ms,
+        retry_count: a.retry_count,
+        context_used_tokens: None,
+        context_max_tokens: None,
+        cache_creation_tokens: a.cache_creation_tokens,
+        cache_read_tokens: a.cache_read_tokens,
+        system_prompt_tokens: None,
         payload,
     };
     store.append_event_with_sync(&e, sync_c.as_ref())?;
@@ -126,6 +141,12 @@ pub struct RecordArgs {
     pub tokens_in: Option<u32>,
     pub tokens_out: Option<u32>,
     pub reasoning_tokens: Option<u32>,
+    pub cache_creation_tokens: Option<u32>,
+    pub cache_read_tokens: Option<u32>,
+    pub stop_reason: Option<String>,
+    pub latency_ms: Option<u32>,
+    pub ttft_ms: Option<u32>,
+    pub retry_count: Option<u16>,
     pub upstream_error: Option<String>,
 }
 
@@ -151,6 +172,12 @@ mod tests {
             tokens_in: None,
             tokens_out: None,
             reasoning_tokens: None,
+            cache_creation_tokens: None,
+            cache_read_tokens: None,
+            stop_reason: None,
+            latency_ms: None,
+            ttft_ms: None,
+            retry_count: None,
             upstream_error: None,
         }
     }

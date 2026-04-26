@@ -24,6 +24,15 @@ pub fn hook_to_event(h: &HookEvent, seq: u64) -> Event {
         tokens_out: None,
         reasoning_tokens: None,
         cost_usd_e6,
+        stop_reason: None,
+        latency_ms: None,
+        ttft_ms: None,
+        retry_count: None,
+        context_used_tokens: None,
+        context_max_tokens: None,
+        cache_creation_tokens: None,
+        cache_read_tokens: None,
+        system_prompt_tokens: None,
         payload: h.payload.clone(),
     }
 }
