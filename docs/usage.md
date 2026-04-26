@@ -177,16 +177,21 @@ Contract: [ingest-contract.md](ingest-contract.md).
 
 ## `kaizen telemetry`
 
-Optional pluggable sinks (PostHog, Datadog, OTLP, `dev`) that receive the same redacted batches as Kaizen sync. Configure `[[telemetry.exporters]]` in `~/.kaizen/config.toml` (or workspace); see [config.md](config.md#telemetry).
+Pluggable sinks receive the same redacted batches as Kaizen sync. Use **`type = "file"`** to append one summary JSON line per batch to **`<workspace>/.kaizen/telemetry.ndjson`** (optional `path`); PostHog, Datadog, OTLP, and `dev` are optional and may need Cargo build features. Configure `[[telemetry.exporters]]` in `~/.kaizen/config.toml` and/or the workspace; see [config.md](config.md#telemetry).
 
 ```bash
-kaizen telemetry configure              # append an exporter template (interactive)
-kaizen telemetry print-effective-config # redacted: which fields resolve from env vs TOML
+kaizen telemetry configure                # append an exporter template (interactive)
+kaizen telemetry print-effective-config  # redacted: which fields resolve from env vs TOML
+kaizen telemetry push                     # replay SQLite events through exporters (no Kaizen POST)
+kaizen telemetry tail                    # read NDJSON from the file exporter (default path above)
+kaizen telemetry tail --no-follow        # print the file once and exit
+kaizen telemetry tail --file /tmp/t.ndjson  # path (absolute or relative to workspace)
+kaizen telemetry tail --json            # pretty-print each JSON line
 ```
 
 ## `kaizen mcp`
 
-Model Context Protocol server over stdio — **most** CLI workflows are available as MCP tools so agents (Cursor, Claude Code, Goose, OpenCode, Copilot, and so on) can query Kaizen without shelling. **CLI-only today:** `doctor`, `guidance`, `gc`, `completions`, `proxy run`, and `telemetry` subcommands — run those from a real shell. Host config and tool list: [mcp.md](mcp.md).
+Model Context Protocol server over stdio — **most** CLI workflows are available as MCP tools so agents (Cursor, Claude Code, Goose, OpenCode, Copilot, and so on) can query Kaizen without shelling. **CLI-only today:** `doctor`, `guidance`, `gc`, `completions`, `proxy run`, and all `kaizen telemetry` subcommands — run those from a real shell. Host config and tool list: [mcp.md](mcp.md).
 
 ## `kaizen exp`
 

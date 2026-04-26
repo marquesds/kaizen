@@ -81,7 +81,7 @@ Local HTTP forwarder for Anthropic-style APIs. Full key list, defaults, and `con
 
 ## `[telemetry]`
 
-Optional fan-out to third-party sinks (PostHog, Datadog, OTLP, or `dev` tracing) with the same redaction as Kaizen sync. Build features may be required (for example `telemetry-posthog`); see [Cargo features](../Cargo.toml) and [usage](usage.md#kaizen-telemetry).
+Optional fan-out to local and third-party sinks: **`file`** (append-only NDJSON under the workspace), PostHog, Datadog, OTLP, or `dev` tracing, with the same redaction as Kaizen sync. The `file` sink needs no extra Cargo feature; others may (for example `telemetry-posthog`); see [Cargo features](../Cargo.toml) and [usage](usage.md#kaizen-telemetry).
 
 | Key | Default | Purpose |
 |-----|---------|--------|
@@ -102,12 +102,13 @@ Remote read-back (provider pull) and cache policy. OTLP is **export only**; it i
 
 When `true`, the corresponding field may be emitted in **cleartext** on outbound / canonical telemetry for that key; when `false` (default), omit or hash. Keys: `team`, `workspace_label`, `runner_label`, `actor_kind`, `actor_label`, `agent`, `model`, `env`, `job`, `branch`.
 
-**Exporters** are `[[telemetry.exporters]]` tables with `type = "posthog" | "datadog" | "otlp" | "dev" | "none"`. The `kaizen telemetry configure` command appends a template block to `~/.kaizen/config.toml`.
+**Exporters** are `[[telemetry.exporters]]` tables with `type = "file" | "posthog" | "datadog" | "otlp" | "dev" | "none"`. For `file`, optional `path` (relative paths resolve against the workspace root) defaults to **`.kaizen/telemetry.ndjson`**. The `kaizen telemetry configure` command appends a template block to `~/.kaizen/config.toml`.
 
 **Credential resolution (per exporter):** standard env vars are preferred, with `KAIZEN_`-prefixed fallbacks in some cases, for example:
 
 | Sink | Common env vars |
 |------|-----------------|
+| file | (none) |
 | PostHog | `POSTHOG_API_KEY`, `POSTHOG_HOST` (or `KAIZEN_POSTHOG_*`) |
 | Datadog | `DD_API_KEY`, `DD_SITE` (or `KAIZEN_DD_*`) |
 | OTLP | `OTEL_EXPORTER_OTLP_ENDPOINT` (or `KAIZEN_OTEL_EXPORTER_OTLP_ENDPOINT`) |

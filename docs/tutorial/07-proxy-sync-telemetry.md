@@ -30,11 +30,13 @@ Contract for operators: [ingest-contract.md](../ingest-contract.md).
 
 ## Pluggable telemetry
 
-PostHog, Datadog, OTLP, or `dev` sinks mirror the same redaction story as sync.
+Sinks (including **`file`**, PostHog, Datadog, OTLP, or `dev`) receive the same redaction story as sync. The **file** exporter appends one JSON summary line per batch to **`.kaizen/telemetry.ndjson`** in the workspace (no extra build feature).
 
 ```bash
 kaizen telemetry configure
 kaizen telemetry print-effective-config
+# After adding `type = "file"` and running sync or `telemetry push`, watch lines:
+kaizen telemetry tail
 ```
 
 Templates and env resolution: [config.md](../config.md#telemetry) and [usage.md](../usage.md#kaizen-telemetry).

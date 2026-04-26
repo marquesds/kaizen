@@ -1,6 +1,6 @@
 # kaizen MCP (stdio)
 
-Run the [Model Context Protocol](https://modelcontextprotocol.io) server so agents (Cursor, Claude Code, Goose, OpenCode, GitHub Copilot, and other MCP hosts) can call **most** `kaizen` workflows without shelling. **Not on MCP (use the real CLI):** `doctor`, `guidance`, `gc`, `completions`, `proxy run`, `telemetry configure`, `telemetry print-effective-config`.
+Run the [Model Context Protocol](https://modelcontextprotocol.io) server so agents (Cursor, Claude Code, Goose, OpenCode, GitHub Copilot, and other MCP hosts) can call **most** `kaizen` workflows without shelling. **Not on MCP (use the real CLI):** `doctor`, `guidance`, `gc`, `completions`, `proxy run`, and all `kaizen telemetry` subcommands (including `configure`, `print-effective-config`, `push`, and `tail`).
 
 The MCP tools are cache-first by default. They read the local `.kaizen/kaizen.db` immediately, and only rescan external agent transcript stores when you pass `refresh: true`.
 

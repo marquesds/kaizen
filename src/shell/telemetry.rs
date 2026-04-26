@@ -29,7 +29,7 @@ pub fn cmd_telemetry_configure(workspace: Option<&Path>) -> Result<()> {
         "This command appends a `[[telemetry.exporters]]` table to {}.",
         p.display()
     );
-    print!("Type `posthog`, `datadog`, `otlp`, or `dev` (or empty to abort): ");
+    print!("Type `file`, `posthog`, `datadog`, `otlp`, or `dev` (or empty to abort): ");
     std::io::stdout().flush()?;
     let mut line = String::new();
     std::io::stdin().lock().read_line(&mut line)?;
@@ -39,6 +39,14 @@ pub fn cmd_telemetry_configure(workspace: Option<&Path>) -> Result<()> {
         return Ok(());
     }
     let block = match t.as_str() {
+        "file" => {
+            r#"
+[[telemetry.exporters]]
+type = "file"
+enabled = true
+# path = "telemetry.ndjson"   # optional; default .kaizen/telemetry.ndjson under each workspace
+"#
+        }
         "posthog" => {
             r#"
 [[telemetry.exporters]]
@@ -68,7 +76,7 @@ type = "otlp"
 type = "dev"
 "#
         }
-        _ => anyhow::bail!("unknown type (use posthog, datadog, otlp, dev)"),
+        _ => anyhow::bail!("unknown type (use file, posthog, datadog, otlp, dev)"),
     };
 
     let mut f = std::fs::OpenOptions::new()
@@ -80,7 +88,9 @@ type = "dev"
     }
     f.write_all(block.as_bytes())?;
     let _ = ws;
-    println!("Appended. Rebuild with e.g. `--features telemetry-posthog` for PostHog.");
+    println!(
+        "Appended. `file` needs no extra feature; use `--features telemetry-posthog` for PostHog."
+    );
     Ok(())
 }
 
@@ -94,6 +104,13 @@ pub fn print_effective_config_text(workspace: Option<&Path>) -> Result<String> {
     for (i, e) in cfg.telemetry.exporters.iter().enumerate() {
         match e {
             ExporterConfig::None => writeln!(&mut s, "[{i}] type=none (ignored)").unwrap(),
+            ExporterConfig::File { enabled, path } => {
+                let p = path
+                    .as_deref()
+                    .map(|p| p.to_string())
+                    .unwrap_or_else(|| "<workspace>/.kaizen/telemetry.ndjson".into());
+                writeln!(&mut s, "[{i}] type=file enabled={enabled} path={p}").unwrap();
+            }
             ExporterConfig::Dev { enabled } => {
                 writeln!(&mut s, "[{i}] type=dev enabled={enabled}").unwrap();
             }
@@ -237,11 +254,12 @@ pub fn cmd_telemetry_push(
              not only for cloud sync."
         );
     };
-    let registry = telemetry::load_exporters(&cfg.telemetry);
+    let registry = telemetry::load_exporters(&cfg.telemetry, primary.as_path());
     if registry.is_empty() {
         anyhow::bail!(
-            "no telemetry exporters to push to: enable a feature (e.g. telemetry-dev) and add \
-             [[telemetry.exporters]] with credentials; see `kaizen telemetry print-effective-config`."
+            "no telemetry exporters to push to: add [[telemetry.exporters]] (e.g. type = \"file\" \
+             needs no extra feature; PostHog/Datadog/OTLP need build features); see \
+             `kaizen telemetry print-effective-config`."
         );
     }
     let fail_open = cfg.telemetry.fail_open;
