@@ -22,3 +22,4 @@ pub mod sampler_cmd;
 pub mod scope;
 pub mod sync;
 pub mod telemetry;
+pub mod telemetry_tail;

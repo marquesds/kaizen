@@ -334,6 +334,13 @@ impl Default for TelemetryConfig {
 pub enum ExporterConfig {
     /// No-op row for sparse tables / templates.
     None,
+    /// Append summary JSON lines to a local NDJSON file (default `<workspace>/.kaizen/telemetry.ndjson`).
+    File {
+        #[serde(default = "default_true")]
+        enabled: bool,
+        #[serde(default)]
+        path: Option<String>,
+    },
     /// Echo to tracing (for wiring tests; requires the `telemetry-dev` build feature).
     Dev {
         #[serde(default = "default_true")]
@@ -368,6 +375,7 @@ impl ExporterConfig {
     pub fn is_enabled(&self) -> bool {
         match self {
             ExporterConfig::None => false,
+            ExporterConfig::File { enabled, .. } => *enabled,
             ExporterConfig::Dev { enabled, .. } => *enabled,
             ExporterConfig::PostHog { enabled, .. } => *enabled,
             ExporterConfig::Datadog { enabled, .. } => *enabled,

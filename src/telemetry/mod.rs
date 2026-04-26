@@ -3,6 +3,8 @@
 //! Fan-out runs in parallel with the primary `POST` (see `sync::engine`); outbox is committed only
 //! when the primary succeeds (and, when `fail_open` is `false`, when the fan-out completes `Ok`).
 
+mod batch_metadata;
+mod file;
 mod resolve;
 
 #[cfg(feature = "telemetry-datadog")]
@@ -17,7 +19,11 @@ mod posthog;
 use crate::core::config::{ExporterConfig, TelemetryConfig};
 use crate::sync::IngestExportBatch;
 use anyhow::Result;
+use std::path::Path;
 use std::sync::Arc;
+
+pub use batch_metadata::telemetry_file_line;
+pub use file::{FileExporter, default_ndjson_path, resolve_file_exporter_path};
 
 pub use resolve::DatadogResolved;
 pub use resolve::OtlpResolved;
@@ -65,22 +71,27 @@ impl ExporterRegistry {
 }
 
 /// Build exporters from TOML + environment. Missing creds for a sink log a warning and skip it.
-pub fn load_exporters(cfg: &TelemetryConfig) -> ExporterRegistry {
+/// `workspace` resolves relative `file` paths (see [`resolve_file_exporter_path`]).
+pub fn load_exporters(cfg: &TelemetryConfig, workspace: &Path) -> ExporterRegistry {
     let mut v: Vec<Arc<dyn TelemetryExporter>> = Vec::new();
     for entry in &cfg.exporters {
-        if let Some(exp) = build_exporter(entry) {
+        if let Some(exp) = build_exporter(entry, workspace) {
             v.push(exp);
         }
     }
     ExporterRegistry::from_vec(v)
 }
 
-fn build_exporter(c: &ExporterConfig) -> Option<Arc<dyn TelemetryExporter>> {
+fn build_exporter(c: &ExporterConfig, workspace: &Path) -> Option<Arc<dyn TelemetryExporter>> {
     if !c.is_enabled() {
         return None;
     }
     match c {
         ExporterConfig::None => None,
+        ExporterConfig::File { path, .. } => {
+            let p = file::resolve_file_exporter_path(path.as_deref(), workspace);
+            Some(Arc::new(file::FileExporter::new(p)) as _)
+        }
         ExporterConfig::Dev { .. } => {
             #[cfg(feature = "telemetry-dev")]
             {

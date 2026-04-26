@@ -15,6 +15,7 @@ When to add or extend a spec: see [`.cursor/rules/quint-before-code.mdc`](../.cu
 | [`specs/retention.qnt`](../specs/retention.qnt) | `tests/spec/retention.rs` | tier aging |
 | [`specs/sync-backpressure.qnt`](../specs/sync-backpressure.qnt) | `tests/spec/sync_backpressure.rs` | sync |
 | [`specs/telemetry-exporters.qnt`](../specs/telemetry-exporters.qnt) | `tests/spec/telemetry_exporters.rs` | telemetry (query authority + N-way fan-out) |
+| [`specs/telemetry-file-metadata.qnt`](../specs/telemetry-file-metadata.qnt) | `tests/spec/telemetry_file_metadata.rs` | file NDJSON: envelope vs body-only metadata, tail follow |
 | [`specs/telemetry-push-replay.qnt`](../specs/telemetry-push-replay.qnt) | `tests/spec/telemetry_push_replay.rs` | `telemetry push` (exporter replay, chunking) |
 | [`specs/provider-pull-cache.qnt`](../specs/provider-pull-cache.qnt) | `tests/spec/provider_pull_cache.rs` | provider pull / remote cache |
 | [`specs/workspace-facts-sync.qnt`](../specs/workspace-facts-sync.qnt) | `tests/spec/workspace_facts_sync.rs` | outbox kind order: `events` before `workspace_facts` |

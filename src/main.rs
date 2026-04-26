@@ -155,7 +155,7 @@ enum Command {
         #[command(subcommand)]
         subcmd: SyncCommand,
     },
-    /// Optional third-party telemetry sinks (PostHog, Datadog, OTLP, dev) alongside Kaizen sync.
+    /// Optional telemetry sinks (file NDJSON, PostHog, Datadog, OTLP, dev) alongside Kaizen sync.
     #[command(next_help_heading = "Operate")]
     Telemetry {
         #[command(subcommand)]
@@ -387,6 +387,21 @@ enum TelemetrySubcommand {
     PrintEffectiveConfig {
         #[arg(long)]
         workspace: Option<PathBuf>,
+    },
+    /// Read local NDJSON from the `file` exporter (default: `<workspace>/.kaizen/telemetry.ndjson`).
+    Tail {
+        /// workspace root (default: cwd)
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        /// File path (absolute or relative to workspace).
+        #[arg(long, short = 'f')]
+        file: Option<PathBuf>,
+        /// Print current file contents and exit (no follow).
+        #[arg(long)]
+        no_follow: bool,
+        /// Pretty-print each JSON line.
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -798,6 +813,17 @@ fn main() -> anyhow::Result<()> {
             TelemetrySubcommand::PrintEffectiveConfig { workspace } => {
                 kaizen::shell::telemetry::cmd_telemetry_print_effective(workspace.as_deref())
             }
+            TelemetrySubcommand::Tail {
+                workspace,
+                file,
+                no_follow,
+                json,
+            } => kaizen::shell::telemetry_tail::cmd_telemetry_tail(
+                workspace.as_deref(),
+                file,
+                no_follow,
+                json,
+            ),
         },
         Command::Retro {
             days,

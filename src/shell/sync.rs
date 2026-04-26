@@ -25,7 +25,7 @@ pub fn sync_run_text(workspace: Option<&Path>, once: bool) -> Result<String> {
     let db_path = ws.join(".kaizen/kaizen.db");
     let store = Store::open(&db_path)?;
     let interval = cfg.sync.flush_interval_ms.max(100);
-    let registry = telemetry::load_exporters(&cfg.telemetry);
+    let registry = telemetry::load_exporters(&cfg.telemetry, &ws);
     let flush = FlushExporters {
         telemetry: &cfg.telemetry,
         registry: if registry.is_empty() {
