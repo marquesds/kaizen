@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-use clap::CommandFactory;
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use kaizen::DataSource;
 use kaizen::feedback::types::FeedbackLabel;
 use std::io::Read;
@@ -974,4 +973,15 @@ fn ingest_hook(source: Source, workspace: Option<PathBuf>) -> anyhow::Result<()>
         Source::Claude => kaizen::shell::ingest::IngestSource::Claude,
     };
     kaizen::shell::ingest::ingest_hook_text(src, &input, workspace)
+}
+
+#[cfg(test)]
+mod cli_parser_tests {
+    use super::Cli;
+    use clap::CommandFactory;
+
+    #[test]
+    fn clap_cli_debug_assert() {
+        Cli::command().debug_assert();
+    }
 }

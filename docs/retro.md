@@ -64,6 +64,7 @@ Each heuristic = pure function `Inputs → Vec<Bet>`. Easy to test, easy to spec
 | H30 | High agent CPU | `session_samples` max CPU &gt; 80% | Smaller tasks; check runaway tools. | CPU × constant |
 | H31 | High agent RSS | Peak RSS ≥ ~1 GiB in samples | Trim context; restart session. | GB × constant |
 | H32 | Long sampled session | ≥ 100 process samples in one session | Break work into shorter sessions. | samples × constant |
+| H33 | Automation cue | Same tool ≥ 5 consecutive calls in a session, or repeating 2- / 3-tool blocks (non-overlapping) across tool calls | Batch with a helper/glob/shell loop, or capture pattern as a script or skill. | streak / repeat count × constant |
 
 **Provider-only note:** Remote cache rows omit `tool_spans` / `files_touched` / local indexes; H12 still uses local `file_facts` when indexed. H13 subagent detection uses `parent_session_id` when present, else `trace_path` containing `subagents/` (often empty on synthetic remote sessions).
 

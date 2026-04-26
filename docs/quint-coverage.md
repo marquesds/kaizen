@@ -35,6 +35,7 @@ When to add or extend a spec: see [`.cursor/rules/quint-before-code.mdc`](../.cu
 | [`specs/metrics-pipeline.qnt`](../specs/metrics-pipeline.qnt) | `tests/spec/metrics_pipeline.rs` | `metrics` |
 | [`specs/tui-app.qnt`](../specs/tui-app.qnt) | `tests/spec/tui_app.rs` | TUI lifecycle |
 | [`specs/eval-h15.qnt`](../specs/eval-h15.qnt) | `tests/spec/eval_h15.rs` | H15 eval trigger invariants |
+| [`specs/h33-automation.qnt`](../specs/h33-automation.qnt) | `tests/spec/h33_automation.rs` | H33 run / subseq gates and token scalars |
 | [`specs/openclaw-ingest.qnt`](../specs/openclaw-ingest.qnt) | `tests/spec/openclaw_ingest_spec.rs` | OpenClaw workspace filter (accept/reject) |
 | [`specs/prompt-tracking.qnt`](../specs/prompt-tracking.qnt) | `tests/spec/prompt_tracking_spec.rs` | prompt snapshot lifecycle (SessionStart capture, Stop re-capture, prompt_changed event) |
 | [`specs/session-feedback.qnt`](../specs/session-feedback.qnt) | `tests/spec/session_feedback_spec.rs` | H17 human feedback trigger (bad/regression count, mean score threshold) |
@@ -55,7 +56,7 @@ When to add or extend a spec: see [`.cursor/rules/quint-before-code.mdc`](../.cu
 
 - **`completions`** — static codegen; low value for formal modeling.
 
-**Ingest** and **sync** are covered by hook / ingest idempotency and sync-backpressure specs. **Retro** has `retro-pipeline` for pipeline phases, not every heuristic in [`src/retro/`](../src/retro/). **`retention.qnt`** models tier **aging**, not every `gc` edge case; **`gc-prune.qnt`** captures refuse / prune / vacuum ordering.
+**Ingest** and **sync** are covered by hook / ingest idempotency and sync-backpressure specs. **Retro** has `retro-pipeline` for pipeline phases; heuristic-specific gates include **`h33-automation`** (H33). Not every heuristic in [`src/retro/`](../src/retro/) has a Quint module. **`retention.qnt`** models tier **aging**, not every `gc` edge case; **`gc-prune.qnt`** captures refuse / prune / vacuum ordering.
 
 ## When to close a gap
 
