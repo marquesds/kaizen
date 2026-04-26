@@ -5,19 +5,14 @@
 use quint_connect::*;
 use serde::Deserialize;
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, Eq, PartialEq, Deserialize)]
 #[serde(tag = "tag")]
 enum SpecMode {
     Plan,
+    #[default]
     Agent,
     Ask,
     Debug,
-}
-
-impl Default for SpecMode {
-    fn default() -> Self {
-        SpecMode::Agent
-    }
 }
 
 #[derive(Debug, Eq, PartialEq, Deserialize)]
