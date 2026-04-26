@@ -1,6 +1,6 @@
 # kaizen
 
-Kaizen captures every coding agent session — Cursor, Claude Code, Codex, OpenClaw, Goose, OpenCode, Copilot — into a local SQLite database, then closes the feedback loop that most observability tools skip: a **heuristic retro engine** that ranks concrete improvement bets by tokens-saved-per-effort, and an **A/B experiment framework** that measures whether each bet worked. Nothing leaves disk until you say so.
+Kaizen captures coding-agent sessions — Cursor, Claude Code, Codex, **OpenClaw**, Goose, OpenCode, Copilot — into **per-workspace** SQLite while a **machine registry** (`~/.kaizen/machine.db`) records every repo you `kaizen init`, so `doctor`, retention, and **`--all-workspaces`** stay coherent across the host. **Local ingest** is the default (transcript tails, Cursor / Claude Code / OpenClaw hooks, optional Anthropic **HTTP proxy** with token-accurate logging and context policy). When you enable **team sync** and a **PostHog or Datadog query** provider, `summary`, `metrics`, `guidance`, and `retro` can **`--source mixed`** (or `provider`) and **`kaizen telemetry pull`** to reconcile rollups with vendor-side events cached beside your rows. Then Kaizen closes the loop most tools skip: a **heuristic retro engine** that ranks improvement bets by tokens-saved-per-effort, and an **A/B experiment framework** that measures whether each bet worked. Nothing leaves disk until you say so; **redact-first** sync stays the team path.
 
 Narrative guides and references live in this repository under [`docs/`](docs/README.md). The
 **CLI** is published on [crates.io](https://crates.io/crates/kaizen-cli) as **`kaizen-cli`**. 
@@ -20,9 +20,9 @@ Agents are opaque. They burn tokens on files you didn't expect, loop on module b
 
 The loop is **observe → summarise → propose → measure**. Each step is a real command.
 
-**Observe** across three ingest tiers, zero agent restarts. `kaizen init` wires transcript tails (file notifications on agent JSONL directories) and hooks (`.cursor/hooks.json`, `.claude/settings.json`). The optional **LLM HTTP proxy** goes further: run `kaizen proxy run`, set `ANTHROPIC_BASE_URL=http://127.0.0.1:3847`, and every Anthropic API call is logged with precise token counts — no changes to the agent. The proxy optionally applies a **context policy** (`last_messages: 20` or `max_input_tokens: 200000`) that trims billed context before requests leave your machine.
+**Observe** across three ingest tiers, zero agent restarts. `kaizen init` wires transcript tails (file notifications on agent JSONL directories) and hooks: `.cursor/hooks.json`, `.claude/settings.json`, and OpenClaw’s `~/.openclaw/hooks/kaizen-events/handler.ts` (created or backed up idempotently). The optional **LLM HTTP proxy** goes further: run `kaizen proxy run`, set `ANTHROPIC_BASE_URL=http://127.0.0.1:3847`, and every Anthropic API call is logged with precise token counts — no changes to the agent. The proxy optionally applies a **context policy** (`last_messages: 20` or `max_input_tokens: 200000`) that trims billed context before requests leave your machine.
 
-**Summarise** at the repository level, not just the token level. Sessions and tool spans accumulate in a local SQLite WAL. The metrics pass walks git and your source tree to build a **code graph** (`file_facts`, `repo_edges`), so retros and experiments can answer: which files co-appear in long sessions, which module boundaries cause agent edit loops, which skills are loaded every turn but never triggered.
+**Summarise** at the repository level, not just the token level. Sessions and tool spans accumulate in a local SQLite WAL; optional **provider pulls** land correlated event-shaped rows in the same DB when `[telemetry.query]` is configured. The metrics pass walks git and your source tree to build a **code graph** (`file_facts`, `repo_edges`), so retros and experiments can answer: which files co-appear in long sessions, which module boundaries cause agent edit loops, which skills are loaded every turn but never triggered.
 
 **Propose** with 30+ deterministic heuristics, no LLM required. `kaizen retro --days 7` ranks bets by `tokens_saved_per_week / effort_minutes`. Each bet includes a hypothesis, estimated impact, evidence links (specific sessions and files), effort in minutes, and a ready-to-run apply command. Deterministic, formally specced in Quint, cheap to run on any schedule. The same engine ships as an **agent skill**: ask *"what should I improve?"* mid-session and kaizen surfaces the top bets inline without leaving your editor.
 
@@ -34,19 +34,22 @@ The loop is **observe → summarise → propose → measure**. Each step is a re
 
 ## Why
 
-- **Cost visibility** — tokens and USD per session, per model, per agent.
-- **Session history** — searchable, live-tailable, across all three agents.
+- **Cost visibility** — tokens and USD per session, model, and agent; same rollups can **merge local SQLite with vendor telemetry** when sync + query provider are set (`--source mixed`).
+- **Session history** — searchable, live-tailable, unified across Cursor, Claude Code, Codex, OpenClaw, and the other tailed agents in config.
+- **Host-level map** — machine registry lists every inited workspace; **`--all-workspaces`** merges per-repo DBs on this machine without hand-maintained paths.
 - **Heuristic retro** — weekly bets: what to change to make agents cheaper / faster.
 - **Experiments** — A/B a rule, skill, or repo change against a real metric.
-- **Fits your topology** — self-host, laptop, or a shared place your team can use; tailable session streams; you decide when anything syncs and **redact first**.
+- **Fits your topology** — laptop or shared team endpoint; tailable streams; you choose when anything syncs and **redact first**.
 
 ## Why kaizen over the alternatives
 
 | You want… | Existing tool | Kaizen |
 |---|---|---|
-| Cost per session for **Claude Code** | `ccusage`, `claude-usage-report` | ✅ plus Cursor + Codex + hook provenance |
+| Cost per session for **Claude Code** | `ccusage`, `claude-usage-report` | ✅ plus Cursor, Codex, OpenClaw, hook provenance |
 | Cost per session for **Cursor** | none (transcripts strip usage) | ✅ best-effort token + model from transcript tail |
+| **OpenClaw** / multi-provider gateway sessions | DIY tails | ✅ tail + webhook hooks, workspace filter, channel metadata on events |
 | One pane of glass across agents | glue scripts | ✅ unified store, one CLI, one MCP |
+| Match dashboards **and** local facts | export-only or two UIs | ✅ optional **pull** + `--source mixed` on read commands |
 | Turn observations into change | dashboards only | ✅ weekly heuristic **retro** + **experiments** (A/B) |
 | Self-host, not locked to a vendor cloud | needs an account | ✅ deploy the binary, tail agent sessions live, SQLite + optional **redacted** sync |
 | Ship MCP tools to agents | depends | ✅ most commands as MCP tools; shell-only for doctor, guidance, gc, completions, proxy, telemetry |
