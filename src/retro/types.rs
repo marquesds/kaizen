@@ -4,6 +4,7 @@
 use crate::core::event::{Event, SessionRecord};
 use crate::feedback::types::FeedbackRecord;
 use crate::metrics::types::{FileFact, ToolSpanView};
+use crate::store::{SessionOutcomeRow, SessionSampleAgg};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
@@ -32,6 +33,10 @@ pub struct Inputs {
     pub prompt_fingerprints: Vec<(String, String)>,
     /// Human feedback records in the window.
     pub feedback: Vec<FeedbackRecord>,
+    /// Measured test/lint outcomes (Tier C) for sessions in the window.
+    pub session_outcomes: Vec<SessionOutcomeRow>,
+    /// Aggregated process samples (Tier D) for sessions in the window.
+    pub session_sample_aggs: Vec<SessionSampleAgg>,
 }
 
 #[derive(Debug, Clone)]

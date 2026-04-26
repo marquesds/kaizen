@@ -135,6 +135,12 @@ mod tests {
                     dirty_end: None,
                     repo_binding_source: None,
                     prompt_fingerprint: None,
+                    parent_session_id: None,
+                    agent_version: None,
+                    os: None,
+                    arch: None,
+                    repo_file_count: None,
+                    repo_total_loc: None,
                 },
                 Event {
                     session_id: "s1".into(),
@@ -149,6 +155,15 @@ mod tests {
                     tokens_out: None,
                     reasoning_tokens: None,
                     cost_usd_e6: None,
+                    stop_reason: None,
+                    latency_ms: None,
+                    ttft_ms: None,
+                    retry_count: None,
+                    context_used_tokens: None,
+                    context_max_tokens: None,
+                    cache_creation_tokens: None,
+                    cache_read_tokens: None,
+                    system_prompt_tokens: None,
                     payload: json!({}),
                 },
             )],
@@ -169,6 +184,8 @@ mod tests {
             aggregates: agg,
             prompt_fingerprints: vec![],
             feedback: vec![],
+            session_outcomes: vec![],
+            session_sample_aggs: vec![],
         }
     }
 

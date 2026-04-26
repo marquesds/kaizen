@@ -12,7 +12,8 @@ Config is TOML. **Paths:**
 - **`[sync]`, `[proxy]`, `[telemetry]`:** field-by-field merge. Workspace is applied first, then the user file overwrites (non-empty strings, set numbers, and so on). Nested **`[telemetry.query]`** and **`[telemetry.query.identity_allowlist]`** merge the same way (per-key; see below).
 - **`[scan]`:** `roots` — if the user file sets a non-default `roots` list, that wins; otherwise the workspace’s `[scan].roots` is used. `min_rescan_seconds` merges the same way (user non-default wins, else workspace).
 - **`[retention]`:** field-by-field merge: for each of `hot_days` and `warm_days`, if the user file value differs from the schema default, the user value wins; otherwise the workspace value is kept.
-- **`[sources]`:** the merged value still comes only from the user file (`~/.kaizen/config.toml`); workspace `[sources]` is not applied. Put tail toggles and Cursor options in the user file when you need to change them.
+- **`[sources]`:** `cursor` and `tail.*` merge like `[retention]`: for each key, if the user file’s value still equals the type default, the workspace value is kept; otherwise the user value wins. Use the user file for machine-wide toggles; workspace file for repo-specific overrides.
+- **`[collect.outcomes]`, `[collect.system_sampler]`:** same pattern as `[retention]` (user non-default wins per key; otherwise workspace).
 
 LLM HTTP proxy: [llm-proxy.md](llm-proxy.md).
 
@@ -112,6 +113,27 @@ When `true`, the corresponding field may be emitted in **cleartext** on outbound
 | OTLP | `OTEL_EXPORTER_OTLP_ENDPOINT` (or `KAIZEN_OTEL_EXPORTER_OTLP_ENDPOINT`) |
 
 Redacted effective resolution: `kaizen telemetry print-effective-config`. Implementation: `src/telemetry/resolve.rs`.
+
+## `[collect.outcomes]`
+
+Post-stop test (and optional lint) measurement. Ingest spawns a detached `kaizen outcomes measure` after `Stop` when `enabled = true`. See [outcomes.md](outcomes.md).
+
+| Key | Default | Purpose |
+|-----|---------|--------|
+| `enabled` | `false` | When `true`, run worker after each session `Stop` hook |
+| `test_cmd` | `cargo test --quiet` | Shell command in session workspace (Unix: `/bin/sh -c`) |
+| `timeout_secs` | `600` | Per-command wall-clock limit; process is killed on expiry |
+| `lint_cmd` | (unset) | Optional e.g. `cargo clippy -- -D warnings` |
+
+## `[collect.system_sampler]`
+
+Per-process CPU/RSS samples for the agent PID from `SessionStart`. Ingest spawns `kaizen __sampler-run` when `enabled` and `pid` is present in the hook JSON. Stops on `Stop` via `.kaizen/sampler-stop/<session_id>`. See [system-telemetry.md](system-telemetry.md). Windows: not supported in v1.
+
+| Key | Default | Purpose |
+|-----|---------|--------|
+| `enabled` | `false` | When `true`, start sampler on `SessionStart` if `pid` is set |
+| `sample_ms` | `2000` | Sleep between samples (minimum 100 ms) |
+| `max_samples_per_session` | `3600` | Hard cap per session |
 
 ## `[eval]`
 

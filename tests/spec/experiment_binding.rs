@@ -16,9 +16,9 @@ enum SpecClass {
 impl From<SpecClass> for Classification {
     fn from(s: SpecClass) -> Self {
         match s {
-            SpecClass::Control   => Classification::Control,
+            SpecClass::Control => Classification::Control,
             SpecClass::Treatment => Classification::Treatment,
-            SpecClass::Excluded  => Classification::Excluded,
+            SpecClass::Excluded => Classification::Excluded,
         }
     }
 }
@@ -28,8 +28,8 @@ impl From<SpecClass> for Classification {
 #[derive(Debug, Eq, PartialEq, Deserialize)]
 struct BindingState {
     manual_tag: SpecClass,
-    git_class:  SpecClass,
-    conflict:   bool,
+    git_class: SpecClass,
+    conflict: bool,
 }
 
 // --- Driver ---
@@ -37,16 +37,16 @@ struct BindingState {
 #[derive(Debug)]
 struct BindingDriver {
     manual_tag: Classification,
-    git_class:  Classification,
-    conflict:   bool,
+    git_class: Classification,
+    conflict: bool,
 }
 
 impl Default for BindingDriver {
     fn default() -> Self {
         Self {
             manual_tag: Classification::Excluded,
-            git_class:  Classification::Excluded,
-            conflict:   false,
+            git_class: Classification::Excluded,
+            conflict: false,
         }
     }
 }
@@ -63,14 +63,14 @@ impl State<BindingDriver> for BindingState {
     fn from_driver(d: &BindingDriver) -> Result<Self> {
         Ok(BindingState {
             manual_tag: match d.manual_tag {
-                Classification::Control   => SpecClass::Control,
+                Classification::Control => SpecClass::Control,
                 Classification::Treatment => SpecClass::Treatment,
-                Classification::Excluded  => SpecClass::Excluded,
+                Classification::Excluded => SpecClass::Excluded,
             },
             git_class: match d.git_class {
-                Classification::Control   => SpecClass::Control,
+                Classification::Control => SpecClass::Control,
                 Classification::Treatment => SpecClass::Treatment,
-                Classification::Excluded  => SpecClass::Excluded,
+                Classification::Excluded => SpecClass::Excluded,
             },
             conflict: d.conflict,
         })
@@ -111,9 +111,12 @@ impl Driver for BindingDriver {
 #[test]
 fn manual_beats_git() {
     let mut d = BindingDriver::default();
-    d.git_class  = Classification::Treatment;
+    d.git_class = Classification::Treatment;
     d.manual_tag = Classification::Control;
-    assert_eq!(resolve(&d.manual_tag, &d.git_class), Classification::Control);
+    assert_eq!(
+        resolve(&d.manual_tag, &d.git_class),
+        Classification::Control
+    );
 }
 
 // Spot-check: git used when no manual tag.
@@ -121,7 +124,10 @@ fn manual_beats_git() {
 fn git_used_without_manual() {
     let mut d = BindingDriver::default();
     d.git_class = Classification::Treatment;
-    assert_eq!(resolve(&d.manual_tag, &d.git_class), Classification::Treatment);
+    assert_eq!(
+        resolve(&d.manual_tag, &d.git_class),
+        Classification::Treatment
+    );
 }
 
 #[quint_run(

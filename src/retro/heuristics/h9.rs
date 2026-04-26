@@ -80,6 +80,12 @@ mod tests {
             dirty_end: None,
             repo_binding_source: None,
             prompt_fingerprint: None,
+            parent_session_id: None,
+            agent_version: None,
+            os: None,
+            arch: None,
+            repo_file_count: None,
+            repo_total_loc: None,
         }
     }
 
@@ -106,6 +112,15 @@ mod tests {
                         tokens_out: None,
                         reasoning_tokens: None,
                         cost_usd_e6: None,
+                        stop_reason: None,
+                        latency_ms: None,
+                        ttft_ms: None,
+                        retry_count: None,
+                        context_used_tokens: None,
+                        context_max_tokens: None,
+                        cache_creation_tokens: None,
+                        cache_read_tokens: None,
+                        system_prompt_tokens: None,
                         payload: json!({"upstream_error": "timeout"}),
                     },
                 )
@@ -128,6 +143,8 @@ mod tests {
             aggregates: agg,
             prompt_fingerprints: vec![],
             feedback: vec![],
+            session_outcomes: vec![],
+            session_sample_aggs: vec![],
         };
         let bets = run(&inputs);
         assert_eq!(bets.len(), 1);
@@ -156,6 +173,15 @@ mod tests {
                     tokens_out: None,
                     reasoning_tokens: None,
                     cost_usd_e6: None,
+                    stop_reason: None,
+                    latency_ms: None,
+                    ttft_ms: None,
+                    retry_count: None,
+                    context_used_tokens: None,
+                    context_max_tokens: None,
+                    cache_creation_tokens: None,
+                    cache_read_tokens: None,
+                    system_prompt_tokens: None,
                     payload: serde_json::Value::Null,
                 },
             )],
@@ -172,6 +198,8 @@ mod tests {
             aggregates: agg,
             prompt_fingerprints: vec![],
             feedback: vec![],
+            session_outcomes: vec![],
+            session_sample_aggs: vec![],
         };
         assert!(run(&inputs).is_empty());
     }

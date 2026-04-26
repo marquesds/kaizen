@@ -24,11 +24,13 @@ The loop is **observe → summarise → propose → measure**. Each step is a re
 
 **Summarise** at the repository level, not just the token level. Sessions and tool spans accumulate in a local SQLite WAL. The metrics pass walks git and your source tree to build a **code graph** (`file_facts`, `repo_edges`), so retros and experiments can answer: which files co-appear in long sessions, which module boundaries cause agent edit loops, which skills are loaded every turn but never triggered.
 
-**Propose** with 14 deterministic heuristics, no LLM required. `kaizen retro --days 7` ranks bets by `tokens_saved_per_week / effort_minutes`. Each bet includes a hypothesis, estimated impact, evidence links (specific sessions and files), effort in minutes, and a ready-to-run apply command. Deterministic, formally specced in Quint, cheap to run on any schedule. The same engine ships as an **agent skill**: ask *"what should I improve?"* mid-session and kaizen surfaces the top bets inline without leaving your editor.
+**Propose** with 30+ deterministic heuristics, no LLM required. `kaizen retro --days 7` ranks bets by `tokens_saved_per_week / effort_minutes`. Each bet includes a hypothesis, estimated impact, evidence links (specific sessions and files), effort in minutes, and a ready-to-run apply command. Deterministic, formally specced in Quint, cheap to run on any schedule. The same engine ships as an **agent skill**: ask *"what should I improve?"* mid-session and kaizen surfaces the top bets inline without leaving your editor.
 
 **Measure** with bootstrap statistics. `kaizen exp new --bind git` ties a hypothesis to a git commit boundary. Kaizen auto-classifies every subsequent session as control or treatment by walking `git log`. After the window closes, `kaizen exp report` shows control vs treatment sample sizes and medians, median delta with a 95% bootstrap CI (10k resamples, winsorized at p1/p99), and a pass/fail against your target. Works for skill additions, rule changes, and architecture refactors — anything you can pin to a commit.
 
 **Distribute** with redact-first sync. Configure a shared team endpoint and kaizen ships redacted batches: Aho-Corasick secret scanning, env var stripping, absolute path normalization, and git email removal run on every event before it leaves disk. The redaction model is formally verified in a Quint spec. Sync is opt-in, idempotent (UUIDv7 dedup), and restartable after failures.
+
+**Optional local depth:** post-stop test/lint snapshots and per-process CPU/RSS samples are off by default; enable in config for stricter retro signals without sending raw command output off disk ([outcomes](docs/outcomes.md), [system telemetry](docs/system-telemetry.md)).
 
 ## Why
 

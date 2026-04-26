@@ -1,6 +1,19 @@
 # Ingest Contract — Sync Daemon → Server
 
-Stable HTTP API. Defines the only surface the future server (separate
+## Hook payload (optional fields)
+
+Workspace hooks that call `kaizen ingest hook` may include extra keys on **SessionStart** JSON:
+
+| Field | Type | Purpose |
+|-------|------|---------|
+| `pid` | positive integer | OS process id of the agent host to sample when `[collect.system_sampler].enabled` is true |
+| `ppid` | positive integer | Reserved; not read in v1 |
+
+These fields are optional; omit `pid` to skip the system sampler. See [system-telemetry.md](system-telemetry.md).
+
+---
+
+The sections below define the only surface the future server (separate
 repo) must implement. Lets the server be swapped without touching
 clients. PostHog-inspired: event-first, stateless ingest, batched,
 idempotent, project-scoped.
@@ -95,6 +108,13 @@ Client-side defaults:
 
 Server `GET /v1/config` may override these (e.g. `events_per_batch_max:
 1000`).
+
+### Event `kind` values
+
+Clients send snake_case `kind` per event. Accepted values include `tool_call`,
+`tool_result`, `message`, `error`, `cost`, `hook`, and `lifecycle` (behavior
+telemetry; `payload` carries a `type` discriminator). Additive: servers should
+accept unknown kinds as opaque or map them to `message` per team policy.
 
 ## `POST /v1/tool-spans`
 

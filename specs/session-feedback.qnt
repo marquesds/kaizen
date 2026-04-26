@@ -24,7 +24,7 @@ module session_feedback {
     n_bad' = n_bad + 1,
     n_scored' = n_scored,
     sum_scores' = sum_scores,
-    h17_fired' = h17_fired or trigger(n_bad + 1, n_scored, sum_scores)
+    h17_fired' = if (h17_fired) true else trigger(n_bad + 1, n_scored, sum_scores)
   }
 
   // Label good/interesting, no score
@@ -40,7 +40,7 @@ module session_feedback {
     n_bad' = n_bad,
     n_scored' = n_scored + 1,
     sum_scores' = sum_scores + 2,
-    h17_fired' = h17_fired or trigger(n_bad, n_scored + 1, sum_scores + 2)
+    h17_fired' = if (h17_fired) true else trigger(n_bad, n_scored + 1, sum_scores + 2)
   }
 
   // Score 4 — high
@@ -48,7 +48,7 @@ module session_feedback {
     n_bad' = n_bad,
     n_scored' = n_scored + 1,
     sum_scores' = sum_scores + 4,
-    h17_fired' = h17_fired or trigger(n_bad, n_scored + 1, sum_scores + 4)
+    h17_fired' = if (h17_fired) true else trigger(n_bad, n_scored + 1, sum_scores + 4)
   }
 
   action step: bool = any {

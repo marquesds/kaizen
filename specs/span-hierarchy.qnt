@@ -16,15 +16,15 @@ module span_hierarchy {
   var spans: List[Span]
   var next_id: int
 
-  pure def contains(outer: Span, inner: Span): bool =
+  pure def span_contains(outer: Span, inner: Span): bool =
     outer.start <= inner.start and inner.end <= outer.end and outer.id != inner.id
 
   // deepest containing ancestor = the one with max depth among all containers
   pure def assign_parent(s: Span, spans_list: List[Span]): int =
     spans_list.foldl(-1, (best, candidate) =>
-      if (contains(candidate, s) and (best == -1 or
-            spans_list.filter(x => x.id == best).length() == 0 or
-            candidate.depth > spans_list.filter(x => x.id == best).head().depth))
+      if (span_contains(candidate, s) and (best == -1 or
+            spans_list.select(x => x.id == best).length() == 0 or
+            candidate.depth > spans_list.select(x => x.id == best).head().depth))
         candidate.id
       else
         best
@@ -32,7 +32,7 @@ module span_hierarchy {
 
   pure def depth_of(pid: int, spans_list: List[Span]): int =
     if (pid == -1) 0
-    else spans_list.filter(x => x.id == pid).foldl(0, (_, p) => p.depth + 1)
+    else spans_list.select(x => x.id == pid).foldl(0, (_, p) => p.depth + 1)
 
   action init: bool = all {
     spans' = [],
@@ -49,7 +49,6 @@ module span_hierarchy {
   // add_child: narrow span inside last root span → depth 1, parent = root id
   action add_child_span: bool = all {
     spans.length() > 0,
-    val root = spans.last()
     val pid = assign_parent({ id: next_id, start: 10, end: 50, parent: -1, depth: 0 }, spans)
     val d = depth_of(pid, spans)
     val s = { id: next_id, start: 10, end: 50, parent: pid, depth: d }
@@ -75,25 +74,27 @@ module span_hierarchy {
 
   // Every non-root span's interval is contained by its parent's interval.
   val containment_holds: bool =
-    spans.forall(s =>
-      s.parent == -1
-      or spans.filter(p => p.id == s.parent).forall(p => contains(p, s))
+    spans.foldl(true, (acc, s) =>
+      acc and (s.parent == -1
+        or spans.select(p => p.id == s.parent)
+               .foldl(true, (a, p) => a and span_contains(p, s)))
     )
 
   // depth == parent.depth + 1 for non-root spans.
   val depth_consistent: bool =
-    spans.forall(s =>
-      s.parent == -1
-      or spans.filter(p => p.id == s.parent).forall(p => s.depth == p.depth + 1)
+    spans.foldl(true, (acc, s) =>
+      acc and (s.parent == -1
+        or spans.select(p => p.id == s.parent)
+               .foldl(true, (a, p) => a and s.depth == p.depth + 1))
     )
 
   // No span is its own ancestor (forest, no cycles).
   val no_cycles: bool =
-    spans.forall(s => s.parent != s.id)
+    spans.foldl(true, (acc, s) => acc and s.parent != s.id)
 
   // Root spans have depth 0.
   val root_depth_zero: bool =
-    spans.forall(s => s.parent != -1 or s.depth == 0)
+    spans.foldl(true, (acc, s) => acc and (s.parent != -1 or s.depth == 0))
 
   run root_only = {
     init
@@ -121,6 +122,6 @@ module span_hierarchy {
       .then(add_root_span)
       .then(add_child_span)
       .then(add_grandchild_span)
-      .expect(spans.forall(s => s.depth <= 2))
+      .expect(spans.foldl(true, (acc, s) => acc and s.depth <= 2))
   }
 }

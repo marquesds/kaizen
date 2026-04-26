@@ -117,6 +117,8 @@ mod tests {
             aggregates: agg,
             prompt_fingerprints: vec![],
             feedback: vec![],
+            session_outcomes: vec![],
+            session_sample_aggs: vec![],
         };
         let bets = run(&inputs);
         assert_eq!(bets.len(), 1);

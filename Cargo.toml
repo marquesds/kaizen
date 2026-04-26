@@ -163,6 +163,46 @@ path = "tests/spec/openclaw_ingest_spec.rs"
 name = "openclaw_ingest"
 path = "tests/openclaw_ingest.rs"
 
+[[test]]
+name = "eval_h15"
+path = "tests/spec/eval_h15.rs"
+
+[[test]]
+name = "experiment_binding"
+path = "tests/spec/experiment_binding.rs"
+
+[[test]]
+name = "experiment_sequential"
+path = "tests/spec/experiment_sequential.rs"
+
+[[test]]
+name = "prompt_tracking_spec"
+path = "tests/spec/prompt_tracking_spec.rs"
+
+[[test]]
+name = "session_feedback_spec"
+path = "tests/spec/session_feedback_spec.rs"
+
+[[test]]
+name = "span_hierarchy_spec"
+path = "tests/spec/span_hierarchy_spec.rs"
+
+[[test]]
+name = "llm_call_quality"
+path = "tests/spec/llm_call_quality.rs"
+
+[[test]]
+name = "agent_behavior"
+path = "tests/spec/agent_behavior.rs"
+
+[[test]]
+name = "session_outcome"
+path = "tests/spec/session_outcome.rs"
+
+[[test]]
+name = "system_sampler"
+path = "tests/spec/system_sampler.rs"
+
 [features]
 default = []
 # Optional fan-out targets (lean default build)
@@ -215,6 +255,7 @@ rmcp = { version = "1", features = ["server", "transport-io", "schemars", "macro
 axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio", "matched-path"] }
 tower = { version = "0.5", features = ["util"] }
 tower-http = { version = "0.6", features = ["limit", "set-header"] }
+sysinfo = { version = "0.38.4", default-features = false, features = ["system"] }
 
 [dev-dependencies]
 quint-connect = "0.1"

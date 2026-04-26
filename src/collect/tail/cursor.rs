@@ -45,6 +45,16 @@ pub fn parse_cursor_line(
                     .and_then(|n| n.as_str())
                     .unwrap_or("")
                     .to_string();
+                if tool_name == "TodoWrite" {
+                    return Ok(Some(todo_write_lifecycle(
+                        session_id,
+                        seq,
+                        ts_ms,
+                        ts_exact,
+                        reasoning_tokens,
+                        block,
+                    )));
+                }
                 return Ok(Some(Event {
                     session_id: session_id.to_string(),
                     seq,
@@ -61,6 +71,15 @@ pub fn parse_cursor_line(
                     tokens_out: None,
                     reasoning_tokens,
                     cost_usd_e6: None,
+                    stop_reason: None,
+                    latency_ms: None,
+                    ttft_ms: None,
+                    retry_count: None,
+                    context_used_tokens: None,
+                    context_max_tokens: None,
+                    cache_creation_tokens: None,
+                    cache_read_tokens: None,
+                    system_prompt_tokens: None,
                     payload: block.clone(),
                 }));
             }
@@ -81,6 +100,15 @@ pub fn parse_cursor_line(
                     tokens_out: None,
                     reasoning_tokens,
                     cost_usd_e6: None,
+                    stop_reason: None,
+                    latency_ms: None,
+                    ttft_ms: None,
+                    retry_count: None,
+                    context_used_tokens: None,
+                    context_max_tokens: None,
+                    cache_creation_tokens: None,
+                    cache_read_tokens: None,
+                    system_prompt_tokens: None,
                     payload: block.clone(),
                 }));
             }
@@ -88,6 +116,66 @@ pub fn parse_cursor_line(
         }
     }
     Ok(None)
+}
+
+fn todo_counts(input: &Value) -> (u32, u32, u32) {
+    let Some(arr) = input.get("todos").and_then(|t| t.as_array()) else {
+        return (0, 0, 0);
+    };
+    let mut comp = 0u32;
+    let mut canc = 0u32;
+    for t in arr {
+        match t.get("status").and_then(|s| s.as_str()).unwrap_or("") {
+            "completed" => comp += 1,
+            "cancelled" => canc += 1,
+            _ => {}
+        }
+    }
+    (arr.len() as u32, comp, canc)
+}
+
+fn todo_write_lifecycle(
+    session_id: &str,
+    seq: u64,
+    ts_ms: u64,
+    ts_exact: bool,
+    reasoning_tokens: Option<u32>,
+    block: &Value,
+) -> Event {
+    let input = block.get("input").unwrap_or(block);
+    let (total, comp, canc) = todo_counts(input);
+    Event {
+        session_id: session_id.to_string(),
+        seq,
+        ts_ms,
+        ts_exact,
+        kind: EventKind::Lifecycle,
+        source: EventSource::Tail,
+        tool: Some("TodoWrite".into()),
+        tool_call_id: block
+            .get("id")
+            .and_then(|v| v.as_str())
+            .map(ToOwned::to_owned),
+        tokens_in: None,
+        tokens_out: None,
+        reasoning_tokens,
+        cost_usd_e6: None,
+        stop_reason: None,
+        latency_ms: None,
+        ttft_ms: None,
+        retry_count: None,
+        context_used_tokens: None,
+        context_max_tokens: None,
+        cache_creation_tokens: None,
+        cache_read_tokens: None,
+        system_prompt_tokens: None,
+        payload: serde_json::json!({
+            "type": "todo_write",
+            "todos_total": total,
+            "todos_completed": comp,
+            "todos_cancelled": canc,
+        }),
+    }
 }
 
 fn line_ts_ms(obj: &serde_json::Map<String, Value>) -> Option<u64> {
@@ -229,6 +317,12 @@ pub fn scan_session_dir_all(dir: &Path) -> Result<Vec<(SessionRecord, Vec<Event>
         dirty_end: None,
         repo_binding_source: None,
         prompt_fingerprint: None,
+        parent_session_id: None,
+        agent_version: None,
+        os: None,
+        arch: None,
+        repo_file_count: None,
+        repo_total_loc: None,
     };
 
     let mut out = vec![(main_record, main_events)];
@@ -269,6 +363,12 @@ pub fn scan_session_dir_all(dir: &Path) -> Result<Vec<(SessionRecord, Vec<Event>
                 dirty_end: None,
                 repo_binding_source: None,
                 prompt_fingerprint: None,
+                parent_session_id: Some(session_id.clone()),
+                agent_version: None,
+                os: None,
+                arch: None,
+                repo_file_count: None,
+                repo_total_loc: None,
             };
             out.push((record, events));
         }
@@ -308,6 +408,12 @@ pub fn scan_session_dir(dir: &Path) -> Result<(SessionRecord, Vec<Event>)> {
         dirty_end: None,
         repo_binding_source: None,
         prompt_fingerprint: None,
+        parent_session_id: None,
+        agent_version: None,
+        os: None,
+        arch: None,
+        repo_file_count: None,
+        repo_total_loc: None,
     };
     Ok((record, events))
 }

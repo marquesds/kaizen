@@ -29,6 +29,14 @@ Idempotent workspace setup. Typical effects:
 
 Re-running is safe. Codex, Goose, OpenCode, Copilot, and OpenClaw sessions are ingested via **transcript tail** and hooks; `init` patches **Cursor**, **Claude Code**, and **OpenClaw** hook files (writes `~/.openclaw/hooks/kaizen-events/handler.ts`).
 
+## `kaizen outcomes`
+
+```text
+kaizen outcomes show <id> [--workspace]   # JSON row from session_outcomes (opt-in feature)
+```
+
+Requires prior measurement with `[collect.outcomes] enabled` and a completed `Stop` hook. Internal: `kaizen outcomes measure` (spawned by ingest). See [outcomes.md](outcomes.md).
+
 ## `kaizen sessions`
 
 ```bash

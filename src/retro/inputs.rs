@@ -54,6 +54,12 @@ pub fn load_inputs(
     let feedback = store
         .list_feedback_in_window(window_start_ms, window_end_ms)
         .unwrap_or_default();
+    let session_outcomes = store
+        .list_session_outcomes_in_window(workspace_key, window_start_ms, window_end_ms)
+        .unwrap_or_default();
+    let session_sample_aggs = store
+        .list_session_sample_aggs_in_window(workspace_key, window_start_ms, window_end_ms)
+        .unwrap_or_default();
     Ok(Inputs {
         window_start_ms,
         window_end_ms,
@@ -71,6 +77,8 @@ pub fn load_inputs(
         eval_scores,
         prompt_fingerprints,
         feedback,
+        session_outcomes,
+        session_sample_aggs,
     })
 }
 
@@ -137,6 +145,7 @@ fn event_kind_from_outbound(s: &str) -> EventKind {
         "error" => EventKind::Error,
         "cost" => EventKind::Cost,
         "hook" => EventKind::Hook,
+        "lifecycle" => EventKind::Lifecycle,
         _ => EventKind::Message,
     }
 }
@@ -168,6 +177,12 @@ fn session_event_from_outbound(o: &OutboundEvent, workspace_key: &str) -> (Sessi
         dirty_end: None,
         repo_binding_source: None,
         prompt_fingerprint: None,
+        parent_session_id: None,
+        agent_version: None,
+        os: None,
+        arch: None,
+        repo_file_count: None,
+        repo_total_loc: None,
     };
     let event = Event {
         session_id: sid,
@@ -182,6 +197,15 @@ fn session_event_from_outbound(o: &OutboundEvent, workspace_key: &str) -> (Sessi
         tokens_out: o.tokens_out,
         reasoning_tokens: o.reasoning_tokens,
         cost_usd_e6: o.cost_usd_e6,
+        stop_reason: None,
+        latency_ms: None,
+        ttft_ms: None,
+        retry_count: None,
+        context_used_tokens: None,
+        context_max_tokens: None,
+        cache_creation_tokens: None,
+        cache_read_tokens: None,
+        system_prompt_tokens: None,
         payload: o.payload.clone(),
     };
     (session, event)
@@ -236,6 +260,12 @@ fn load_inputs_from_remote_cache(
         eval_scores: vec![],
         prompt_fingerprints: vec![],
         feedback: vec![],
+        session_outcomes: store
+            .list_session_outcomes_in_window(workspace_key, start_ms, end_ms)
+            .unwrap_or_default(),
+        session_sample_aggs: store
+            .list_session_sample_aggs_in_window(workspace_key, start_ms, end_ms)
+            .unwrap_or_default(),
     })
 }
 

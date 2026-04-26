@@ -26,7 +26,7 @@ module eval_h15 {
     n_low' = n_low + 1,
     sum_scores' = sum_scores + 20,
     prior_mean' = prior_mean,
-    h15_fired' = h15_fired or trigger(n_low + 1, n_evals + 1, sum_scores + 20, prior_mean)
+    h15_fired' = if (h15_fired) true else trigger(n_low + 1, n_evals + 1, sum_scores + 20, prior_mean)
   }
 
   action add_ok: bool = all {
@@ -34,7 +34,7 @@ module eval_h15 {
     n_low' = n_low,
     sum_scores' = sum_scores + 70,
     prior_mean' = prior_mean,
-    h15_fired' = h15_fired or trigger(n_low, n_evals + 1, sum_scores + 70, prior_mean)
+    h15_fired' = if (h15_fired) true else trigger(n_low, n_evals + 1, sum_scores + 70, prior_mean)
   }
 
   action rotate: bool = all {

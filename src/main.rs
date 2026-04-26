@@ -224,6 +224,22 @@ enum Command {
         #[command(subcommand)]
         subcmd: FeedbackCommand,
     },
+    /// Post-stop test/lint outcomes (opt-in). See docs/outcomes.md.
+    #[command(next_help_heading = "Trust & observe")]
+    Outcomes {
+        #[command(subcommand)]
+        subcmd: OutcomesCommand,
+    },
+    /// Internal: sample OS stats for a hook PID. Spawned by ingest when opt-in.
+    #[command(hide = true, name = "__sampler-run")]
+    SamplerRun {
+        #[arg(long)]
+        workspace: PathBuf,
+        #[arg(long)]
+        session: String,
+        #[arg(long)]
+        pid: u32,
+    },
 }
 
 #[derive(Subcommand)]
@@ -561,6 +577,27 @@ enum SessionsCommand {
 }
 
 #[derive(Subcommand)]
+enum OutcomesCommand {
+    /// Show stored JSON row for a session.
+    Show {
+        id: String,
+        /// workspace root (default: cwd)
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+    },
+    /// Internal: run tests/lint and upsert `session_outcomes` (ingest spawns this).
+    #[command(hide = true)]
+    Measure {
+        /// workspace root (db + repo path)
+        #[arg(long)]
+        workspace: PathBuf,
+        /// Session id
+        #[arg(long)]
+        session: String,
+    },
+}
+
+#[derive(Subcommand)]
 enum FeedbackCommand {
     /// List feedback records for the workspace.
     List {
@@ -831,6 +868,19 @@ fn main() -> anyhow::Result<()> {
                 workspace.as_deref(),
             ),
         },
+        Command::Outcomes { subcmd } => match subcmd {
+            OutcomesCommand::Show { id, workspace } => {
+                kaizen::shell::outcomes_cmd::cmd_outcomes_show(&id, workspace.as_deref())
+            }
+            OutcomesCommand::Measure { workspace, session } => {
+                kaizen::shell::outcomes_cmd::cmd_outcomes_measure(&workspace, &session)
+            }
+        },
+        Command::SamplerRun {
+            workspace,
+            session,
+            pid,
+        } => kaizen::shell::sampler_cmd::cmd_sampler_run(&workspace, &session, pid),
     }
 }
 

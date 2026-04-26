@@ -20,6 +20,12 @@ Atomic telemetry record: prompt, assistant turn, tool call, hook fire,
 session lifecycle. Ordered by `event_seq` within a session. See
 [datamodel.md](datamodel.md).
 
+**Lifecycle events:** `EventKind::Lifecycle` carries structured behavior signals in
+`payload`, with `payload.type` set to values such as `todo_write` (from Cursor `TodoWrite`
+in transcripts) or `mode_transition` (when hooks or tails emit them). Hooks may set
+`reject_diff: true` on `Hook` payloads for apply/reject telemetry; retro heuristic H24
+reads that field.
+
 ## Collection
 
 Two tiers:
@@ -31,6 +37,10 @@ Two tiers:
   `~/.kaizen/config.toml`).
 - **Tier 2 — hooks.** `kaizen init` patches Cursor, Claude Code, and OpenClaw hooks
   to pipe JSON events into `kaizen ingest hook`.
+
+**Session outcomes (opt-in):** after `Stop`, a detached child can run your test/lint command and store a row in `session_outcomes`. See [outcomes.md](outcomes.md).
+
+**Process samples (opt-in):** if the hook sends `pid` on `SessionStart` and sampling is enabled, a detached child records CPU/memory for that PID until `Stop` or a cap. See [system-telemetry.md](system-telemetry.md).
 
 ### Channel meta tag
 

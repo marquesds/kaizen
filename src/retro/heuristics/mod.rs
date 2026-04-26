@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Heuristic bets H1–H14.
+//! Heuristic bets H1–H32.
 
 mod h1;
 mod h10;
@@ -11,8 +11,21 @@ mod h15;
 mod h16;
 mod h17;
 mod h18;
+mod h19;
 mod h2;
+mod h20;
+mod h21;
+mod h22;
+mod h23;
+mod h24;
+mod h25;
+mod h27;
+mod h28;
+mod h29;
 mod h3;
+mod h30;
+mod h31;
+mod h32;
 mod h4;
 mod h5;
 mod h6;
@@ -42,5 +55,18 @@ pub fn all_bets(inputs: &Inputs) -> Vec<Bet> {
     v.extend(h16::run(inputs));
     v.extend(h17::run(inputs));
     v.extend(h18::run(inputs));
+    v.extend(h19::run(inputs));
+    v.extend(h20::run(inputs));
+    v.extend(h21::run(inputs));
+    v.extend(h22::run(inputs));
+    v.extend(h23::run(inputs));
+    v.extend(h24::run(inputs));
+    v.extend(h25::run(inputs));
+    v.extend(h27::run(inputs));
+    v.extend(h28::run(inputs));
+    v.extend(h29::run(inputs));
+    v.extend(h30::run(inputs));
+    v.extend(h31::run(inputs));
+    v.extend(h32::run(inputs));
     v
 }

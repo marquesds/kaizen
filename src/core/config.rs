@@ -424,6 +424,75 @@ fn default_eval_min_cost() -> f64 {
     0.01
 }
 
+/// Opt-in post-hook outcome measurement (Tier C).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CollectOutcomesConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "default_outcomes_test_cmd")]
+    pub test_cmd: String,
+    #[serde(default = "default_outcomes_timeout_secs")]
+    pub timeout_secs: u64,
+    #[serde(default)]
+    pub lint_cmd: Option<String>,
+}
+
+fn default_outcomes_test_cmd() -> String {
+    "cargo test --quiet".to_string()
+}
+
+fn default_outcomes_timeout_secs() -> u64 {
+    600
+}
+
+impl Default for CollectOutcomesConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            test_cmd: default_outcomes_test_cmd(),
+            timeout_secs: default_outcomes_timeout_secs(),
+            lint_cmd: None,
+        }
+    }
+}
+
+/// Opt-in per-process sampling (Tier D).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CollectSystemSamplerConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "default_sampler_sample_ms")]
+    pub sample_ms: u64,
+    #[serde(default = "default_sampler_max_samples")]
+    pub max_samples_per_session: u32,
+}
+
+fn default_sampler_sample_ms() -> u64 {
+    2000
+}
+
+fn default_sampler_max_samples() -> u32 {
+    3600
+}
+
+impl Default for CollectSystemSamplerConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            sample_ms: default_sampler_sample_ms(),
+            max_samples_per_session: default_sampler_max_samples(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct CollectConfig {
+    #[serde(default)]
+    pub outcomes: CollectOutcomesConfig,
+    #[serde(default)]
+    pub system_sampler: CollectSystemSamplerConfig,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Config {
     #[serde(default)]
@@ -440,6 +509,8 @@ pub struct Config {
     pub proxy: ProxyConfig,
     #[serde(default)]
     pub eval: EvalConfig,
+    #[serde(default)]
+    pub collect: CollectConfig,
 }
 
 /// Load config: workspace `.kaizen/config.toml` then `~/.kaizen/config.toml`.
@@ -467,12 +538,135 @@ fn load_file(path: &Path) -> Option<Config> {
 fn merge(base: Config, user: Config) -> Config {
     Config {
         scan: merge_scan(base.scan, user.scan),
-        sources: user.sources,
+        sources: merge_sources(base.sources, user.sources),
         retention: merge_retention(base.retention, user.retention),
         sync: merge_sync(base.sync, user.sync),
         telemetry: merge_telemetry(base.telemetry, user.telemetry),
         proxy: merge_proxy(base.proxy, user.proxy),
         eval: merge_eval(base.eval, user.eval),
+        collect: merge_collect(base.collect, user.collect),
+    }
+}
+
+fn merge_collect(base: CollectConfig, user: CollectConfig) -> CollectConfig {
+    let def = CollectConfig::default();
+    CollectConfig {
+        outcomes: merge_collect_outcomes(base.outcomes, user.outcomes, def.outcomes),
+        system_sampler: merge_collect_sampler(
+            base.system_sampler,
+            user.system_sampler,
+            def.system_sampler,
+        ),
+    }
+}
+
+fn merge_collect_outcomes(
+    base: CollectOutcomesConfig,
+    user: CollectOutcomesConfig,
+    def: CollectOutcomesConfig,
+) -> CollectOutcomesConfig {
+    CollectOutcomesConfig {
+        enabled: if user.enabled != def.enabled {
+            user.enabled
+        } else {
+            base.enabled
+        },
+        test_cmd: if user.test_cmd != def.test_cmd {
+            user.test_cmd
+        } else {
+            base.test_cmd
+        },
+        timeout_secs: if user.timeout_secs != def.timeout_secs {
+            user.timeout_secs
+        } else {
+            base.timeout_secs
+        },
+        lint_cmd: user.lint_cmd.or(base.lint_cmd),
+    }
+}
+
+fn merge_collect_sampler(
+    base: CollectSystemSamplerConfig,
+    user: CollectSystemSamplerConfig,
+    def: CollectSystemSamplerConfig,
+) -> CollectSystemSamplerConfig {
+    CollectSystemSamplerConfig {
+        enabled: if user.enabled != def.enabled {
+            user.enabled
+        } else {
+            base.enabled
+        },
+        sample_ms: if user.sample_ms != def.sample_ms {
+            user.sample_ms
+        } else {
+            base.sample_ms
+        },
+        max_samples_per_session: if user.max_samples_per_session != def.max_samples_per_session {
+            user.max_samples_per_session
+        } else {
+            base.max_samples_per_session
+        },
+    }
+}
+
+fn merge_sources(base: SourcesConfig, user: SourcesConfig) -> SourcesConfig {
+    let def = SourcesConfig::default();
+    SourcesConfig {
+        cursor: merge_cursor_source(base.cursor, user.cursor, def.cursor),
+        tail: merge_tail_toggles(base.tail, user.tail, def.tail),
+    }
+}
+
+fn merge_cursor_source(
+    base: CursorSourceConfig,
+    user: CursorSourceConfig,
+    def: CursorSourceConfig,
+) -> CursorSourceConfig {
+    CursorSourceConfig {
+        enabled: if user.enabled != def.enabled {
+            user.enabled
+        } else {
+            base.enabled
+        },
+        transcript_glob: if user.transcript_glob != def.transcript_glob {
+            user.transcript_glob
+        } else {
+            base.transcript_glob
+        },
+    }
+}
+
+fn merge_tail_toggles(
+    base: TailAgentToggles,
+    user: TailAgentToggles,
+    def: TailAgentToggles,
+) -> TailAgentToggles {
+    TailAgentToggles {
+        goose: if user.goose != def.goose {
+            user.goose
+        } else {
+            base.goose
+        },
+        openclaw: if user.openclaw != def.openclaw {
+            user.openclaw
+        } else {
+            base.openclaw
+        },
+        opencode: if user.opencode != def.opencode {
+            user.opencode
+        } else {
+            base.opencode
+        },
+        copilot_cli: if user.copilot_cli != def.copilot_cli {
+            user.copilot_cli
+        } else {
+            base.copilot_cli
+        },
+        copilot_vscode: if user.copilot_vscode != def.copilot_vscode {
+            user.copilot_vscode
+        } else {
+            base.copilot_vscode
+        },
     }
 }
 
@@ -789,6 +983,24 @@ mod tests {
         };
         let merged = merge(base, user);
         assert_eq!(merged.scan.roots, vec!["/user"]);
+    }
+
+    #[test]
+    fn merge_sources_user_default_keeps_workspace_cursor() {
+        let base = Config {
+            sources: SourcesConfig {
+                cursor: CursorSourceConfig {
+                    enabled: false,
+                    transcript_glob: "/workspace/glob/**".into(),
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let user = Config::default();
+        let merged = merge(base, user);
+        assert!(!merged.sources.cursor.enabled);
+        assert_eq!(merged.sources.cursor.transcript_glob, "/workspace/glob/**");
     }
 
     #[test]
