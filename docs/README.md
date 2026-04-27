@@ -37,6 +37,7 @@ glossary. For a **guided tour** with exercises, start at [tutorial/README.md](tu
 | [datamodel.md](datamodel.md) | Data structs, relationships, invariants |
 | [patterns.md](patterns.md) | Conventions, design patterns |
 | [ingest-contract.md](ingest-contract.md) | HTTP ingest API |
+| [perf-redesign/](perf-redesign/README.md) | Phased plan for sub-100ms TUI at 100k+ sessions |
 | [adr/](adr/) | Architecture decision records |
 
 ## Keep docs current
