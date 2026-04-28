@@ -8,11 +8,13 @@ use crate::store::Store;
 use crate::store::span_tree::SpanNode;
 use crate::ui::theme;
 use anyhow::Result;
+use arc_swap::ArcSwapOption;
 use crossterm::{
-    event::{self as cxev, Event as CxEvent, KeyCode, KeyEventKind},
+    event::{self as cxev, Event as CxEvent, KeyCode, KeyEvent, KeyEventKind},
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
+use notify::{EventKind as NotifyEventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use ratatui::{
     Terminal,
     backend::CrosstermBackend,
@@ -22,14 +24,20 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap},
 };
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 use time::OffsetDateTime;
-use tokio::sync::broadcast;
-use tokio::time::{Duration, interval};
+use tokio::sync::{Notify, mpsc};
+use tokio::time::{Duration, Instant, sleep_until};
 
 const THIRTY_DAYS_SEC: u64 = 30 * 24 * 3600;
 /// Timestamps below this are treated as Unix **seconds** when `now` looks like ms (ingest mistakes).
 const MS_HEURISTIC_THRESHOLD: u64 = 1_000_000_000_000;
+const WAL_REFRESH_COALESCE_MS: u64 = 100;
+const REPORT_REFRESH_MIN_MS: u64 = 2_000;
 
 struct App {
     /// Unfiltered from store (last refresh).
@@ -54,9 +62,13 @@ struct App {
     detail: bool,
     show_metrics: bool,
     metrics: Option<MetricsReport>,
+    metrics_cache: Arc<ArcSwapOption<MetricsReport>>,
+    report_dirty: Arc<AtomicBool>,
+    report_notify: Arc<Notify>,
     pulse: bool,
     store: Store,
     workspace: String,
+    max_session_started_at_ms: u64,
     /// session_id -> score (1..=5) for visible sessions; populated each refresh.
     feedback_scores: HashMap<String, u8>,
     /// Flat span nodes for selected session (depth-indented in detail pane).
@@ -64,13 +76,23 @@ struct App {
 }
 
 impl App {
-    fn open(workspace: &Path) -> Result<Self> {
+    fn open(
+        workspace: &Path,
+        metrics_cache: Arc<ArcSwapOption<MetricsReport>>,
+        report_dirty: Arc<AtomicBool>,
+        report_notify: Arc<Notify>,
+    ) -> Result<Self> {
         let db = workspace.join(".kaizen/kaizen.db");
-        let store = Store::open(&db)?;
+        Store::open(&db)?;
+        let store = Store::open_read_only(&db)?;
         let ws = workspace.to_string_lossy().to_string();
         let sessions_all = store.list_sessions(&ws)?;
-        let _ = index::ensure_indexed(&store, workspace, false);
-        let metrics = report::build_report(&store, &ws, 7).ok();
+        let max_session_started_at_ms = sessions_all
+            .iter()
+            .map(|s| s.started_at_ms)
+            .max()
+            .unwrap_or(0);
+        let metrics = metrics_cache.load_full().as_deref().cloned();
         let mut app = Self {
             sessions: Vec::new(),
             sessions_all,
@@ -87,14 +109,20 @@ impl App {
             detail: false,
             show_metrics: false,
             metrics,
+            metrics_cache,
+            report_dirty,
+            report_notify,
             pulse: false,
             store,
             workspace: ws,
+            max_session_started_at_ms,
             feedback_scores: HashMap::new(),
             span_nodes: vec![],
         };
         app.reapply_filter();
-        app.refresh()?;
+        app.refresh_selected()?;
+        app.refresh_feedback();
+        app.mark_report_dirty();
         Ok(app)
     }
 
@@ -113,10 +141,80 @@ impl App {
         self.sel_session = self.sel_session.min(self.sessions.len().saturating_sub(1));
     }
 
-    fn refresh(&mut self) -> Result<()> {
+    fn sync_metrics_cache(&mut self) {
+        self.metrics = self.metrics_cache.load_full().as_deref().cloned();
+    }
+
+    fn mark_report_dirty(&self) {
+        self.report_dirty.store(true, Ordering::Release);
+        self.report_notify.notify_one();
+    }
+
+    fn sort_sessions(&mut self) {
+        self.sessions_all.sort_by(|a, b| {
+            b.started_at_ms
+                .cmp(&a.started_at_ms)
+                .then_with(|| a.id.cmp(&b.id))
+        });
+    }
+
+    fn refresh_full(&mut self) -> Result<()> {
         self.sessions_all = self.store.list_sessions(&self.workspace)?;
+        self.max_session_started_at_ms = self
+            .sessions_all
+            .iter()
+            .map(|s| s.started_at_ms)
+            .max()
+            .unwrap_or(0);
         self.reapply_filter();
         self.pulse = !self.pulse;
+        self.refresh_selected()?;
+        self.refresh_feedback();
+        self.sync_metrics_cache();
+        self.mark_report_dirty();
+        Ok(())
+    }
+
+    fn refresh(&mut self) -> Result<()> {
+        self.refresh_sessions_incremental()?;
+        self.reapply_filter();
+        self.pulse = !self.pulse;
+        self.refresh_selected()?;
+        self.refresh_feedback();
+        self.sync_metrics_cache();
+        self.mark_report_dirty();
+        Ok(())
+    }
+
+    fn refresh_sessions_incremental(&mut self) -> Result<()> {
+        let mut added = self
+            .store
+            .list_sessions_started_after(&self.workspace, self.max_session_started_at_ms)?;
+        if let Some(max_started) = added.iter().map(|s| s.started_at_ms).max() {
+            self.max_session_started_at_ms = self.max_session_started_at_ms.max(max_started);
+        }
+        self.sessions_all.append(&mut added);
+        let ids = self
+            .sessions_all
+            .iter()
+            .map(|s| s.id.clone())
+            .collect::<Vec<_>>();
+        let statuses = self.store.session_statuses(&ids)?;
+        let by_id = statuses
+            .into_iter()
+            .map(|row| (row.id, (row.status, row.ended_at_ms)))
+            .collect::<HashMap<_, _>>();
+        for session in &mut self.sessions_all {
+            if let Some((status, ended_at_ms)) = by_id.get(&session.id) {
+                session.status = status.clone();
+                session.ended_at_ms = *ended_at_ms;
+            }
+        }
+        self.sort_sessions();
+        Ok(())
+    }
+
+    fn refresh_selected(&mut self) -> Result<()> {
         if let Some(s) = self.sessions.get(self.sel_session) {
             self.events = self.store.list_events_for_session(&s.id)?;
             self.tool_lead_by_call.clear();
@@ -132,7 +230,11 @@ impl App {
             self.span_nodes.clear();
         }
         self.sel_event = self.sel_event.min(self.events.len().saturating_sub(1));
-        self.metrics = report::build_report(&self.store, &self.workspace, 7).ok();
+        self.sync_metrics_cache();
+        Ok(())
+    }
+
+    fn refresh_feedback(&mut self) {
         let ids: Vec<String> = self.sessions.iter().map(|s| s.id.clone()).collect();
         self.feedback_scores = self
             .store
@@ -141,7 +243,6 @@ impl App {
             .into_iter()
             .filter_map(|(sid, r)| r.score.map(|s| (sid, s.0)))
             .collect();
-        Ok(())
     }
 
     fn selected_session(&self) -> Option<&SessionRecord> {
@@ -583,9 +684,139 @@ fn now_ms() -> u64 {
         .as_millis() as u64
 }
 
-/// Entry point. Opens terminal, polls SQLite every 500 ms, handles keys.
+fn spawn_key_reader(stop: Arc<AtomicBool>) -> mpsc::UnboundedReceiver<KeyEvent> {
+    let (tx, rx) = mpsc::unbounded_channel();
+    tokio::task::spawn_blocking(move || {
+        while !stop.load(Ordering::Acquire) {
+            match cxev::poll(Duration::from_millis(250)) {
+                Ok(true) => match cxev::read() {
+                    Ok(CxEvent::Key(k)) if k.kind == KeyEventKind::Press => {
+                        if tx.send(k).is_err() {
+                            break;
+                        }
+                    }
+                    Ok(_) => {}
+                    Err(_) => break,
+                },
+                Ok(false) => {}
+                Err(_) => break,
+            }
+        }
+    });
+    rx
+}
+
+fn spawn_wal_watcher(
+    wal_path: &Path,
+    dirty: Arc<AtomicBool>,
+) -> Result<(RecommendedWatcher, mpsc::UnboundedReceiver<()>)> {
+    let (tx, rx) = mpsc::unbounded_channel();
+    let watched_wal = wal_path.to_path_buf();
+    let callback_wal = watched_wal.clone();
+    let mut watcher = RecommendedWatcher::new(
+        move |res: notify::Result<notify::Event>| {
+            if let Ok(event) = res
+                && !matches!(event.kind, NotifyEventKind::Access(_))
+                && event.paths.iter().any(|p| p == &callback_wal)
+            {
+                dirty.store(true, Ordering::Release);
+                let _ = tx.send(());
+            }
+        },
+        notify::Config::default(),
+    )?;
+    watcher.watch(
+        watched_wal.parent().unwrap_or_else(|| Path::new(".")),
+        RecursiveMode::NonRecursive,
+    )?;
+    Ok((watcher, rx))
+}
+
+fn spawn_report_worker(
+    db_path: PathBuf,
+    workspace: String,
+    cache: Arc<ArcSwapOption<MetricsReport>>,
+    dirty: Arc<AtomicBool>,
+    notify: Arc<Notify>,
+    ui_tx: mpsc::UnboundedSender<()>,
+) {
+    tokio::spawn(async move {
+        let mut last_run = Instant::now() - Duration::from_millis(REPORT_REFRESH_MIN_MS);
+        loop {
+            notify.notified().await;
+            let ready_at = last_run + Duration::from_millis(REPORT_REFRESH_MIN_MS);
+            let now = Instant::now();
+            if now < ready_at {
+                sleep_until(ready_at).await;
+            }
+            if !dirty.swap(false, Ordering::AcqRel) {
+                continue;
+            }
+            let db = db_path.clone();
+            let ws = workspace.clone();
+            let next = tokio::task::spawn_blocking(move || {
+                let store = Store::open_read_only(&db)?;
+                report::build_report(&store, &ws, 7)
+            })
+            .await;
+            last_run = Instant::now();
+            if let Ok(Ok(report)) = next {
+                cache.store(Some(Arc::new(report)));
+                let _ = ui_tx.send(());
+            }
+        }
+    });
+}
+
+fn spawn_tui_setup_worker(
+    workspace: PathBuf,
+    db_path: PathBuf,
+    report_dirty: Arc<AtomicBool>,
+    report_notify: Arc<Notify>,
+) {
+    tokio::task::spawn_blocking(move || {
+        if let Ok(store) = Store::open(&db_path) {
+            let _ = index::ensure_indexed(&store, &workspace, false);
+            report_dirty.store(true, Ordering::Release);
+            report_notify.notify_one();
+        }
+    });
+}
+
+async fn wait_for_deadline(deadline: Option<Instant>) {
+    match deadline {
+        Some(deadline) => sleep_until(deadline).await,
+        None => std::future::pending::<()>().await,
+    }
+}
+
+/// Entry point. Opens terminal, refreshes on WAL changes, handles keys.
 pub async fn run(workspace: &Path) -> Result<()> {
-    let mut app = App::open(workspace)?;
+    let db_path = workspace.join(".kaizen/kaizen.db");
+    let metrics_cache = Arc::new(ArcSwapOption::from(None));
+    let report_dirty = Arc::new(AtomicBool::new(true));
+    let report_notify = Arc::new(Notify::new());
+    let (report_ui_tx, mut report_ui_rx) = mpsc::unbounded_channel();
+    spawn_report_worker(
+        db_path.clone(),
+        workspace.to_string_lossy().to_string(),
+        metrics_cache.clone(),
+        report_dirty.clone(),
+        report_notify.clone(),
+        report_ui_tx,
+    );
+    let mut app = App::open(
+        workspace,
+        metrics_cache,
+        report_dirty.clone(),
+        report_notify.clone(),
+    )?;
+    spawn_tui_setup_worker(
+        workspace.to_path_buf(),
+        db_path.clone(),
+        report_dirty.clone(),
+        report_notify.clone(),
+    );
     enable_raw_mode()?;
     let mut stdout = std::io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
@@ -597,42 +828,79 @@ pub async fn run(workspace: &Path) -> Result<()> {
         let _ = execute!(std::io::stdout(), LeaveAlternateScreen);
     }));
 
-    let (tx, _rx) = broadcast::channel::<()>(1);
-    let tx2 = tx.clone();
-    tokio::spawn(async move {
-        let mut ticker = interval(Duration::from_millis(500));
-        loop {
-            ticker.tick().await;
-            let _ = tx2.send(());
-        }
-    });
-    let mut rx = tx.subscribe();
+    let wal_dirty = Arc::new(AtomicBool::new(false));
+    let (_watcher, mut wal_rx) =
+        match spawn_wal_watcher(&db_path.with_extension("db-wal"), wal_dirty.clone()) {
+            Ok((watcher, rx)) => (Some(watcher), rx),
+            Err(_) => {
+                let (_tx, rx) = mpsc::unbounded_channel();
+                (None, rx)
+            }
+        };
+    let input_stop = Arc::new(AtomicBool::new(false));
+    let mut key_rx = spawn_key_reader(input_stop.clone());
+    let mut needs_draw = true;
+    let mut pending_refresh = false;
+    let mut refresh_deadline = None;
+    let mut last_refresh = Instant::now() - Duration::from_millis(WAL_REFRESH_COALESCE_MS);
 
     loop {
-        terminal.draw(|f| draw(f, &app))?;
+        if needs_draw {
+            app.sync_metrics_cache();
+            terminal.draw(|f| draw(f, &app))?;
+            needs_draw = false;
+        }
         tokio::select! {
-            _ = rx.recv() => { let _ = app.refresh(); }
-            _ = tokio::task::spawn_blocking(|| { cxev::poll(Duration::from_millis(50)) }) => {
-                if cxev::poll(Duration::ZERO)?
-                    && let CxEvent::Key(k) = cxev::read()?
-                {
-                    if k.kind != KeyEventKind::Press { continue; }
+            _ = wait_for_deadline(refresh_deadline), if refresh_deadline.is_some() => {
+                refresh_deadline = None;
+                if pending_refresh {
+                    pending_refresh = false;
+                    if app.refresh().is_ok() {
+                        last_refresh = Instant::now();
+                        needs_draw = true;
+                    }
+                }
+            }
+            Some(_) = wal_rx.recv() => {
+                if wal_dirty.swap(false, Ordering::AcqRel) {
+                    let ready_at = last_refresh + Duration::from_millis(WAL_REFRESH_COALESCE_MS);
+                    let now = Instant::now();
+                    if now >= ready_at {
+                        if app.refresh().is_ok() {
+                            last_refresh = now;
+                            needs_draw = true;
+                        }
+                    } else {
+                        pending_refresh = true;
+                        refresh_deadline = Some(ready_at);
+                    }
+                }
+            }
+            Some(_) = report_ui_rx.recv() => {
+                app.sync_metrics_cache();
+                needs_draw = true;
+            }
+            Some(k) = key_rx.recv() => {
                     if app.filter_mode {
                         match k.code {
                             KeyCode::Enter => {
                                 app.agent_filter = app.filter_buf.trim().to_string();
                                 app.filter_mode = false;
-                                let _ = app.refresh();
+                                let _ = app.refresh_full();
+                                needs_draw = true;
                             }
                             KeyCode::Esc => {
                                 app.filter_mode = false;
                                 app.filter_buf.clear();
+                                needs_draw = true;
                             }
                             KeyCode::Backspace => {
                                 app.filter_buf.pop();
+                                needs_draw = true;
                             }
                             KeyCode::Char(c) => {
                                 app.filter_buf.push(c);
+                                needs_draw = true;
                             }
                             _ => {}
                         }
@@ -642,6 +910,7 @@ pub async fn run(workspace: &Path) -> Result<()> {
                         KeyCode::Char('/') => {
                             app.filter_mode = true;
                             app.filter_buf.clone_from(&app.agent_filter);
+                            needs_draw = true;
                         }
                         KeyCode::Char('y') if app.left_focus => {
                             if let Some(id) = app.selected_id() {
@@ -655,37 +924,44 @@ pub async fn run(workspace: &Path) -> Result<()> {
                                     }
                                     Err(_) => app.clipboard_note = "no clipboard".to_string(),
                                 }
+                                needs_draw = true;
                             }
                         }
                         KeyCode::Char('q') | KeyCode::Esc if !app.detail && !app.show_help => break,
-                        KeyCode::Char('q') if app.show_help => { app.show_help = false; }
-                        KeyCode::Char('q') => { app.detail = false; app.show_help = false; }
+                        KeyCode::Char('q') if app.show_help => { app.show_help = false; needs_draw = true; }
+                        KeyCode::Char('q') => { app.detail = false; app.show_help = false; needs_draw = true; }
                         KeyCode::Esc | KeyCode::Backspace => {
                             app.detail = false;
                             app.show_help = false;
+                            needs_draw = true;
                         }
-                        KeyCode::Char('?') => app.show_help = !app.show_help,
-                        KeyCode::Char('m') => app.show_metrics = !app.show_metrics,
+                        KeyCode::Char('?') => { app.show_help = !app.show_help; needs_draw = true; }
+                        KeyCode::Char('m') => { app.show_metrics = !app.show_metrics; needs_draw = true; }
                         KeyCode::Tab => {
                             app.left_focus = !app.left_focus;
+                            needs_draw = true;
                         }
-                        KeyCode::Char('r') => { let _ = app.refresh(); }
+                        KeyCode::Char('r') => { let _ = app.refresh_full(); needs_draw = true; }
                         KeyCode::Char('j') | KeyCode::Down => {
                             if app.show_metrics || app.left_focus {
                                 if app.sel_session + 1 < app.sessions.len() {
                                     app.sel_session += 1;
+                                    needs_draw = true;
                                 }
                             } else if app.sel_event + 1 < app.events.len() {
                                 app.sel_event += 1;
+                                needs_draw = true;
                             }
                         }
                         KeyCode::Char('k') | KeyCode::Up => {
                             if app.show_metrics || app.left_focus {
                                 if app.sel_session > 0 {
                                     app.sel_session -= 1;
+                                    needs_draw = true;
                                 }
                             } else if app.sel_event > 0 {
                                 app.sel_event -= 1;
+                                needs_draw = true;
                             }
                         }
                         KeyCode::Char('g') => {
@@ -694,6 +970,7 @@ pub async fn run(workspace: &Path) -> Result<()> {
                             } else {
                                 app.sel_event = 0;
                             }
+                            needs_draw = true;
                         }
                         KeyCode::Char('G') => {
                             if app.show_metrics || app.left_focus {
@@ -701,9 +978,11 @@ pub async fn run(workspace: &Path) -> Result<()> {
                             } else {
                                 app.sel_event = app.events.len().saturating_sub(1);
                             }
+                            needs_draw = true;
                         }
                         KeyCode::Enter if !app.events.is_empty() && !app.show_metrics => {
                             app.detail = !app.detail;
+                            needs_draw = true;
                         }
                         _ => {}
                     }
@@ -713,13 +992,15 @@ pub async fn run(workspace: &Path) -> Result<()> {
                         | KeyCode::Char('g') | KeyCode::Char('G')
                     ) && (app.show_metrics || app.left_focus)
                     {
-                        let _ = app.refresh();
+                        let _ = app.refresh_selected();
+                        needs_draw = true;
                     }
-                }
             }
+            else => {}
         }
     }
 
+    input_stop.store(true, Ordering::Release);
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     Ok(())

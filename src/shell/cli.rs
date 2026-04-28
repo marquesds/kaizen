@@ -414,10 +414,11 @@ pub fn summary_text(
         crate::shell::remote_pull::maybe_telemetry_pull(workspace, &store, &cfg, source, refresh)?;
         maybe_refresh_store(workspace, &store, refresh)?;
         let ws_str = workspace.to_string_lossy().to_string();
-        let mut stats = store.summary_stats(&ws_str)?;
+        let read_store = Store::open_read_only(&crate::core::workspace::db_path(workspace))?;
+        let mut stats = read_store.summary_stats(&ws_str)?;
         if source != crate::core::data_source::DataSource::Local
             && let Ok(Some(agg)) =
-                crate::shell::remote_observe::try_remote_event_agg(&store, &cfg, workspace)
+                crate::shell::remote_observe::try_remote_event_agg(&read_store, &cfg, workspace)
         {
             stats = crate::shell::remote_observe::merge_summary_stats(stats, &agg, source);
         }
@@ -426,7 +427,7 @@ pub fn summary_text(
         by_agent.push(stats.by_agent);
         by_model.push(stats.by_model);
         top_tools.push(stats.top_tools);
-        if let Ok(metrics) = report::build_report(&store, &ws_str, 7) {
+        if let Ok(metrics) = report::build_report(&read_store, &ws_str, 7) {
             if let Some(file) = metrics.hottest_files.first().cloned() {
                 hottest.push(if roots.len() == 1 {
                     file

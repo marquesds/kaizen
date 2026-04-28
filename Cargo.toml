@@ -211,6 +211,10 @@ path = "tests/spec/session_outcome.rs"
 name = "system_sampler"
 path = "tests/spec/system_sampler.rs"
 
+[[test]]
+name = "perf_phase0"
+path = "tests/perf/phase0.rs"
+
 [features]
 default = []
 # Optional fan-out targets (lean default build)
@@ -237,6 +241,7 @@ rusqlite = { version = "0.39", features = ["bundled"] }
 rand = { version = "0.10", features = ["std_rng"] }
 tokio = { version = "1", features = ["full"] }
 notify = "8"
+arc-swap = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 toml = "1.1"

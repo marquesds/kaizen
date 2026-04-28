@@ -11,13 +11,15 @@ use crate::sync::outbound::outbound_event_from_row;
 use crate::sync::redact::redact_payload;
 use crate::sync::smart::enqueue_tool_spans_for_session;
 use anyhow::{Context, Result};
-use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
+use rusqlite::{Connection, OpenFlags, OptionalExtension, TransactionBehavior, params};
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 /// Max `ts_ms` still treated as transcript-only synthetic timing (seq-based fallbacks).
 /// Rows below this use `sessions.started_at_ms` for time-window matching.
 const SYNTHETIC_TS_CEILING_MS: i64 = 1_000_000_000_000;
+const DEFAULT_MMAP_MB: u64 = 256;
 
 const MIGRATIONS: &[&str] = &[
     "CREATE TABLE IF NOT EXISTS sessions (
@@ -250,6 +252,12 @@ const MIGRATIONS: &[&str] = &[
         PRIMARY KEY (session_id, ts_ms, pid)
     )",
     "CREATE INDEX IF NOT EXISTS session_samples_session_idx ON session_samples(session_id)",
+    "CREATE INDEX IF NOT EXISTS tool_spans_session_idx ON tool_spans(session_id)",
+    "CREATE INDEX IF NOT EXISTS tool_spans_started_idx ON tool_spans(started_at_ms)",
+    "CREATE INDEX IF NOT EXISTS tool_spans_ended_idx ON tool_spans(ended_at_ms)",
+    "CREATE INDEX IF NOT EXISTS session_samples_ts_idx ON session_samples(ts_ms)",
+    "CREATE INDEX IF NOT EXISTS events_ts_idx ON events(ts_ms)",
+    "CREATE INDEX IF NOT EXISTS feedback_session_idx ON session_feedback(session_id)",
 ];
 
 /// Per-workspace activity dashboard stats.
@@ -370,8 +378,29 @@ pub struct ToolSpanSyncRow {
     pub paths: Vec<String>,
 }
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum StoreOpenMode {
+    ReadWrite,
+    ReadOnlyQuery,
+}
+
+#[derive(Debug, Clone)]
+pub struct SessionStatusRow {
+    pub id: String,
+    pub status: SessionStatus,
+    pub ended_at_ms: Option<u64>,
+}
+
+#[derive(Clone)]
+struct SpanTreeCacheEntry {
+    session_id: String,
+    last_event_seq: Option<u64>,
+    nodes: Vec<crate::store::span_tree::SpanNode>,
+}
+
 pub struct Store {
     conn: Connection,
+    span_tree_cache: RefCell<Option<SpanTreeCacheEntry>>,
 }
 
 impl Store {
@@ -380,17 +409,40 @@ impl Store {
     }
 
     pub fn open(path: &Path) -> Result<Self> {
+        Self::open_with_mode(path, StoreOpenMode::ReadWrite)
+    }
+
+    pub fn open_read_only(path: &Path) -> Result<Self> {
+        Self::open_with_mode(path, StoreOpenMode::ReadOnlyQuery)
+    }
+
+    pub fn open_with_mode(path: &Path, mode: StoreOpenMode) -> Result<Self> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        let conn =
-            Connection::open(path).with_context(|| format!("open db: {}", path.display()))?;
-        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;")?;
-        for sql in MIGRATIONS {
-            conn.execute_batch(sql)?;
+        let conn = match mode {
+            StoreOpenMode::ReadWrite => Connection::open(path),
+            StoreOpenMode::ReadOnlyQuery => Connection::open_with_flags(
+                path,
+                OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+            ),
         }
-        ensure_schema_columns(&conn)?;
-        Ok(Self { conn })
+        .with_context(|| format!("open db: {}", path.display()))?;
+        apply_pragmas(&conn, mode)?;
+        if mode == StoreOpenMode::ReadWrite {
+            for sql in MIGRATIONS {
+                conn.execute_batch(sql)?;
+            }
+            ensure_schema_columns(&conn)?;
+        }
+        Ok(Self {
+            conn,
+            span_tree_cache: RefCell::new(None),
+        })
+    }
+
+    fn invalidate_span_tree_cache(&self) {
+        *self.span_tree_cache.borrow_mut() = None;
     }
 
     pub fn upsert_session(&self, s: &SessionRecord) -> Result<()> {
@@ -562,6 +614,7 @@ impl Store {
         }
         index_event_derived(&self.conn, e)?;
         rebuild_tool_spans_for_session(&self.conn, &e.session_id)?;
+        self.invalidate_span_tree_cache();
         let Some(ctx) = ctx else {
             return Ok(());
         };
@@ -816,6 +869,7 @@ impl Store {
             params![cutoff_ms],
         )?;
         tx.commit()?;
+        self.invalidate_span_tree_cache();
         Ok(PruneStats {
             sessions_removed: sessions_to_remove as u64,
             events_removed: events_to_remove as u64,
@@ -912,6 +966,45 @@ impl Store {
             });
         }
         Ok(out)
+    }
+
+    pub fn list_sessions_started_after(
+        &self,
+        workspace: &str,
+        after_started_at_ms: u64,
+    ) -> Result<Vec<SessionRecord>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, agent, model, workspace, started_at_ms, ended_at_ms, status, trace_path,
+                    start_commit, end_commit, branch, dirty_start, dirty_end, repo_binding_source,
+                    prompt_fingerprint, parent_session_id, agent_version, os, arch,
+                    repo_file_count, repo_total_loc
+             FROM sessions
+             WHERE workspace = ?1 AND started_at_ms > ?2
+             ORDER BY started_at_ms DESC",
+        )?;
+        let rows = stmt.query_map(params![workspace, after_started_at_ms as i64], session_row)?;
+        rows.map(|r| r.map_err(anyhow::Error::from)).collect()
+    }
+
+    pub fn session_statuses(&self, ids: &[String]) -> Result<Vec<SessionStatusRow>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let placeholders = ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let sql =
+            format!("SELECT id, status, ended_at_ms FROM sessions WHERE id IN ({placeholders})");
+        let mut stmt = self.conn.prepare(&sql)?;
+        let params: Vec<&dyn rusqlite::ToSql> =
+            ids.iter().map(|s| s as &dyn rusqlite::ToSql).collect();
+        let rows = stmt.query_map(params.as_slice(), |r| {
+            let status: String = r.get(1)?;
+            Ok(SessionStatusRow {
+                id: r.get(0)?,
+                status: status_from_str(&status),
+                ended_at_ms: r.get::<_, Option<i64>>(2)?.map(|v| v as u64),
+            })
+        })?;
+        rows.map(|r| r.map_err(anyhow::Error::from)).collect()
     }
 
     pub fn summary_stats(&self, workspace: &str) -> Result<SummaryStats> {
@@ -1747,15 +1840,34 @@ impl Store {
         end_ms: u64,
     ) -> Result<Vec<ToolSpanView>> {
         let mut stmt = self.conn.prepare(
-            "SELECT ts.span_id, ts.tool, ts.status, ts.lead_time_ms, ts.tokens_in, ts.tokens_out,
-                    ts.reasoning_tokens, ts.cost_usd_e6, ts.paths_json,
-                    ts.parent_span_id, ts.depth, ts.subtree_cost_usd_e6, ts.subtree_token_count
-             FROM tool_spans ts
-             JOIN sessions s ON s.id = ts.session_id
-             WHERE s.workspace = ?1
-               AND COALESCE(ts.started_at_ms, ts.ended_at_ms, 0) >= ?2
-               AND COALESCE(ts.started_at_ms, ts.ended_at_ms, 0) <= ?3
-             ORDER BY COALESCE(ts.started_at_ms, ts.ended_at_ms, 0) DESC",
+            "SELECT span_id, tool, status, lead_time_ms, tokens_in, tokens_out,
+                    reasoning_tokens, cost_usd_e6, paths_json,
+                    parent_span_id, depth, subtree_cost_usd_e6, subtree_token_count
+             FROM (
+                 SELECT ts.span_id, ts.tool, ts.status, ts.lead_time_ms,
+                        ts.tokens_in, ts.tokens_out, ts.reasoning_tokens,
+                        ts.cost_usd_e6, ts.paths_json, ts.parent_span_id,
+                        ts.depth, ts.subtree_cost_usd_e6, ts.subtree_token_count,
+                        ts.started_at_ms AS sort_ms
+                 FROM tool_spans ts
+                 JOIN sessions s ON s.id = ts.session_id
+                 WHERE s.workspace = ?1
+                   AND ts.started_at_ms >= ?2
+                   AND ts.started_at_ms <= ?3
+                 UNION ALL
+                 SELECT ts.span_id, ts.tool, ts.status, ts.lead_time_ms,
+                        ts.tokens_in, ts.tokens_out, ts.reasoning_tokens,
+                        ts.cost_usd_e6, ts.paths_json, ts.parent_span_id,
+                        ts.depth, ts.subtree_cost_usd_e6, ts.subtree_token_count,
+                        ts.ended_at_ms AS sort_ms
+                 FROM tool_spans ts
+                 JOIN sessions s ON s.id = ts.session_id
+                 WHERE s.workspace = ?1
+                   AND ts.started_at_ms IS NULL
+                   AND ts.ended_at_ms >= ?2
+                   AND ts.ended_at_ms <= ?3
+             )
+             ORDER BY sort_ms DESC",
         )?;
         let rows = stmt.query_map(params![workspace, start_ms as i64, end_ms as i64], |row| {
             let paths_json: String = row.get(8)?;
@@ -1784,6 +1896,13 @@ impl Store {
         &self,
         session_id: &str,
     ) -> Result<Vec<crate::store::span_tree::SpanNode>> {
+        let last_event_seq = self.last_event_seq_for_session(session_id)?;
+        if let Some(entry) = self.span_tree_cache.borrow().as_ref()
+            && entry.session_id == session_id
+            && entry.last_event_seq == last_event_seq
+        {
+            return Ok(entry.nodes.clone());
+        }
         let mut stmt = self.conn.prepare(
             "SELECT span_id, tool, status, lead_time_ms, tokens_in, tokens_out,
                     reasoning_tokens, cost_usd_e6, paths_json,
@@ -1813,7 +1932,25 @@ impl Store {
             })
         })?;
         let spans: Vec<_> = rows.filter_map(|r| r.ok()).collect();
-        Ok(crate::store::span_tree::build_tree(spans))
+        let nodes = crate::store::span_tree::build_tree(spans);
+        *self.span_tree_cache.borrow_mut() = Some(SpanTreeCacheEntry {
+            session_id: session_id.to_string(),
+            last_event_seq,
+            nodes: nodes.clone(),
+        });
+        Ok(nodes)
+    }
+
+    pub fn last_event_seq_for_session(&self, session_id: &str) -> Result<Option<u64>> {
+        let seq = self
+            .conn
+            .query_row(
+                "SELECT MAX(seq) FROM events WHERE session_id = ?1",
+                params![session_id],
+                |r| r.get::<_, Option<i64>>(0),
+            )?
+            .map(|v| v as u64);
+        Ok(seq)
     }
 
     pub fn tool_spans_for_session(&self, session_id: &str) -> Result<Vec<ToolSpanSyncRow>> {
@@ -2276,8 +2413,62 @@ fn now_ms() -> u64 {
         .as_millis() as u64
 }
 
+fn mmap_size_bytes_from_mb(raw: Option<&str>) -> i64 {
+    raw.and_then(|s| s.trim().parse::<u64>().ok())
+        .unwrap_or(DEFAULT_MMAP_MB)
+        .saturating_mul(1024)
+        .saturating_mul(1024)
+        .min(i64::MAX as u64) as i64
+}
+
+fn apply_pragmas(conn: &Connection, mode: StoreOpenMode) -> Result<()> {
+    let mmap_size = mmap_size_bytes_from_mb(std::env::var("KAIZEN_MMAP_MB").ok().as_deref());
+    conn.execute_batch(&format!(
+        "
+        PRAGMA journal_mode=WAL;
+        PRAGMA busy_timeout=5000;
+        PRAGMA synchronous=NORMAL;
+        PRAGMA cache_size=-65536;
+        PRAGMA mmap_size={mmap_size};
+        PRAGMA temp_store=MEMORY;
+        PRAGMA wal_autocheckpoint=1000;
+        "
+    ))?;
+    if mode == StoreOpenMode::ReadOnlyQuery {
+        conn.execute_batch("PRAGMA query_only=ON;")?;
+    }
+    Ok(())
+}
+
 fn count_q(conn: &Connection, sql: &str, workspace: &str) -> Result<u64> {
     Ok(conn.query_row(sql, params![workspace], |r| r.get::<_, i64>(0))? as u64)
+}
+
+fn session_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<SessionRecord> {
+    let status_str: String = row.get(6)?;
+    Ok(SessionRecord {
+        id: row.get(0)?,
+        agent: row.get(1)?,
+        model: row.get(2)?,
+        workspace: row.get(3)?,
+        started_at_ms: row.get::<_, i64>(4)? as u64,
+        ended_at_ms: row.get::<_, Option<i64>>(5)?.map(|v| v as u64),
+        status: status_from_str(&status_str),
+        trace_path: row.get(7)?,
+        start_commit: row.get(8)?,
+        end_commit: row.get(9)?,
+        branch: row.get(10)?,
+        dirty_start: row.get::<_, Option<i64>>(11)?.map(i64_to_bool),
+        dirty_end: row.get::<_, Option<i64>>(12)?.map(i64_to_bool),
+        repo_binding_source: empty_to_none(row.get::<_, String>(13)?),
+        prompt_fingerprint: row.get(14)?,
+        parent_session_id: row.get(15)?,
+        agent_version: row.get(16)?,
+        os: row.get(17)?,
+        arch: row.get(18)?,
+        repo_file_count: row.get::<_, Option<i64>>(19)?.map(|v| v as u32),
+        repo_total_loc: row.get::<_, Option<i64>>(20)?.map(|v| v as u64),
+    })
 }
 
 fn cost_stats(conn: &Connection, workspace: &str) -> Result<(i64, u64)> {
@@ -2597,6 +2788,69 @@ mod tests {
     }
 
     #[test]
+    fn open_applies_phase0_pragmas() {
+        let dir = TempDir::new().unwrap();
+        let store = Store::open(&dir.path().join("kaizen.db")).unwrap();
+        let synchronous: i64 = store
+            .conn
+            .query_row("PRAGMA synchronous", [], |r| r.get(0))
+            .unwrap();
+        let cache_size: i64 = store
+            .conn
+            .query_row("PRAGMA cache_size", [], |r| r.get(0))
+            .unwrap();
+        let temp_store: i64 = store
+            .conn
+            .query_row("PRAGMA temp_store", [], |r| r.get(0))
+            .unwrap();
+        let wal_autocheckpoint: i64 = store
+            .conn
+            .query_row("PRAGMA wal_autocheckpoint", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(synchronous, 1);
+        assert_eq!(cache_size, -65_536);
+        assert_eq!(temp_store, 2);
+        assert_eq!(wal_autocheckpoint, 1_000);
+        assert_eq!(mmap_size_bytes_from_mb(Some("64")), 67_108_864);
+    }
+
+    #[test]
+    fn read_only_open_sets_query_only() {
+        let dir = TempDir::new().unwrap();
+        let db = dir.path().join("kaizen.db");
+        Store::open(&db).unwrap();
+        let store = Store::open_read_only(&db).unwrap();
+        let query_only: i64 = store
+            .conn
+            .query_row("PRAGMA query_only", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(query_only, 1);
+    }
+
+    #[test]
+    fn phase0_indexes_exist() {
+        let dir = TempDir::new().unwrap();
+        let store = Store::open(&dir.path().join("kaizen.db")).unwrap();
+        for name in [
+            "tool_spans_session_idx",
+            "tool_spans_started_idx",
+            "session_samples_ts_idx",
+            "events_ts_idx",
+            "feedback_session_idx",
+        ] {
+            let found: i64 = store
+                .conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name=?1",
+                    params![name],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(found, 1, "{name}");
+        }
+    }
+
+    #[test]
     fn upsert_and_get_session() {
         let dir = TempDir::new().unwrap();
         let store = Store::open(&dir.path().join("kaizen.db")).unwrap();
@@ -2620,6 +2874,30 @@ mod tests {
         let sessions = store.list_sessions("/ws").unwrap();
         assert_eq!(sessions.len(), 1);
         assert_eq!(sessions[0].id, "s2");
+    }
+
+    #[test]
+    fn incremental_session_helpers_find_new_rows_and_statuses() {
+        let dir = TempDir::new().unwrap();
+        let store = Store::open(&dir.path().join("kaizen.db")).unwrap();
+        let mut old = make_session("old");
+        old.started_at_ms = 1_000;
+        let mut new = make_session("new");
+        new.started_at_ms = 2_000;
+        new.status = SessionStatus::Running;
+        store.upsert_session(&old).unwrap();
+        store.upsert_session(&new).unwrap();
+
+        let rows = store.list_sessions_started_after("/ws", 1_500).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].id, "new");
+
+        store
+            .update_session_status("new", SessionStatus::Done)
+            .unwrap();
+        let statuses = store.session_statuses(&["new".to_string()]).unwrap();
+        assert_eq!(statuses.len(), 1);
+        assert_eq!(statuses[0].status, SessionStatus::Done);
     }
 
     #[test]
@@ -2667,6 +2945,50 @@ mod tests {
         store.append_event(&make_event("s5", 0)).unwrap();
         let events = store.list_events_for_session("s5").unwrap();
         assert_eq!(events.len(), 1);
+    }
+
+    #[test]
+    fn span_tree_cache_hits_empty_and_invalidates_on_append() {
+        let dir = TempDir::new().unwrap();
+        let store = Store::open(&dir.path().join("kaizen.db")).unwrap();
+        assert!(store.session_span_tree("missing").unwrap().is_empty());
+        assert!(store.span_tree_cache.borrow().is_some());
+
+        store.upsert_session(&make_session("tree")).unwrap();
+        store.append_event(&make_event("tree", 0)).unwrap();
+        assert!(store.span_tree_cache.borrow().is_none());
+        let first = store.session_span_tree("tree").unwrap();
+        assert_eq!(first.len(), 1);
+        assert!(store.span_tree_cache.borrow().is_some());
+        store.append_event(&make_event("tree", 1)).unwrap();
+        assert!(store.span_tree_cache.borrow().is_none());
+    }
+
+    #[test]
+    fn tool_spans_in_window_uses_started_then_ended_fallback() {
+        let dir = TempDir::new().unwrap();
+        let store = Store::open(&dir.path().join("kaizen.db")).unwrap();
+        store.upsert_session(&make_session("spans")).unwrap();
+        for (id, started, ended) in [
+            ("started", Some(200_i64), None),
+            ("fallback", None, Some(250_i64)),
+            ("outside", Some(400_i64), None),
+            ("too_old", None, Some(50_i64)),
+            ("started_wins", Some(500_i64), Some(200_i64)),
+        ] {
+            store
+                .conn
+                .execute(
+                    "INSERT INTO tool_spans
+                     (span_id, session_id, tool, status, started_at_ms, ended_at_ms, paths_json)
+                     VALUES (?1, 'spans', 'read', 'done', ?2, ?3, '[]')",
+                    params![id, started, ended],
+                )
+                .unwrap();
+        }
+        let rows = store.tool_spans_in_window("/ws", 100, 300).unwrap();
+        let ids = rows.into_iter().map(|r| r.span_id).collect::<Vec<_>>();
+        assert_eq!(ids, vec!["fallback".to_string(), "started".to_string()]);
     }
 
     #[test]
