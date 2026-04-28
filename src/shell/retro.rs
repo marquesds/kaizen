@@ -37,6 +37,7 @@ fn compute_retro(
         }
         let _ = crate::sync::smart::enqueue_workspace_fact_snapshot(&store, workspace, &ctx);
     }
+    let read_store = Store::open_read_only(&db_path)?;
 
     let end_ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -53,7 +54,7 @@ fn compute_retro(
         .as_ref()
         .and_then(crate::sync::smart::workspace_hash_for);
     let inputs = inputs::load_inputs_for_data_source(
-        &store,
+        &read_store,
         workspace,
         &ws_str,
         start_ms,
