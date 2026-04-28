@@ -19,6 +19,17 @@ struct TuiState {
     refreshes: i64,
     #[serde(rename = "reportPublishes")]
     report_publishes: i64,
+    #[serde(rename = "totalSessions")]
+    total_sessions: i64,
+    cursor: i64,
+    #[serde(rename = "fetchedStart")]
+    fetched_start: i64,
+    #[serde(rename = "fetchedEnd")]
+    fetched_end: i64,
+    #[serde(rename = "pageLoading")]
+    page_loading: bool,
+    #[serde(rename = "loadRequests")]
+    load_requests: i64,
 }
 
 #[derive(Debug)]
@@ -32,6 +43,12 @@ struct TuiDriver {
     manual_refreshes: i64,
     refreshes: i64,
     report_publishes: i64,
+    total_sessions: i64,
+    cursor: i64,
+    fetched_start: i64,
+    fetched_end: i64,
+    page_loading: bool,
+    load_requests: i64,
 }
 
 impl Default for TuiDriver {
@@ -46,6 +63,12 @@ impl Default for TuiDriver {
             manual_refreshes: 0,
             refreshes: 0,
             report_publishes: 0,
+            total_sessions: 0,
+            cursor: 0,
+            fetched_start: 0,
+            fetched_end: 0,
+            page_loading: false,
+            load_requests: 0,
         }
     }
 }
@@ -62,6 +85,12 @@ impl State<TuiDriver> for TuiState {
             manual_refreshes: d.manual_refreshes,
             refreshes: d.refreshes,
             report_publishes: d.report_publishes,
+            total_sessions: d.total_sessions,
+            cursor: d.cursor,
+            fetched_start: d.fetched_start,
+            fetched_end: d.fetched_end,
+            page_loading: d.page_loading,
+            load_requests: d.load_requests,
         })
     }
 }
@@ -118,6 +147,42 @@ impl Driver for TuiDriver {
                 self.report_computing = false;
                 self.report_ready = true;
                 self.report_publishes += 1;
+            },
+            page_load_request => {
+                require_phase(&self.phase, "Interactive", "page_load_request")?;
+                if self.page_loading {
+                    anyhow::bail!("page_load_request double-load");
+                }
+                self.page_loading = true;
+                self.load_requests += 1;
+            },
+            page_load_complete => {
+                require_phase(&self.phase, "Interactive", "page_load_complete")?;
+                if !self.page_loading {
+                    anyhow::bail!("page_load_complete not enabled");
+                }
+                self.total_sessions = 20;
+                self.fetched_start = 0;
+                self.fetched_end = 20;
+                self.page_loading = false;
+            },
+            scroll_down => {
+                require_phase(&self.phase, "Interactive", "scroll_down")?;
+                if self.total_sessions <= 0
+                    || self.cursor + 1 >= self.total_sessions
+                    || self.cursor + 1 >= self.fetched_end
+                {
+                    anyhow::bail!("scroll_down not enabled");
+                }
+                self.cursor += 1;
+            },
+            filter_reset => {
+                require_phase(&self.phase, "Interactive", "filter_reset")?;
+                self.total_sessions = 0;
+                self.cursor = 0;
+                self.fetched_start = 0;
+                self.fetched_end = 0;
+                self.page_loading = false;
             },
             request_quit => {
                 require_phase(&self.phase, "Interactive", "request_quit")?;
