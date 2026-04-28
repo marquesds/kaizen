@@ -1661,7 +1661,7 @@ dependencies = [
 
 [[package]]
 name = "kaizen-cli"
-version = "0.1.16"
+version = "0.1.17"
 dependencies = [
  "aho-corasick",
  "anyhow",
