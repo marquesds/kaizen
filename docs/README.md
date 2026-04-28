@@ -18,6 +18,7 @@ glossary. For a **guided tour** with exercises, start at [tutorial/README.md](tu
 | [tutorial/README.md](tutorial/README.md) | Hands-on tutorial (all major features + exercises) |
 | [usage.md](usage.md) | CLI reference |
 | [mcp.md](mcp.md) | MCP stdio server (agent hosts; most commands as tools) |
+| [daemon.md](daemon.md) | Local daemon lifecycle and direct-mode fallback |
 | [llm-proxy.md](llm-proxy.md) | Local HTTP forwarder for LLM APIs (Anthropic) |
 | [concepts.md](concepts.md) | Sessions, events, retro, experiments |
 | [outcomes.md](outcomes.md) | Post-stop test/lint outcomes (opt-in) |

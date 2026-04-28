@@ -220,6 +220,10 @@ name = "system_sampler"
 path = "tests/spec/system_sampler.rs"
 
 [[test]]
+name = "daemon_lifecycle"
+path = "tests/spec/daemon_lifecycle.rs"
+
+[[test]]
 name = "perf_phase0"
 path = "tests/perf/phase0.rs"
 

@@ -3,6 +3,8 @@
 ## Module Graph
 
 - `collect` parses agent transcripts + hooks into raw `Event`s.
+- `daemon` owns local daemon lifecycle and length-prefixed IPC for supported
+  client paths.
 - `store` owns SQLite raw tables, the incremental event projector, and derived
   indexes (`tool_spans`, `file_facts`, `repo_edges`).
 - `metrics` builds commit-pinned repo snapshots and Ladybug sidecar.
@@ -22,8 +24,9 @@
    `rules_used`, and closed/orphaned `tool_spans`.
 3. Metrics index scans git + source tree → `repo_snapshots`,
    `file_facts`, `repo_edges`, Ladybug sidecar.
-4. CLI / TUI / retro read shared smart-metric report builder.
-5. Sync flushes redacted outbox rows by kind:
+4. Daemon-backed clients use the local socket; direct mode opens SQLite in-process.
+5. CLI / TUI / retro read shared smart-metric report builder.
+6. Sync flushes redacted outbox rows by kind:
    `events`, `tool_spans`, `repo_snapshots`.
 
 ## Store Projector

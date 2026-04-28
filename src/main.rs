@@ -17,6 +17,9 @@ const LONG_ABOUT: &str = "Deploy and share kaizen: real-time-tailable agent sess
     propagate_version = true
 )]
 struct Cli {
+    /// Keep Phase 0-2 direct SQLite mode for this invocation.
+    #[arg(long, global = true)]
+    no_daemon: bool,
     #[command(subcommand)]
     cmd: Command,
 }
@@ -28,6 +31,12 @@ enum Command {
     Ingest {
         #[command(subcommand)]
         subcmd: IngestCommand,
+    },
+    /// Manage the local Kaizen daemon.
+    #[command(next_help_heading = "Operate")]
+    Daemon {
+        #[command(subcommand)]
+        subcmd: DaemonCommand,
     },
     /// Session list/show commands.
     #[command(next_help_heading = "Trust & observe")]
@@ -517,6 +526,19 @@ enum SyncCommand {
 }
 
 #[derive(Subcommand)]
+enum DaemonCommand {
+    /// Run daemon in the foreground. Hidden background flag is used by auto-spawn.
+    Start {
+        #[arg(long, hide = true)]
+        background: bool,
+    },
+    /// Gracefully stop daemon.
+    Stop,
+    /// Show daemon pid, uptime, queue depth, and last error.
+    Status,
+}
+
+#[derive(Subcommand)]
 enum MetricsCommand {
     /// Rebuild repo snapshot and Ladybug sidecar.
     Index {
@@ -635,7 +657,11 @@ enum Source {
 fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
     let cli = Cli::parse();
+    if cli.no_daemon {
+        unsafe { std::env::set_var("KAIZEN_DAEMON", "0") };
+    }
     match cli.cmd {
+        Command::Daemon { subcmd } => dispatch_daemon(subcmd),
         Command::Ingest {
             subcmd: IngestCommand::Hook { source, workspace },
         } => ingest_hook(source, workspace),
@@ -909,6 +935,27 @@ fn main() -> anyhow::Result<()> {
     }
 }
 
+fn dispatch_daemon(cmd: DaemonCommand) -> anyhow::Result<()> {
+    match cmd {
+        DaemonCommand::Start { background: _ } => kaizen::daemon::start_foreground(),
+        DaemonCommand::Stop => {
+            println!("{}", kaizen::daemon::stop()?);
+            Ok(())
+        }
+        DaemonCommand::Status => {
+            let st = kaizen::daemon::try_status()?;
+            println!("pid: {}", st.pid);
+            println!("uptime_ms: {}", st.uptime_ms);
+            println!("queue_depth: {}", st.queue_depth);
+            println!(
+                "last_error: {}",
+                st.last_error.unwrap_or_else(|| "-".to_string())
+            );
+            Ok(())
+        }
+    }
+}
+
 fn dispatch_exp(cmd: ExpCommand) -> anyhow::Result<()> {
     use kaizen::shell::exp;
     match cmd {
@@ -972,6 +1019,22 @@ fn ingest_hook(source: Source, workspace: Option<PathBuf>) -> anyhow::Result<()>
         Source::Cursor => kaizen::shell::ingest::IngestSource::Cursor,
         Source::Claude => kaizen::shell::ingest::IngestSource::Claude,
     };
+    if kaizen::daemon::enabled() {
+        let response = kaizen::daemon::request_blocking(kaizen::ipc::DaemonRequest::IngestHook {
+            source: src,
+            payload: input,
+            workspace: workspace.map(|p| {
+                kaizen::core::paths::canonical(&p)
+                    .to_string_lossy()
+                    .to_string()
+            }),
+        })?;
+        return match response {
+            kaizen::ipc::DaemonResponse::Ack { .. } => Ok(()),
+            kaizen::ipc::DaemonResponse::Error { message, .. } => Err(anyhow::anyhow!(message)),
+            _ => Err(anyhow::anyhow!("unexpected daemon ingest response")),
+        };
+    }
     kaizen::shell::ingest::ingest_hook_text(src, &input, workspace)
 }
 

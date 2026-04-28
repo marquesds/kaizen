@@ -158,11 +158,29 @@ pub fn sessions_list_text(
 ) -> Result<String> {
     let roots = scope::resolve(workspace, all_workspaces)?;
     let mut sessions = Vec::new();
-    for workspace in &roots {
-        let store = open_workspace_store(workspace)?;
-        maybe_refresh_store(workspace, &store, refresh)?;
-        let ws_str = workspace.to_string_lossy().to_string();
-        sessions.extend(store.list_sessions(&ws_str)?);
+    if crate::daemon::enabled() && !refresh {
+        for workspace in &roots {
+            let ws_str = workspace.to_string_lossy().to_string();
+            let response =
+                crate::daemon::request_blocking(crate::ipc::DaemonRequest::ListSessions {
+                    workspace: ws_str,
+                    offset: 0,
+                    limit: i64::MAX as usize,
+                    filter: crate::store::SessionFilter::default(),
+                })?;
+            match response {
+                crate::ipc::DaemonResponse::Sessions(page) => sessions.extend(page.rows),
+                crate::ipc::DaemonResponse::Error { message, .. } => anyhow::bail!(message),
+                _ => anyhow::bail!("unexpected daemon sessions response"),
+            }
+        }
+    } else {
+        for workspace in &roots {
+            let store = open_workspace_store(workspace)?;
+            maybe_refresh_store(workspace, &store, refresh)?;
+            let ws_str = workspace.to_string_lossy().to_string();
+            sessions.extend(store.list_sessions(&ws_str)?);
+        }
     }
     sessions.sort_by(|a, b| {
         b.started_at_ms
