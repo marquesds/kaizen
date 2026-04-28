@@ -15,8 +15,10 @@
 
 pub mod collect;
 pub mod core;
+pub mod daemon;
 pub mod eval;
 pub mod feedback;
+pub mod ipc;
 pub mod prompt;
 
 pub use crate::core::DataSource;

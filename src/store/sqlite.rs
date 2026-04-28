@@ -405,14 +405,14 @@ pub struct SessionStatusRow {
     pub ended_at_ms: Option<u64>,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct SessionFilter {
     pub agent_prefix: Option<String>,
     pub status: Option<SessionStatus>,
     pub since_ms: Option<u64>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SessionPage {
     pub rows: Vec<SessionRecord>,
     pub total: usize,

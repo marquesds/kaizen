@@ -4,6 +4,10 @@ CLI reference. All commands accept `--workspace <path>` (default: cwd).
 
 Run `kaizen --help` for grouped subcommands (Trust & observe, Operate, Improve, Integrations, Shell).
 
+**Daemon mode:** Kaizen starts a local daemon for supported read/write paths.
+Use `kaizen daemon status`, `kaizen daemon stop`, or `--no-daemon` /
+`KAIZEN_DAEMON=0` for direct SQLite mode. See [daemon.md](daemon.md).
+
 **Cache-first reads:** `sessions list`, `summary`, `insights`, `guidance`, `metrics`, and `retro` read the local workspace database first, so the common path stays fast. Pass **`--refresh`** (`-r`) when you want Kaizen to rescan external agent transcripts before rendering the command. See [config.md](config.md).
 
 **Machine-wide aggregation:** `sessions list`, `summary`, `insights`, and `metrics` accept **`--all-workspaces`**. Kaizen records each workspace path you use (canonicalized) in a machine-local JSON list, then opens each repo’s `.kaizen/kaizen.db` and merges results in memory. Details: [config.md#machine-local-registry](config.md#machine-local-registry).

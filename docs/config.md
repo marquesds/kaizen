@@ -24,6 +24,7 @@ LLM HTTP proxy: [llm-proxy.md](llm-proxy.md).
 | `RUST_LOG` | (unset) | Log filter for the `tracing` stack (e.g. `info`, `kaizen=debug`) |
 | `HOME` | (required) | Resolves `~` paths and the user config location |
 | `KAIZEN_HOME` | (unset) | Overrides the machine-local Kaizen home used for the workspace registry and other non-workspace files |
+| `KAIZEN_DAEMON` | `1` | Set to `0` to disable daemon auto-spawn and use direct SQLite mode |
 | `KAIZEN_PROJECTOR` | `incremental` | Set to `legacy` to use the old per-session `tool_spans` rebuild path |
 | `OPENCLAW_STATE_DIR` | `~/.openclaw` | Override OpenClaw state directory (used by `tail.openclaw` and tests) |
 | `OPENCLAW_HOME` | (unset) | Secondary override for OpenClaw home (resolved before `~/.openclaw` fallback) |
