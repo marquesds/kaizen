@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pub mod event_index;
+pub mod projector;
 pub mod remote_cache;
 pub mod span_tree;
 pub mod sqlite;

@@ -7,104 +7,70 @@ use anyhow::Result;
 use rusqlite::{Connection, params};
 use std::collections::{BTreeSet, HashMap};
 
-#[derive(Debug, Default)]
-struct SpanBuilder {
-    span_id: String,
-    session_id: String,
-    tool: Option<String>,
-    tool_call_id: Option<String>,
-    hook_start_ms: Option<u64>,
-    hook_end_ms: Option<u64>,
-    call_start_ms: Option<u64>,
-    result_end_ms: Option<u64>,
-    call_start_exact: bool,
-    result_end_exact: bool,
-    tokens_in: Option<u32>,
-    tokens_out: Option<u32>,
-    reasoning_tokens: Option<u32>,
-    cost_usd_e6: Option<i64>,
-    paths: BTreeSet<String>,
-    has_call: bool,
-    has_end: bool,
-    parent_span_id: Option<String>,
-    depth: u32,
-    subtree_cost_usd_e6: Option<i64>,
-    subtree_token_count: Option<u32>,
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct SpanBuilder {
+    pub span_id: String,
+    pub session_id: String,
+    pub tool: Option<String>,
+    pub tool_call_id: Option<String>,
+    pub hook_start_ms: Option<u64>,
+    pub hook_end_ms: Option<u64>,
+    pub call_start_ms: Option<u64>,
+    pub result_end_ms: Option<u64>,
+    pub call_start_exact: bool,
+    pub result_end_exact: bool,
+    pub tokens_in: Option<u32>,
+    pub tokens_out: Option<u32>,
+    pub reasoning_tokens: Option<u32>,
+    pub cost_usd_e6: Option<i64>,
+    pub paths: BTreeSet<String>,
+    pub has_call: bool,
+    pub has_end: bool,
+    pub parent_span_id: Option<String>,
+    pub depth: u32,
+    pub subtree_cost_usd_e6: Option<i64>,
+    pub subtree_token_count: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ToolSpanRecord {
+    pub span_id: String,
+    pub session_id: String,
+    pub tool: Option<String>,
+    pub tool_call_id: Option<String>,
+    pub status: String,
+    pub started_at_ms: Option<u64>,
+    pub ended_at_ms: Option<u64>,
+    pub lead_time_ms: Option<u64>,
+    pub tokens_in: Option<u32>,
+    pub tokens_out: Option<u32>,
+    pub reasoning_tokens: Option<u32>,
+    pub cost_usd_e6: Option<i64>,
+    pub paths: Vec<String>,
+    pub parent_span_id: Option<String>,
+    pub depth: u32,
+    pub subtree_cost_usd_e6: Option<i64>,
+    pub subtree_token_count: Option<u32>,
 }
 
 pub fn rebuild_tool_spans_for_session(conn: &Connection, session_id: &str) -> Result<()> {
     let events = load_session_events(conn, session_id)?;
     clear_session_spans(conn, session_id)?;
-    let mut spans = build_spans(&events);
-    assign_parents(&mut spans);
-    compute_subtree_costs(&mut spans);
-    for span in spans {
-        let lead = span
-            .hook_start_ms
-            .zip(span.hook_end_ms)
-            .map(|(a, b)| b.saturating_sub(a))
-            .or_else(|| {
-                if span.call_start_exact && span.result_end_exact {
-                    span.call_start_ms
-                        .zip(span.result_end_ms)
-                        .map(|(a, b)| b.saturating_sub(a))
-                } else {
-                    None
-                }
-            });
-        let started = span.hook_start_ms.or(span.call_start_ms);
-        let ended = span.hook_end_ms.or(span.result_end_ms);
-        let status = if started.is_some() && ended.is_some() {
-            "done"
-        } else {
-            "orphaned"
-        };
-        conn.execute(
-            "INSERT INTO tool_spans (
-                span_id, session_id, tool, tool_call_id, status,
-                started_at_ms, ended_at_ms, lead_time_ms,
-                tokens_in, tokens_out, reasoning_tokens, cost_usd_e6, paths_json,
-                parent_span_id, depth, subtree_cost_usd_e6, subtree_token_count
-             ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)",
-            params![
-                span.span_id,
-                span.session_id,
-                span.tool,
-                span.tool_call_id,
-                status,
-                started.map(|v| v as i64),
-                ended.map(|v| v as i64),
-                lead.map(|v| v as i64),
-                span.tokens_in.map(|v| v as i64),
-                span.tokens_out.map(|v| v as i64),
-                span.reasoning_tokens.map(|v| v as i64),
-                span.cost_usd_e6,
-                serde_json::to_string(&span.paths.iter().cloned().collect::<Vec<_>>())?,
-                span.parent_span_id,
-                span.depth as i64,
-                span.subtree_cost_usd_e6,
-                span.subtree_token_count.map(|v| v as i64),
-            ],
-        )?;
-        for path in span.paths {
-            conn.execute(
-                "INSERT INTO tool_span_paths (span_id, path) VALUES (?1, ?2)",
-                params![span.span_id, path],
-            )?;
-        }
+    for span in final_span_records(&events) {
+        upsert_tool_span_record(conn, &span)?;
     }
     Ok(())
 }
 
-fn span_start(s: &SpanBuilder) -> Option<u64> {
+pub(crate) fn span_start(s: &SpanBuilder) -> Option<u64> {
     s.hook_start_ms.or(s.call_start_ms)
 }
 
-fn span_end(s: &SpanBuilder) -> Option<u64> {
+pub(crate) fn span_end(s: &SpanBuilder) -> Option<u64> {
     s.hook_end_ms.or(s.result_end_ms)
 }
 
-fn assign_parents(spans: &mut [SpanBuilder]) {
+pub(crate) fn assign_parents(spans: &mut [SpanBuilder]) {
     // Sort: start ASC, end DESC so outer spans appear before inner spans.
     spans.sort_by(|a, b| {
         let sa = span_start(a).unwrap_or(u64::MAX);
@@ -141,7 +107,7 @@ fn assign_parents(spans: &mut [SpanBuilder]) {
     }
 }
 
-fn compute_subtree_costs(spans: &mut [SpanBuilder]) {
+pub(crate) fn compute_subtree_costs(spans: &mut [SpanBuilder]) {
     // Seed each span's subtree with its own cost/tokens.
     for s in spans.iter_mut() {
         s.subtree_cost_usd_e6 = s.cost_usd_e6;
@@ -174,7 +140,7 @@ fn compute_subtree_costs(spans: &mut [SpanBuilder]) {
     }
 }
 
-fn clear_session_spans(conn: &Connection, session_id: &str) -> Result<()> {
+pub(crate) fn clear_session_spans(conn: &Connection, session_id: &str) -> Result<()> {
     conn.execute(
         "DELETE FROM tool_span_paths
          WHERE span_id IN (SELECT span_id FROM tool_spans WHERE session_id = ?1)",
@@ -187,7 +153,14 @@ fn clear_session_spans(conn: &Connection, session_id: &str) -> Result<()> {
     Ok(())
 }
 
-fn build_spans(events: &[Event]) -> Vec<SpanBuilder> {
+pub(crate) fn final_span_records(events: &[Event]) -> Vec<ToolSpanRecord> {
+    let mut spans = build_spans(events);
+    assign_parents(&mut spans);
+    compute_subtree_costs(&mut spans);
+    spans.iter().map(ToolSpanRecord::from_builder).collect()
+}
+
+pub(crate) fn build_spans(events: &[Event]) -> Vec<SpanBuilder> {
     let mut spans: HashMap<String, SpanBuilder> = HashMap::new();
     let mut open_order: Vec<String> = Vec::new();
     for event in events {
@@ -207,7 +180,7 @@ fn build_spans(events: &[Event]) -> Vec<SpanBuilder> {
     spans.into_values().collect()
 }
 
-fn handle_tool_call(
+pub(crate) fn handle_tool_call(
     event: &Event,
     spans: &mut HashMap<String, SpanBuilder>,
     open_order: &mut Vec<String>,
@@ -242,7 +215,7 @@ fn handle_tool_call(
     }
 }
 
-fn handle_tool_result(
+pub(crate) fn handle_tool_result(
     event: &Event,
     spans: &mut HashMap<String, SpanBuilder>,
     open_order: &[String],
@@ -263,7 +236,7 @@ fn handle_tool_result(
     span.has_end = true;
 }
 
-fn handle_hook(
+pub(crate) fn handle_hook(
     event: &Event,
     spans: &mut HashMap<String, SpanBuilder>,
     open_order: &mut Vec<String>,
@@ -352,7 +325,7 @@ fn load_session_events(conn: &Connection, session_id: &str) -> Result<Vec<Event>
     Ok(rows.filter_map(|row| row.ok()).collect())
 }
 
-fn match_span_id(
+pub(crate) fn match_span_id(
     event: &Event,
     spans: &HashMap<String, SpanBuilder>,
     open_order: &[String],
@@ -371,7 +344,7 @@ fn match_span_id(
         .or_else(|| open_order.last().cloned())
 }
 
-fn find_open_without_call(
+pub(crate) fn find_open_without_call(
     spans: &HashMap<String, SpanBuilder>,
     open_order: &[String],
     tool: &str,
@@ -387,7 +360,7 @@ fn find_open_without_call(
     })
 }
 
-fn find_open_same_tool(
+pub(crate) fn find_open_same_tool(
     spans: &HashMap<String, SpanBuilder>,
     open_order: &[String],
     tool: &str,
@@ -403,11 +376,11 @@ fn find_open_same_tool(
     })
 }
 
-fn synthetic_span_id(event: &Event) -> String {
+pub(crate) fn synthetic_span_id(event: &Event) -> String {
     format!("{}:{}:{}", event.session_id, event.seq, event.ts_ms)
 }
 
-fn hook_kind(payload: &serde_json::Value) -> Option<&'static str> {
+pub(crate) fn hook_kind(payload: &serde_json::Value) -> Option<&'static str> {
     let raw = payload
         .get("event")
         .and_then(|v| v.as_str())
@@ -419,17 +392,119 @@ fn hook_kind(payload: &serde_json::Value) -> Option<&'static str> {
     }
 }
 
-fn hook_tool(payload: &serde_json::Value) -> Option<String> {
+pub(crate) fn hook_tool(payload: &serde_json::Value) -> Option<String> {
     ["tool_name", "tool", "name"]
         .iter()
         .find_map(|k| payload.get(k).and_then(|v| v.as_str()))
         .map(ToOwned::to_owned)
 }
 
-fn pick_u32(current: Option<u32>, next: Option<u32>) -> Option<u32> {
+pub(crate) fn pick_u32(current: Option<u32>, next: Option<u32>) -> Option<u32> {
     next.or(current)
 }
 
-fn pick_i64(current: Option<i64>, next: Option<i64>) -> Option<i64> {
+pub(crate) fn pick_i64(current: Option<i64>, next: Option<i64>) -> Option<i64> {
     next.or(current)
+}
+
+impl ToolSpanRecord {
+    pub(crate) fn from_builder(span: &SpanBuilder) -> Self {
+        let lead = span
+            .hook_start_ms
+            .zip(span.hook_end_ms)
+            .map(|(a, b)| b.saturating_sub(a))
+            .or_else(|| {
+                if span.call_start_exact && span.result_end_exact {
+                    span.call_start_ms
+                        .zip(span.result_end_ms)
+                        .map(|(a, b)| b.saturating_sub(a))
+                } else {
+                    None
+                }
+            });
+        let started = span_start(span);
+        let ended = span_end(span);
+        let status = if started.is_some() && ended.is_some() {
+            "done"
+        } else {
+            "orphaned"
+        };
+        Self {
+            span_id: span.span_id.clone(),
+            session_id: span.session_id.clone(),
+            tool: span.tool.clone(),
+            tool_call_id: span.tool_call_id.clone(),
+            status: status.to_string(),
+            started_at_ms: started,
+            ended_at_ms: ended,
+            lead_time_ms: lead,
+            tokens_in: span.tokens_in,
+            tokens_out: span.tokens_out,
+            reasoning_tokens: span.reasoning_tokens,
+            cost_usd_e6: span.cost_usd_e6,
+            paths: span.paths.iter().cloned().collect(),
+            parent_span_id: span.parent_span_id.clone(),
+            depth: span.depth,
+            subtree_cost_usd_e6: span.subtree_cost_usd_e6,
+            subtree_token_count: span.subtree_token_count,
+        }
+    }
+}
+
+pub(crate) fn upsert_tool_span_record(conn: &Connection, span: &ToolSpanRecord) -> Result<()> {
+    conn.execute(
+        "INSERT INTO tool_spans (
+            span_id, session_id, tool, tool_call_id, status,
+            started_at_ms, ended_at_ms, lead_time_ms,
+            tokens_in, tokens_out, reasoning_tokens, cost_usd_e6, paths_json,
+            parent_span_id, depth, subtree_cost_usd_e6, subtree_token_count
+         ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)
+         ON CONFLICT(span_id) DO UPDATE SET
+            session_id=excluded.session_id,
+            tool=excluded.tool,
+            tool_call_id=excluded.tool_call_id,
+            status=excluded.status,
+            started_at_ms=excluded.started_at_ms,
+            ended_at_ms=excluded.ended_at_ms,
+            lead_time_ms=excluded.lead_time_ms,
+            tokens_in=excluded.tokens_in,
+            tokens_out=excluded.tokens_out,
+            reasoning_tokens=excluded.reasoning_tokens,
+            cost_usd_e6=excluded.cost_usd_e6,
+            paths_json=excluded.paths_json,
+            parent_span_id=excluded.parent_span_id,
+            depth=excluded.depth,
+            subtree_cost_usd_e6=excluded.subtree_cost_usd_e6,
+            subtree_token_count=excluded.subtree_token_count",
+        params![
+            &span.span_id,
+            &span.session_id,
+            span.tool.as_deref(),
+            span.tool_call_id.as_deref(),
+            &span.status,
+            span.started_at_ms.map(|v| v as i64),
+            span.ended_at_ms.map(|v| v as i64),
+            span.lead_time_ms.map(|v| v as i64),
+            span.tokens_in.map(|v| v as i64),
+            span.tokens_out.map(|v| v as i64),
+            span.reasoning_tokens.map(|v| v as i64),
+            span.cost_usd_e6,
+            serde_json::to_string(&span.paths)?,
+            span.parent_span_id.as_deref(),
+            span.depth as i64,
+            span.subtree_cost_usd_e6,
+            span.subtree_token_count.map(|v| v as i64),
+        ],
+    )?;
+    conn.execute(
+        "DELETE FROM tool_span_paths WHERE span_id = ?1",
+        params![&span.span_id],
+    )?;
+    for path in &span.paths {
+        conn.execute(
+            "INSERT INTO tool_span_paths (span_id, path) VALUES (?1, ?2)",
+            params![&span.span_id, path],
+        )?;
+    }
+    Ok(())
 }
