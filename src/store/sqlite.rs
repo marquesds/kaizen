@@ -5,7 +5,10 @@ use crate::core::config::try_team_salt;
 use crate::core::event::{Event, EventKind, EventSource, SessionRecord, SessionStatus};
 use crate::metrics::types::{FileFact, RepoEdge, RepoSnapshotRecord, ToolSpanView};
 use crate::store::event_index::index_event_derived;
-use crate::store::tool_span_index::rebuild_tool_spans_for_session;
+use crate::store::projector::{DEFAULT_ORPHAN_TTL_MS, Projector, ProjectorEvent};
+use crate::store::tool_span_index::{
+    clear_session_spans, rebuild_tool_spans_for_session, upsert_tool_span_record,
+};
 use crate::sync::context::SyncIngestContext;
 use crate::sync::outbound::outbound_event_from_row;
 use crate::sync::redact::redact_payload;
@@ -426,6 +429,7 @@ struct SpanTreeCacheEntry {
 pub struct Store {
     conn: Connection,
     span_tree_cache: RefCell<Option<SpanTreeCacheEntry>>,
+    projector: RefCell<Projector>,
 }
 
 impl Store {
@@ -460,14 +464,30 @@ impl Store {
             }
             ensure_schema_columns(&conn)?;
         }
-        Ok(Self {
+        let store = Self {
             conn,
             span_tree_cache: RefCell::new(None),
-        })
+            projector: RefCell::new(Projector::default()),
+        };
+        if mode == StoreOpenMode::ReadWrite {
+            store.warm_projector()?;
+        }
+        Ok(store)
     }
 
     fn invalidate_span_tree_cache(&self) {
         *self.span_tree_cache.borrow_mut() = None;
+    }
+
+    fn warm_projector(&self) -> Result<()> {
+        let ids = self.running_session_ids()?;
+        let mut projector = self.projector.borrow_mut();
+        for id in ids {
+            for event in self.list_events_for_session(&id)? {
+                let _ = projector.apply(&event);
+            }
+        }
+        Ok(())
     }
 
     pub fn upsert_session(&self, s: &SessionRecord) -> Result<()> {
@@ -576,6 +596,11 @@ impl Store {
 
     /// Append event; when `ctx` is set and sync is configured, enqueue one redacted outbox row.
     pub fn append_event_with_sync(&self, e: &Event, ctx: Option<&SyncIngestContext>) -> Result<()> {
+        let last_before = if projector_legacy_mode() {
+            None
+        } else {
+            self.last_event_seq_for_session(&e.session_id)?
+        };
         let payload = serde_json::to_string(&e.payload)?;
         self.conn.execute(
             "INSERT INTO events (
@@ -637,9 +662,29 @@ impl Store {
         if self.conn.changes() == 0 {
             return Ok(());
         }
-        index_event_derived(&self.conn, e)?;
-        rebuild_tool_spans_for_session(&self.conn, &e.session_id)?;
-        self.invalidate_span_tree_cache();
+        if projector_legacy_mode() {
+            index_event_derived(&self.conn, e)?;
+            rebuild_tool_spans_for_session(&self.conn, &e.session_id)?;
+            self.invalidate_span_tree_cache();
+        } else if last_before.is_some_and(|last| e.seq <= last) {
+            self.replay_projector_session(&e.session_id)?;
+        } else {
+            let deltas = self.projector.borrow_mut().apply(e);
+            self.apply_projector_events(&deltas)?;
+            let expired = self
+                .projector
+                .borrow_mut()
+                .flush_expired(e.ts_ms, DEFAULT_ORPHAN_TTL_MS);
+            self.apply_projector_events(&expired)?;
+            if is_stop_event(e) {
+                let flushed = self
+                    .projector
+                    .borrow_mut()
+                    .flush_session(&e.session_id, e.ts_ms);
+                self.apply_projector_events(&flushed)?;
+            }
+            self.invalidate_span_tree_cache();
+        }
         let Some(ctx) = ctx else {
             return Ok(());
         };
@@ -672,6 +717,98 @@ impl Store {
         )?;
         enqueue_tool_spans_for_session(self, &e.session_id, ctx)?;
         Ok(())
+    }
+
+    pub fn flush_projector_session(&self, session_id: &str, now_ms: u64) -> Result<()> {
+        if projector_legacy_mode() {
+            rebuild_tool_spans_for_session(&self.conn, session_id)?;
+            self.invalidate_span_tree_cache();
+            return Ok(());
+        }
+        let deltas = self
+            .projector
+            .borrow_mut()
+            .flush_session(session_id, now_ms);
+        if self.apply_projector_events(&deltas)? {
+            self.invalidate_span_tree_cache();
+        }
+        Ok(())
+    }
+
+    fn replay_projector_session(&self, session_id: &str) -> Result<()> {
+        clear_session_spans(&self.conn, session_id)?;
+        self.projector.borrow_mut().reset_session(session_id);
+        let events = self.list_events_for_session(session_id)?;
+        let mut changed = false;
+        for event in &events {
+            let deltas = self.projector.borrow_mut().apply(event);
+            changed |= self.apply_projector_events(&deltas)?;
+        }
+        if self
+            .get_session(session_id)?
+            .is_some_and(|session| session.status == SessionStatus::Done)
+        {
+            let now_ms = events.last().map(|event| event.ts_ms).unwrap_or(0);
+            let deltas = self
+                .projector
+                .borrow_mut()
+                .flush_session(session_id, now_ms);
+            changed |= self.apply_projector_events(&deltas)?;
+        }
+        if changed {
+            self.invalidate_span_tree_cache();
+        }
+        Ok(())
+    }
+
+    fn apply_projector_events(&self, deltas: &[ProjectorEvent]) -> Result<bool> {
+        let mut changed = false;
+        for delta in deltas {
+            match delta {
+                ProjectorEvent::SpanClosed(span, sample) => {
+                    upsert_tool_span_record(&self.conn, span)?;
+                    tracing::debug!(
+                        session_id = %sample.session_id,
+                        span_id = %sample.span_id,
+                        tool = ?sample.tool,
+                        lead_time_ms = ?sample.lead_time_ms,
+                        tokens_in = ?sample.tokens_in,
+                        tokens_out = ?sample.tokens_out,
+                        reasoning_tokens = ?sample.reasoning_tokens,
+                        cost_usd_e6 = ?sample.cost_usd_e6,
+                        paths = ?sample.paths,
+                        "tool span closed"
+                    );
+                    changed = true;
+                }
+                ProjectorEvent::SpanPatched(span) => {
+                    upsert_tool_span_record(&self.conn, span)?;
+                    changed = true;
+                }
+                ProjectorEvent::FileTouched { session, path } => {
+                    self.conn.execute(
+                        "INSERT OR IGNORE INTO files_touched (session_id, path) VALUES (?1, ?2)",
+                        params![session, path],
+                    )?;
+                    changed = true;
+                }
+                ProjectorEvent::SkillUsed { session, skill } => {
+                    self.conn.execute(
+                        "INSERT OR IGNORE INTO skills_used (session_id, skill) VALUES (?1, ?2)",
+                        params![session, skill],
+                    )?;
+                    changed = true;
+                }
+                ProjectorEvent::RuleUsed { session, rule } => {
+                    self.conn.execute(
+                        "INSERT OR IGNORE INTO rules_used (session_id, rule) VALUES (?1, ?2)",
+                        params![session, rule],
+                    )?;
+                    changed = true;
+                }
+            }
+        }
+        Ok(changed)
     }
 
     pub fn list_outbox_pending(&self, limit: usize) -> Result<Vec<(i64, String, String)>> {
@@ -993,6 +1130,14 @@ impl Store {
                 ended_at_ms: r.get::<_, Option<i64>>(2)?.map(|v| v as u64),
             })
         })?;
+        rows.map(|r| r.map_err(anyhow::Error::from)).collect()
+    }
+
+    fn running_session_ids(&self) -> Result<Vec<String>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id FROM sessions WHERE status != 'Done' ORDER BY started_at_ms ASC")?;
+        let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
         rows.map(|r| r.map_err(anyhow::Error::from)).collect()
     }
 
@@ -2644,6 +2789,21 @@ fn status_from_str(s: &str) -> SessionStatus {
     }
 }
 
+fn projector_legacy_mode() -> bool {
+    std::env::var("KAIZEN_PROJECTOR").is_ok_and(|v| v == "legacy")
+}
+
+fn is_stop_event(e: &Event) -> bool {
+    if !matches!(e.kind, EventKind::Hook) {
+        return false;
+    }
+    e.payload
+        .get("event")
+        .and_then(|v| v.as_str())
+        .or_else(|| e.payload.get("hook_event_name").and_then(|v| v.as_str()))
+        == Some("Stop")
+}
+
 fn kind_from_str(s: &str) -> EventKind {
     match s {
         "ToolCall" => EventKind::ToolCall,
@@ -3065,12 +3225,20 @@ mod tests {
         assert!(store.span_tree_cache.borrow().is_some());
 
         store.upsert_session(&make_session("tree")).unwrap();
-        store.append_event(&make_event("tree", 0)).unwrap();
+        let call = make_event("tree", 0);
+        store.append_event(&call).unwrap();
+        assert!(store.span_tree_cache.borrow().is_none());
+        assert!(store.session_span_tree("tree").unwrap().is_empty());
+        assert!(store.span_tree_cache.borrow().is_some());
+        let mut result = make_event("tree", 1);
+        result.kind = EventKind::ToolResult;
+        result.tool_call_id = call.tool_call_id.clone();
+        store.append_event(&result).unwrap();
         assert!(store.span_tree_cache.borrow().is_none());
         let first = store.session_span_tree("tree").unwrap();
         assert_eq!(first.len(), 1);
         assert!(store.span_tree_cache.borrow().is_some());
-        store.append_event(&make_event("tree", 1)).unwrap();
+        store.append_event(&make_event("tree", 2)).unwrap();
         assert!(store.span_tree_cache.borrow().is_none());
     }
 

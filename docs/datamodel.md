@@ -15,7 +15,8 @@
   token splits), and `EventKind::Lifecycle` for `payload.type`-discriminated
   behavior signals.
 - `tool_spans`
-  derived per-tool spans. One row per correlated tool execution.
+  derived per-tool spans. One row per closed or orphaned correlated tool
+  execution. Open spans live in the incremental projector until close/flush.
 - `repo_snapshots`
   commit-pinned code fact snapshot for one workspace fingerprint.
 - `file_facts`
@@ -32,6 +33,9 @@
 ## Invariants
 
 - Raw `events` append-only. Derived tables can rebuild from them.
+- Incremental projector owns hot derived writes for `tool_spans`, `files_touched`,
+  `skills_used`, and `rules_used`; `KAIZEN_PROJECTOR=legacy` restores full
+  per-session span rebuild.
 - Session browsing reads through `list_sessions_page`: SQL filters by
   workspace, optional lower-case agent prefix, status, and `started_at_ms`
   floor before applying `LIMIT/OFFSET`.
@@ -39,6 +43,8 @@
   so callers start at `0` and continue from `last_seq + 1`.
 - Token and reasoning fields stay exact-or-null. No synthetic backfill.
 - `tool_spans.status` in `done|orphaned`.
+- Running-session open spans may be absent from `tool_spans` until a post hook,
+  tool result, `Stop`, or one-hour orphan TTL flush.
 - One `file_facts` row per `(snapshot_id, path)`.
 - `repo_snapshots.id` changes when commit, dirty fingerprint, or analyzer
   version changes.

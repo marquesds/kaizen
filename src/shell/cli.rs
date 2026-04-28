@@ -656,8 +656,12 @@ fn persist_session_batch(
             record.repo_binding_source = binding.source;
         }
         store.upsert_session(&record)?;
+        let flush_ms = record.ended_at_ms.unwrap_or(record.started_at_ms);
         for ev in events {
             store.append_event_with_sync(&ev, sync_ctx)?;
+        }
+        if record.status == crate::core::event::SessionStatus::Done {
+            store.flush_projector_session(&record.id, flush_ms)?;
         }
     }
     Ok(())
@@ -696,8 +700,12 @@ where
                         record.repo_binding_source = binding.source;
                     }
                     store.upsert_session(&record)?;
+                    let flush_ms = record.ended_at_ms.unwrap_or(record.started_at_ms);
                     for ev in events {
                         store.append_event_with_sync(&ev, sync_ctx)?;
+                    }
+                    if record.status == crate::core::event::SessionStatus::Done {
+                        store.flush_projector_session(&record.id, flush_ms)?;
                     }
                 }
             }

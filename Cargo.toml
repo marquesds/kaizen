@@ -196,6 +196,14 @@ name = "span_hierarchy_spec"
 path = "tests/spec/span_hierarchy_spec.rs"
 
 [[test]]
+name = "projector_incremental"
+path = "tests/spec/projector_incremental.rs"
+
+[[test]]
+name = "projector_parity"
+path = "tests/spec/projector_parity.rs"
+
+[[test]]
 name = "llm_call_quality"
 path = "tests/spec/llm_call_quality.rs"
 
@@ -214,6 +222,10 @@ path = "tests/spec/system_sampler.rs"
 [[test]]
 name = "perf_phase0"
 path = "tests/perf/phase0.rs"
+
+[[test]]
+name = "perf_projector_phase2"
+path = "tests/perf/projector_phase2.rs"
 
 [features]
 default = []
@@ -273,6 +285,7 @@ sysinfo = { version = "0.38.4", default-features = false, features = ["system"] 
 [dev-dependencies]
 quint-connect = "0.1"
 itf = "0.4"
+proptest = "1"
 rmcp = { version = "1", features = ["server", "client", "transport-io", "schemars", "macros"] }
 tempfile = "3"
 tower = { version = "0.5", features = ["util"] }

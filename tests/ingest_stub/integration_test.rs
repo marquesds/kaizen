@@ -139,6 +139,11 @@ team_salt_hex = "{salt_hex}"
         }),
     };
     store.append_event_with_sync(&ev, Some(&ctx)).unwrap();
+    let mut result = ev.clone();
+    result.seq = 1;
+    result.ts_ms = 1_100;
+    result.kind = EventKind::ToolResult;
+    store.append_event_with_sync(&result, Some(&ctx)).unwrap();
 
     let db_path = db.clone();
     let ws_path = ws.to_path_buf();
@@ -155,7 +160,7 @@ team_salt_hex = "{salt_hex}"
     .unwrap();
 
     let bodies = state.captured_bodies.lock().unwrap();
-    assert_eq!(bodies.len(), 2, "expected event + tool-span POST bodies");
+    assert_eq!(bodies.len(), 2, "expected events + tool-span POST bodies");
 
     let parsed = bodies
         .iter()
@@ -172,7 +177,7 @@ team_salt_hex = "{salt_hex}"
         .expect("tool spans batch");
 
     let events = event_body["events"].as_array().expect("events array");
-    assert_eq!(events.len(), 1);
+    assert_eq!(events.len(), 2);
     let payload_str = events[0]["payload"].to_string();
     assert!(
         !payload_str.contains("/Users/"),

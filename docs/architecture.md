@@ -3,8 +3,8 @@
 ## Module Graph
 
 - `collect` parses agent transcripts + hooks into raw `Event`s.
-- `store` owns SQLite raw tables and derived indexes (`tool_spans`,
-  `file_facts`, `repo_edges`).
+- `store` owns SQLite raw tables, the incremental event projector, and derived
+  indexes (`tool_spans`, `file_facts`, `repo_edges`).
 - `metrics` builds commit-pinned repo snapshots and Ladybug sidecar.
 - `retro` consumes raw telemetry + smart metrics for heuristic bets.
 - `sync` ships redacted events, tool spans, and repo snapshots.
@@ -18,12 +18,21 @@
 ## Data Flow
 
 1. Transcript, hook, or (optional) proxy ingest → `events`.
-2. Event append rebuilds `files_touched`, `skills_used`, `tool_spans`.
+2. Event append applies projector deltas for `files_touched`, `skills_used`,
+   `rules_used`, and closed/orphaned `tool_spans`.
 3. Metrics index scans git + source tree → `repo_snapshots`,
    `file_facts`, `repo_edges`, Ladybug sidecar.
 4. CLI / TUI / retro read shared smart-metric report builder.
 5. Sync flushes redacted outbox rows by kind:
    `events`, `tool_spans`, `repo_snapshots`.
+
+## Store Projector
+
+`src/store/projector.rs` is the hot ingest path. It keeps open tool spans and
+per-session file/skill/rule dedup in memory, emits small deltas, and persists
+only terminal span rows. Store startup warms this state by replaying events for
+non-`Done` sessions. Done sessions are frozen unless the legacy rebuild path is
+requested with `KAIZEN_PROJECTOR=legacy`.
 
 ## External Boundaries
 
