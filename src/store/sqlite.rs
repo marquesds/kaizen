@@ -11,7 +11,10 @@ use crate::sync::outbound::outbound_event_from_row;
 use crate::sync::redact::redact_payload;
 use crate::sync::smart::enqueue_tool_spans_for_session;
 use anyhow::{Context, Result};
-use rusqlite::{Connection, OpenFlags, OptionalExtension, TransactionBehavior, params};
+use rusqlite::types::Value;
+use rusqlite::{
+    Connection, OpenFlags, OptionalExtension, TransactionBehavior, params, params_from_iter,
+};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -20,6 +23,10 @@ use std::path::Path;
 /// Rows below this use `sessions.started_at_ms` for time-window matching.
 const SYNTHETIC_TS_CEILING_MS: i64 = 1_000_000_000_000;
 const DEFAULT_MMAP_MB: u64 = 256;
+const SESSION_SELECT: &str = "SELECT id, agent, model, workspace, started_at_ms, ended_at_ms,
+    status, trace_path, start_commit, end_commit, branch, dirty_start, dirty_end,
+    repo_binding_source, prompt_fingerprint, parent_session_id, agent_version, os, arch,
+    repo_file_count, repo_total_loc FROM sessions";
 
 const MIGRATIONS: &[&str] = &[
     "CREATE TABLE IF NOT EXISTS sessions (
@@ -151,6 +158,10 @@ const MIGRATIONS: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS sessions_workspace_idx ON sessions(workspace)",
     // `ORDER BY started_at_ms` for a workspace (list_sessions, recent_sessions_3)
     "CREATE INDEX IF NOT EXISTS sessions_workspace_started_idx ON sessions(workspace, started_at_ms)",
+    "CREATE INDEX IF NOT EXISTS sessions_workspace_started_desc_idx
+        ON sessions(workspace, started_at_ms DESC, id ASC)",
+    "CREATE INDEX IF NOT EXISTS sessions_workspace_agent_lower_idx
+        ON sessions(workspace, lower(agent), started_at_ms DESC, id ASC)",
     "CREATE TABLE IF NOT EXISTS rules_used (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         session_id TEXT NOT NULL,
@@ -389,6 +400,20 @@ pub struct SessionStatusRow {
     pub id: String,
     pub status: SessionStatus,
     pub ended_at_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct SessionFilter {
+    pub agent_prefix: Option<String>,
+    pub status: Option<SessionStatus>,
+    pub since_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SessionPage {
+    pub rows: Vec<SessionRecord>,
+    pub total: usize,
+    pub next_offset: Option<usize>,
 }
 
 #[derive(Clone)]
@@ -883,89 +908,53 @@ impl Store {
     }
 
     pub fn list_sessions(&self, workspace: &str) -> Result<Vec<SessionRecord>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, agent, model, workspace, started_at_ms, ended_at_ms, status, trace_path,
-                    start_commit, end_commit, branch, dirty_start, dirty_end, repo_binding_source,
-                    prompt_fingerprint, parent_session_id, agent_version, os, arch,
-                    repo_file_count, repo_total_loc
-             FROM sessions WHERE workspace = ?1 ORDER BY started_at_ms DESC",
-        )?;
-        let rows = stmt.query_map(params![workspace], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, Option<String>>(2)?,
-                row.get::<_, String>(3)?,
-                row.get::<_, i64>(4)?,
-                row.get::<_, Option<i64>>(5)?,
-                row.get::<_, String>(6)?,
-                row.get::<_, String>(7)?,
-                row.get::<_, Option<String>>(8)?,
-                row.get::<_, Option<String>>(9)?,
-                row.get::<_, Option<String>>(10)?,
-                row.get::<_, Option<i64>>(11)?,
-                row.get::<_, Option<i64>>(12)?,
-                row.get::<_, String>(13)?,
-                row.get::<_, Option<String>>(14)?,
-                row.get::<_, Option<String>>(15)?,
-                row.get::<_, Option<String>>(16)?,
-                row.get::<_, Option<String>>(17)?,
-                row.get::<_, Option<String>>(18)?,
-                row.get::<_, Option<i64>>(19)?,
-                row.get::<_, Option<i64>>(20)?,
-            ))
-        })?;
+        Ok(self
+            .list_sessions_page(workspace, 0, i64::MAX as usize, SessionFilter::default())?
+            .rows)
+    }
 
-        let mut out = Vec::new();
-        for row in rows {
-            let (
-                id,
-                agent,
-                model,
-                workspace,
-                started,
-                ended,
-                status_str,
-                trace,
-                start_commit,
-                end_commit,
-                branch,
-                dirty_start,
-                dirty_end,
-                source,
-                prompt_fingerprint,
-                parent_session_id,
-                agent_version,
-                os,
-                arch,
-                repo_file_count,
-                repo_total_loc,
-            ) = row?;
-            out.push(SessionRecord {
-                id,
-                agent,
-                model,
-                workspace,
-                started_at_ms: started as u64,
-                ended_at_ms: ended.map(|v| v as u64),
-                status: status_from_str(&status_str),
-                trace_path: trace,
-                start_commit,
-                end_commit,
-                branch,
-                dirty_start: dirty_start.map(i64_to_bool),
-                dirty_end: dirty_end.map(i64_to_bool),
-                repo_binding_source: empty_to_none(source),
-                prompt_fingerprint,
-                parent_session_id,
-                agent_version,
-                os,
-                arch,
-                repo_file_count: repo_file_count.map(|v| v as u32),
-                repo_total_loc: repo_total_loc.map(|v| v as u64),
-            });
-        }
-        Ok(out)
+    pub fn list_sessions_page(
+        &self,
+        workspace: &str,
+        offset: usize,
+        limit: usize,
+        filter: SessionFilter,
+    ) -> Result<SessionPage> {
+        let (where_sql, args) = session_filter_sql(workspace, &filter);
+        let total = self.query_session_page_count(&where_sql, &args)?;
+        let rows = self.query_session_page_rows(&where_sql, &args, offset, limit)?;
+        let next = offset.saturating_add(rows.len());
+        Ok(SessionPage {
+            rows,
+            total,
+            next_offset: (next < total).then_some(next),
+        })
+    }
+
+    fn query_session_page_count(&self, where_sql: &str, args: &[Value]) -> Result<usize> {
+        let sql = format!("SELECT COUNT(*) FROM sessions {where_sql}");
+        let total: i64 = self
+            .conn
+            .query_row(&sql, params_from_iter(args.iter()), |r| r.get(0))?;
+        Ok(total as usize)
+    }
+
+    fn query_session_page_rows(
+        &self,
+        where_sql: &str,
+        args: &[Value],
+        offset: usize,
+        limit: usize,
+    ) -> Result<Vec<SessionRecord>> {
+        let sql = format!(
+            "{SESSION_SELECT} {where_sql} ORDER BY started_at_ms DESC, id ASC LIMIT ? OFFSET ?"
+        );
+        let mut values = args.to_vec();
+        values.push(Value::Integer(limit.min(i64::MAX as usize) as i64));
+        values.push(Value::Integer(offset.min(i64::MAX as usize) as i64));
+        let mut stmt = self.conn.prepare(&sql)?;
+        let rows = stmt.query_map(params_from_iter(values.iter()), session_row)?;
+        rows.map(|r| r.map_err(anyhow::Error::from)).collect()
     }
 
     pub fn list_sessions_started_after(
@@ -980,7 +969,7 @@ impl Store {
                     repo_file_count, repo_total_loc
              FROM sessions
              WHERE workspace = ?1 AND started_at_ms > ?2
-             ORDER BY started_at_ms DESC",
+             ORDER BY started_at_ms DESC, id ASC",
         )?;
         let rows = stmt.query_map(params![workspace, after_started_at_ms as i64], session_row)?;
         rows.map(|r| r.map_err(anyhow::Error::from)).collect()
@@ -1063,42 +1052,33 @@ impl Store {
     }
 
     pub fn list_events_for_session(&self, session_id: &str) -> Result<Vec<Event>> {
+        self.list_events_page(session_id, 0, i64::MAX as usize)
+    }
+
+    pub fn list_events_page(
+        &self,
+        session_id: &str,
+        after_seq: u64,
+        limit: usize,
+    ) -> Result<Vec<Event>> {
         let mut stmt = self.conn.prepare(
             "SELECT session_id, seq, ts_ms, COALESCE(ts_exact, 0), kind, source, tool, tool_call_id,
                     tokens_in, tokens_out, reasoning_tokens, cost_usd_e6, payload,
                     stop_reason, latency_ms, ttft_ms, retry_count,
                     context_used_tokens, context_max_tokens,
                     cache_creation_tokens, cache_read_tokens, system_prompt_tokens
-             FROM events WHERE session_id = ?1 ORDER BY seq ASC",
+             FROM events
+             WHERE session_id = ?1 AND seq >= ?2
+             ORDER BY seq ASC LIMIT ?3",
         )?;
-        let rows = stmt.query_map(params![session_id], |row| {
-            let payload_str: String = row.get(12)?;
-            Ok(Event {
-                session_id: row.get(0)?,
-                seq: row.get::<_, i64>(1)? as u64,
-                ts_ms: row.get::<_, i64>(2)? as u64,
-                ts_exact: row.get::<_, i64>(3)? != 0,
-                kind: kind_from_str(&row.get::<_, String>(4)?),
-                source: source_from_str(&row.get::<_, String>(5)?),
-                tool: row.get(6)?,
-                tool_call_id: row.get(7)?,
-                tokens_in: row.get::<_, Option<i64>>(8)?.map(|v| v as u32),
-                tokens_out: row.get::<_, Option<i64>>(9)?.map(|v| v as u32),
-                reasoning_tokens: row.get::<_, Option<i64>>(10)?.map(|v| v as u32),
-                cost_usd_e6: row.get(11)?,
-                payload: serde_json::from_str(&payload_str).unwrap_or(serde_json::Value::Null),
-                stop_reason: row.get(13)?,
-                latency_ms: row.get::<_, Option<i64>>(14)?.map(|v| v as u32),
-                ttft_ms: row.get::<_, Option<i64>>(15)?.map(|v| v as u32),
-                retry_count: row.get::<_, Option<i64>>(16)?.map(|v| v as u16),
-                context_used_tokens: row.get::<_, Option<i64>>(17)?.map(|v| v as u32),
-                context_max_tokens: row.get::<_, Option<i64>>(18)?.map(|v| v as u32),
-                cache_creation_tokens: row.get::<_, Option<i64>>(19)?.map(|v| v as u32),
-                cache_read_tokens: row.get::<_, Option<i64>>(20)?.map(|v| v as u32),
-                system_prompt_tokens: row.get::<_, Option<i64>>(21)?.map(|v| v as u32),
-            })
-        })?;
-
+        let rows = stmt.query_map(
+            params![
+                session_id,
+                after_seq as i64,
+                limit.min(i64::MAX as usize) as i64
+            ],
+            event_row,
+        )?;
         let mut events = Vec::new();
         for row in rows {
             events.push(row?);
@@ -2471,6 +2451,59 @@ fn session_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<SessionRecord> {
     })
 }
 
+fn event_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Event> {
+    let payload_str: String = row.get(12)?;
+    Ok(Event {
+        session_id: row.get(0)?,
+        seq: row.get::<_, i64>(1)? as u64,
+        ts_ms: row.get::<_, i64>(2)? as u64,
+        ts_exact: row.get::<_, i64>(3)? != 0,
+        kind: kind_from_str(&row.get::<_, String>(4)?),
+        source: source_from_str(&row.get::<_, String>(5)?),
+        tool: row.get(6)?,
+        tool_call_id: row.get(7)?,
+        tokens_in: row.get::<_, Option<i64>>(8)?.map(|v| v as u32),
+        tokens_out: row.get::<_, Option<i64>>(9)?.map(|v| v as u32),
+        reasoning_tokens: row.get::<_, Option<i64>>(10)?.map(|v| v as u32),
+        cost_usd_e6: row.get(11)?,
+        payload: serde_json::from_str(&payload_str).unwrap_or(serde_json::Value::Null),
+        stop_reason: row.get(13)?,
+        latency_ms: row.get::<_, Option<i64>>(14)?.map(|v| v as u32),
+        ttft_ms: row.get::<_, Option<i64>>(15)?.map(|v| v as u32),
+        retry_count: row.get::<_, Option<i64>>(16)?.map(|v| v as u16),
+        context_used_tokens: row.get::<_, Option<i64>>(17)?.map(|v| v as u32),
+        context_max_tokens: row.get::<_, Option<i64>>(18)?.map(|v| v as u32),
+        cache_creation_tokens: row.get::<_, Option<i64>>(19)?.map(|v| v as u32),
+        cache_read_tokens: row.get::<_, Option<i64>>(20)?.map(|v| v as u32),
+        system_prompt_tokens: row.get::<_, Option<i64>>(21)?.map(|v| v as u32),
+    })
+}
+
+fn session_filter_sql(workspace: &str, filter: &SessionFilter) -> (String, Vec<Value>) {
+    let mut clauses = vec!["workspace = ?".to_string()];
+    let mut args = vec![Value::Text(workspace.to_string())];
+    if let Some(prefix) = filter.agent_prefix.as_deref().filter(|s| !s.is_empty()) {
+        clauses.push("lower(agent) LIKE ? ESCAPE '\\'".to_string());
+        args.push(Value::Text(format!("{}%", escape_like(prefix))));
+    }
+    if let Some(status) = &filter.status {
+        clauses.push("status = ?".to_string());
+        args.push(Value::Text(format!("{status:?}")));
+    }
+    if let Some(since_ms) = filter.since_ms {
+        clauses.push("started_at_ms >= ?".to_string());
+        args.push(Value::Integer(since_ms as i64));
+    }
+    (format!("WHERE {}", clauses.join(" AND ")), args)
+}
+
+fn escape_like(raw: &str) -> String {
+    raw.to_lowercase()
+        .replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_")
+}
+
 fn cost_stats(conn: &Connection, workspace: &str) -> Result<(i64, u64)> {
     let cost: i64 = conn.query_row(
         "SELECT COALESCE(SUM(e.cost_usd_e6),0) FROM events e JOIN sessions s ON s.id=e.session_id WHERE s.workspace=?1",
@@ -2877,6 +2910,67 @@ mod tests {
     }
 
     #[test]
+    fn list_sessions_page_orders_and_counts() {
+        let dir = TempDir::new().unwrap();
+        let store = Store::open(&dir.path().join("kaizen.db")).unwrap();
+        let mut a = make_session("a");
+        a.started_at_ms = 2_000;
+        let mut b = make_session("b");
+        b.started_at_ms = 2_000;
+        let mut c = make_session("c");
+        c.started_at_ms = 1_000;
+        store.upsert_session(&c).unwrap();
+        store.upsert_session(&b).unwrap();
+        store.upsert_session(&a).unwrap();
+
+        let page = store
+            .list_sessions_page("/ws", 0, 2, SessionFilter::default())
+            .unwrap();
+        assert_eq!(page.total, 3);
+        assert_eq!(page.next_offset, Some(2));
+        assert_eq!(
+            page.rows.iter().map(|s| s.id.as_str()).collect::<Vec<_>>(),
+            vec!["a", "b"]
+        );
+
+        let all = store.list_sessions("/ws").unwrap();
+        assert_eq!(
+            all.iter().map(|s| s.id.as_str()).collect::<Vec<_>>(),
+            vec!["a", "b", "c"]
+        );
+    }
+
+    #[test]
+    fn list_sessions_page_filters_in_sql_shape() {
+        let dir = TempDir::new().unwrap();
+        let store = Store::open(&dir.path().join("kaizen.db")).unwrap();
+        let mut cursor = make_session("cursor");
+        cursor.agent = "Cursor".into();
+        cursor.started_at_ms = 2_000;
+        cursor.status = SessionStatus::Running;
+        let mut claude = make_session("claude");
+        claude.agent = "claude".into();
+        claude.started_at_ms = 3_000;
+        store.upsert_session(&cursor).unwrap();
+        store.upsert_session(&claude).unwrap();
+
+        let page = store
+            .list_sessions_page(
+                "/ws",
+                0,
+                10,
+                SessionFilter {
+                    agent_prefix: Some("cur".into()),
+                    status: Some(SessionStatus::Running),
+                    since_ms: Some(1_500),
+                },
+            )
+            .unwrap();
+        assert_eq!(page.total, 1);
+        assert_eq!(page.rows[0].id, "cursor");
+    }
+
+    #[test]
     fn incremental_session_helpers_find_new_rows_and_statuses() {
         let dir = TempDir::new().unwrap();
         let store = Store::open(&dir.path().join("kaizen.db")).unwrap();
@@ -2933,6 +3027,22 @@ mod tests {
         assert_eq!(events.len(), 2);
         assert_eq!(events[0].seq, 0);
         assert_eq!(events[1].seq, 1);
+    }
+
+    #[test]
+    fn list_events_page_uses_inclusive_seq_cursor() {
+        let dir = TempDir::new().unwrap();
+        let store = Store::open(&dir.path().join("kaizen.db")).unwrap();
+        store.upsert_session(&make_session("paged")).unwrap();
+        for seq in 0..5 {
+            store.append_event(&make_event("paged", seq)).unwrap();
+        }
+        let first = store.list_events_page("paged", 0, 2).unwrap();
+        assert_eq!(first.iter().map(|e| e.seq).collect::<Vec<_>>(), vec![0, 1]);
+        let second = store
+            .list_events_page("paged", first[1].seq + 1, 2)
+            .unwrap();
+        assert_eq!(second.iter().map(|e| e.seq).collect::<Vec<_>>(), vec![2, 3]);
     }
 
     #[test]

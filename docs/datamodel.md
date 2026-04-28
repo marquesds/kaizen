@@ -32,11 +32,24 @@
 ## Invariants
 
 - Raw `events` append-only. Derived tables can rebuild from them.
+- Session browsing reads through `list_sessions_page`: SQL filters by
+  workspace, optional lower-case agent prefix, status, and `started_at_ms`
+  floor before applying `LIMIT/OFFSET`.
+- Event browsing reads through `list_events_page`: `after_seq` is inclusive,
+  so callers start at `0` and continue from `last_seq + 1`.
 - Token and reasoning fields stay exact-or-null. No synthetic backfill.
 - `tool_spans.status` in `done|orphaned`.
 - One `file_facts` row per `(snapshot_id, path)`.
 - `repo_snapshots.id` changes when commit, dirty fingerprint, or analyzer
   version changes.
+
+## Query Indexes
+
+- `sessions(workspace, started_at_ms DESC, id ASC)` keeps session pages stable
+  and newest-first.
+- `sessions(workspace, lower(agent), started_at_ms DESC, id ASC)` supports
+  case-insensitive agent-prefix filtering.
+- `events(session_id, seq)` supports deterministic event pages inside one session.
 
 ## Relationships
 

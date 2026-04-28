@@ -67,6 +67,10 @@ kaizen tui
 
 This is the richest **interactive** way to explore turns and tools. It is **not** available over MCP; hosts that need graphs should shell to the CLI or use list/summary/metrics tools.
 
+The TUI loads only the visible session and event rows, then fetches more as you
+scroll. Agent filtering uses a case-insensitive prefix and runs in SQLite, so
+large workspaces stay responsive instead of loading every session into memory.
+
 ## Machine-wide aggregation (optional)
 
 If you use Kaizen in several repos on one machine:

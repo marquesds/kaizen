@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Two-pane TUI: session list (left) + events (right).
 
+mod view;
+mod worker;
+
 use crate::core::event::{Event, SessionRecord, SessionStatus};
 use crate::metrics::types::MetricsReport;
 use crate::metrics::{index, report};
-use crate::store::Store;
 use crate::store::span_tree::SpanNode;
+use crate::store::{SessionFilter, Store};
 use crate::ui::theme;
 use anyhow::Result;
 use arc_swap::ArcSwapOption;
@@ -32,33 +35,26 @@ use std::sync::{
 use time::OffsetDateTime;
 use tokio::sync::{Notify, mpsc};
 use tokio::time::{Duration, Instant, sleep_until};
+use view::{DetailData, DetailState, EventView, SessionView};
+use worker::{StoreRequest, StoreResponse, spawn_store_worker};
 
 const THIRTY_DAYS_SEC: u64 = 30 * 24 * 3600;
 /// Timestamps below this are treated as Unix **seconds** when `now` looks like ms (ingest mistakes).
 const MS_HEURISTIC_THRESHOLD: u64 = 1_000_000_000_000;
 const WAL_REFRESH_COALESCE_MS: u64 = 100;
 const REPORT_REFRESH_MIN_MS: u64 = 2_000;
+const DEFAULT_VIEWPORT_HEIGHT: usize = 32;
 
 struct App {
-    /// Unfiltered from store (last refresh).
-    sessions_all: Vec<SessionRecord>,
-    /// Filtered by agent substring (see `agent_filter`).
-    sessions: Vec<SessionRecord>,
-    /// Lowercase substring match on `SessionRecord::agent` (empty = show all).
+    sessions: SessionView,
+    events: EventView,
+    detail_state: DetailState,
     agent_filter: String,
-    /// Typing a new filter; Enter commits, Esc cancels.
     filter_mode: bool,
     filter_buf: String,
-    /// Shown in status after `y` copy.
     clipboard_note: String,
-    events: Vec<Event>,
-    /// `tool_call_id` -> `lead_time_ms` for the selected session (from `tool_spans`).
-    tool_lead_by_call: HashMap<String, u64>,
-    sel_session: usize,
-    sel_event: usize,
     left_focus: bool,
     show_help: bool,
-    /// When true, show payload / fields for `events[sel_event]` in a strip under the list.
     detail: bool,
     show_metrics: bool,
     metrics: Option<MetricsReport>,
@@ -66,13 +62,16 @@ struct App {
     report_dirty: Arc<AtomicBool>,
     report_notify: Arc<Notify>,
     pulse: bool,
-    store: Store,
     workspace: String,
-    max_session_started_at_ms: u64,
-    /// session_id -> score (1..=5) for visible sessions; populated each refresh.
+    store_tx: mpsc::UnboundedSender<StoreRequest>,
+    store_rx: mpsc::UnboundedReceiver<StoreResponse>,
     feedback_scores: HashMap<String, u8>,
-    /// Flat span nodes for selected session (depth-indented in detail pane).
-    span_nodes: Vec<SpanNode>,
+    feedback_token: u64,
+    detail_token: u64,
+    last_session_id: Option<String>,
+    session_viewport_height: usize,
+    event_viewport_height: usize,
+    error_note: String,
 }
 
 impl App {
@@ -84,26 +83,17 @@ impl App {
     ) -> Result<Self> {
         let db = workspace.join(".kaizen/kaizen.db");
         Store::open(&db)?;
-        let store = Store::open_read_only(&db)?;
+        let (store_tx, store_rx) = spawn_store_worker(db);
         let ws = workspace.to_string_lossy().to_string();
-        let sessions_all = store.list_sessions(&ws)?;
-        let max_session_started_at_ms = sessions_all
-            .iter()
-            .map(|s| s.started_at_ms)
-            .max()
-            .unwrap_or(0);
         let metrics = metrics_cache.load_full().as_deref().cloned();
-        let mut app = Self {
-            sessions: Vec::new(),
-            sessions_all,
+        let app = Self {
+            sessions: SessionView::new(),
+            events: EventView::new(),
+            detail_state: DetailState::Idle,
             agent_filter: String::new(),
             filter_mode: false,
             filter_buf: String::new(),
             clipboard_note: String::new(),
-            events: vec![],
-            tool_lead_by_call: HashMap::new(),
-            sel_session: 0,
-            sel_event: 0,
             left_focus: true,
             show_help: false,
             detail: false,
@@ -113,32 +103,22 @@ impl App {
             report_dirty,
             report_notify,
             pulse: false,
-            store,
             workspace: ws,
-            max_session_started_at_ms,
+            store_tx,
+            store_rx,
             feedback_scores: HashMap::new(),
-            span_nodes: vec![],
+            feedback_token: 0,
+            detail_token: 0,
+            last_session_id: None,
+            session_viewport_height: DEFAULT_VIEWPORT_HEIGHT,
+            event_viewport_height: DEFAULT_VIEWPORT_HEIGHT,
+            error_note: String::new(),
         };
-        app.reapply_filter();
-        app.refresh_selected()?;
-        app.refresh_feedback();
         app.mark_report_dirty();
+        let mut app = app;
+        app.request_session_pages();
+        app.request_feedback_for_viewport();
         Ok(app)
-    }
-
-    fn reapply_filter(&mut self) {
-        let f = self.agent_filter.to_lowercase();
-        if f.is_empty() {
-            self.sessions.clone_from(&self.sessions_all);
-        } else {
-            self.sessions = self
-                .sessions_all
-                .iter()
-                .filter(|s| s.agent.to_lowercase().contains(&f))
-                .cloned()
-                .collect();
-        }
-        self.sel_session = self.sel_session.min(self.sessions.len().saturating_sub(1));
     }
 
     fn sync_metrics_cache(&mut self) {
@@ -150,103 +130,214 @@ impl App {
         self.report_notify.notify_one();
     }
 
-    fn sort_sessions(&mut self) {
-        self.sessions_all.sort_by(|a, b| {
-            b.started_at_ms
-                .cmp(&a.started_at_ms)
-                .then_with(|| a.id.cmp(&b.id))
-        });
-    }
-
     fn refresh_full(&mut self) -> Result<()> {
-        self.sessions_all = self.store.list_sessions(&self.workspace)?;
-        self.max_session_started_at_ms = self
-            .sessions_all
-            .iter()
-            .map(|s| s.started_at_ms)
-            .max()
-            .unwrap_or(0);
-        self.reapply_filter();
+        self.sessions.reset();
+        self.events.clear();
+        self.detail_state = DetailState::Idle;
+        self.last_session_id = None;
         self.pulse = !self.pulse;
-        self.refresh_selected()?;
-        self.refresh_feedback();
+        self.request_session_pages();
         self.sync_metrics_cache();
         self.mark_report_dirty();
         Ok(())
     }
 
     fn refresh(&mut self) -> Result<()> {
-        self.refresh_sessions_incremental()?;
-        self.reapply_filter();
         self.pulse = !self.pulse;
-        self.refresh_selected()?;
-        self.refresh_feedback();
+        self.request_session_pages();
+        self.request_selected_detail();
+        self.request_event_pages();
         self.sync_metrics_cache();
         self.mark_report_dirty();
         Ok(())
     }
 
-    fn refresh_sessions_incremental(&mut self) -> Result<()> {
-        let mut added = self
-            .store
-            .list_sessions_started_after(&self.workspace, self.max_session_started_at_ms)?;
-        if let Some(max_started) = added.iter().map(|s| s.started_at_ms).max() {
-            self.max_session_started_at_ms = self.max_session_started_at_ms.max(max_started);
+    fn filter(&self) -> SessionFilter {
+        SessionFilter {
+            agent_prefix: Some(self.agent_filter.trim().to_lowercase()).filter(|s| !s.is_empty()),
+            status: None,
+            since_ms: None,
         }
-        self.sessions_all.append(&mut added);
-        let ids = self
-            .sessions_all
-            .iter()
-            .map(|s| s.id.clone())
-            .collect::<Vec<_>>();
-        let statuses = self.store.session_statuses(&ids)?;
-        let by_id = statuses
-            .into_iter()
-            .map(|row| (row.id, (row.status, row.ended_at_ms)))
-            .collect::<HashMap<_, _>>();
-        for session in &mut self.sessions_all {
-            if let Some((status, ended_at_ms)) = by_id.get(&session.id) {
-                session.status = status.clone();
-                session.ended_at_ms = *ended_at_ms;
-            }
-        }
-        self.sort_sessions();
-        Ok(())
     }
 
-    fn refresh_selected(&mut self) -> Result<()> {
-        if let Some(s) = self.sessions.get(self.sel_session) {
-            self.events = self.store.list_events_for_session(&s.id)?;
-            self.tool_lead_by_call.clear();
-            for row in self.store.tool_spans_for_session(&s.id)? {
-                if let (Some(id), Some(lt)) = (row.tool_call_id, row.lead_time_ms) {
-                    self.tool_lead_by_call.insert(id, lt);
-                }
+    fn request_session_pages(&mut self) {
+        let offsets = self
+            .sessions
+            .needed_page_offsets(self.session_viewport_height);
+        for offset in offsets {
+            if self.sessions.request_page(offset) {
+                let _ = self.store_tx.send(StoreRequest::SessionsPage {
+                    token: self.sessions.generation(),
+                    workspace: self.workspace.clone(),
+                    offset,
+                    limit: self.sessions.page_size,
+                    filter: self.filter(),
+                });
             }
-            self.span_nodes = self.store.session_span_tree(&s.id).unwrap_or_default();
-        } else {
-            self.events.clear();
-            self.tool_lead_by_call.clear();
-            self.span_nodes.clear();
         }
-        self.sel_event = self.sel_event.min(self.events.len().saturating_sub(1));
-        self.sync_metrics_cache();
-        Ok(())
     }
 
-    fn refresh_feedback(&mut self) {
-        let ids: Vec<String> = self.sessions.iter().map(|s| s.id.clone()).collect();
-        self.feedback_scores = self
-            .store
-            .feedback_for_sessions(&ids)
-            .unwrap_or_default()
+    fn request_feedback_for_viewport(&mut self) {
+        let ids: Vec<String> = self
+            .sessions
+            .visible_rows(self.session_viewport_height)
             .into_iter()
-            .filter_map(|(sid, r)| r.score.map(|s| (sid, s.0)))
+            .filter_map(|(_, row)| row.map(|s| s.id.clone()))
+            .filter(|id| !self.feedback_scores.contains_key(id))
             .collect();
+        if ids.is_empty() {
+            return;
+        }
+        self.feedback_token = self.feedback_token.wrapping_add(1);
+        let _ = self.store_tx.send(StoreRequest::Feedback {
+            token: self.feedback_token,
+            ids,
+        });
+    }
+
+    fn request_selected_detail(&mut self) {
+        let Some(id) = self.selected_id().map(str::to_string) else {
+            self.detail_state = DetailState::Idle;
+            self.events.clear();
+            self.last_session_id = None;
+            return;
+        };
+        if self.last_session_id.as_deref() != Some(&id) {
+            self.events.reset_for(&id);
+            self.detail_token = self.detail_token.wrapping_add(1);
+            self.detail_state = DetailState::Loading {
+                token: self.detail_token,
+                session_id: id.clone(),
+            };
+            let _ = self.store_tx.send(StoreRequest::Detail {
+                token: self.detail_token,
+                session_id: id.clone(),
+            });
+            self.last_session_id = Some(id);
+        }
+        self.request_event_pages();
+    }
+
+    fn request_event_pages(&mut self) {
+        let Some(session_id) = self.events.session_id().map(str::to_string) else {
+            return;
+        };
+        for after_seq in self.events.needed_after_seq(self.event_viewport_height) {
+            if self.events.request_page(after_seq) {
+                let _ = self.store_tx.send(StoreRequest::EventsPage {
+                    token: self.events.generation(),
+                    session_id: session_id.clone(),
+                    after_seq,
+                    limit: self.events.page_size,
+                });
+            }
+        }
+    }
+
+    fn apply_store_response(&mut self, response: StoreResponse) {
+        match response {
+            StoreResponse::SessionsPage {
+                token,
+                offset,
+                result,
+            } => self.apply_session_page(token, offset, result),
+            StoreResponse::EventsPage {
+                token,
+                session_id,
+                after_seq,
+                result,
+            } => self.apply_event_page(token, &session_id, after_seq, result),
+            StoreResponse::Detail {
+                token,
+                session_id,
+                result,
+            } => self.apply_detail(token, &session_id, result),
+            StoreResponse::Feedback { token, result } => self.apply_feedback(token, result),
+        }
+    }
+
+    fn apply_session_page(
+        &mut self,
+        token: u64,
+        offset: usize,
+        result: Result<crate::store::SessionPage, String>,
+    ) {
+        if token != self.sessions.generation() {
+            return;
+        }
+        match result {
+            Ok(page) => {
+                self.sessions.finish_page(offset, page.rows, page.total);
+                self.error_note.clear();
+                self.request_feedback_for_viewport();
+                self.request_selected_detail();
+            }
+            Err(err) => {
+                self.sessions.finish_error(offset);
+                self.error_note = err;
+            }
+        }
+    }
+
+    fn apply_event_page(
+        &mut self,
+        token: u64,
+        session_id: &str,
+        after_seq: u64,
+        result: Result<Vec<Event>, String>,
+    ) {
+        if token != self.events.generation() || self.events.session_id() != Some(session_id) {
+            return;
+        }
+        match result {
+            Ok(rows) => self.events.finish_page(after_seq, rows),
+            Err(err) => {
+                self.events.finish_error(after_seq);
+                self.error_note = err;
+            }
+        }
+    }
+
+    fn apply_detail(&mut self, token: u64, session_id: &str, result: Result<DetailData, String>) {
+        match &self.detail_state {
+            DetailState::Loading {
+                token: active,
+                session_id: active_id,
+            } if *active == token && active_id == session_id => {}
+            _ => return,
+        }
+        self.detail_state = match result {
+            Ok(data) => DetailState::Ready(data),
+            Err(err) => DetailState::Error(err),
+        };
+    }
+
+    fn apply_feedback(&mut self, token: u64, result: Result<HashMap<String, u8>, String>) {
+        if token != self.feedback_token {
+            return;
+        }
+        if let Ok(scores) = result {
+            self.feedback_scores.extend(scores);
+        }
+    }
+
+    fn set_viewport_height(&mut self, height: usize) {
+        let h = height.saturating_sub(4);
+        self.session_viewport_height = h.max(1);
+        self.event_viewport_height = h.max(1);
+        self.sessions
+            .set_viewport_height(self.session_viewport_height);
+        self.events.set_viewport_height(self.event_viewport_height);
+    }
+
+    fn after_session_cursor_move(&mut self) {
+        self.request_session_pages();
+        self.request_feedback_for_viewport();
+        self.request_selected_detail();
     }
 
     fn selected_session(&self) -> Option<&SessionRecord> {
-        self.sessions.get(self.sel_session)
+        self.sessions.selected()
     }
 
     fn selected_id(&self) -> Option<&str> {
@@ -254,7 +345,7 @@ impl App {
     }
 
     fn selected_event(&self) -> Option<&Event> {
-        self.events.get(self.sel_event)
+        self.events.selected()
     }
 }
 
@@ -381,13 +472,11 @@ fn draw_sessions(f: &mut ratatui::Frame, app: &App, area: ratatui::layout::Rect)
         theme::BORDER_INACTIVE
     };
     let title = if app.agent_filter.is_empty() {
-        format!("Sessions ({})", app.sessions.len())
+        format!("Sessions ({})", app.sessions.total)
     } else {
         format!(
-            "Sessions {}/{} (agent filter: {:?})",
-            app.sessions.len(),
-            app.sessions_all.len(),
-            app.agent_filter
+            "Sessions {} (agent prefix: {:?})",
+            app.sessions.total, app.agent_filter
         )
     };
     let block = Block::default()
@@ -397,44 +486,18 @@ fn draw_sessions(f: &mut ratatui::Frame, app: &App, area: ratatui::layout::Rect)
     let now = now_ms();
     let items: Vec<ListItem> = app
         .sessions
-        .iter()
-        .map(|s| {
-            let st = format!("{:?}", s.status);
-            let st_color = theme::status_color(&st);
-            let age = time_ago_label(now, s.started_at_ms);
-            let tag = session_status_letter(s);
-            let m = model_suffix(&s.model);
-            let score_span = app.feedback_scores.get(&s.id).map(|&sc| {
-                let color = match sc {
-                    1..=2 => Color::Red,
-                    3 => Color::Yellow,
-                    _ => Color::Green,
-                };
-                Span::styled(format!("★{sc}"), Style::default().fg(color))
-            });
-            let mut spans = vec![
-                Span::styled(format!("{:.10}", s.id), Style::default().fg(Color::Gray)),
-                Span::raw(" "),
-                Span::styled(
-                    format!("{:.7}", s.agent),
-                    Style::default().fg(theme::agent_color(&s.agent)),
-                ),
-                Span::raw(" "),
-                Span::styled(format!("{tag}"), Style::default().fg(st_color)),
-                Span::raw(" "),
-                Span::styled(age, Style::default().fg(Color::White)),
-                Span::styled(m, Style::default().fg(Color::Gray)),
-            ];
-            if let Some(s) = score_span {
-                spans.push(Span::raw(" "));
-                spans.push(s);
-            }
-            let line = Line::from(spans);
-            ListItem::new(line)
+        .visible_rows(area.height.saturating_sub(2) as usize)
+        .into_iter()
+        .map(|(idx, row)| {
+            row.map(|s| session_item(now, s, &app.feedback_scores))
+                .unwrap_or_else(|| ListItem::new(format!("{idx:>6}  loading...")))
         })
         .collect();
     let mut state = ListState::default();
-    state.select(Some(app.sel_session));
+    state.select(
+        app.sessions
+            .selected_local_index(area.height.saturating_sub(2) as usize),
+    );
     f.render_stateful_widget(
         ratatui::widgets::List::new(items)
             .block(block)
@@ -442,6 +505,44 @@ fn draw_sessions(f: &mut ratatui::Frame, app: &App, area: ratatui::layout::Rect)
         area,
         &mut state,
     );
+}
+
+fn session_item<'a>(
+    now: u64,
+    s: &'a SessionRecord,
+    feedback_scores: &HashMap<String, u8>,
+) -> ListItem<'a> {
+    let st = format!("{:?}", s.status);
+    let st_color = theme::status_color(&st);
+    let age = time_ago_label(now, s.started_at_ms);
+    let tag = session_status_letter(s);
+    let m = model_suffix(&s.model);
+    let score_span = feedback_scores.get(&s.id).map(|&sc| {
+        let color = match sc {
+            1..=2 => Color::Red,
+            3 => Color::Yellow,
+            _ => Color::Green,
+        };
+        Span::styled(format!("★{sc}"), Style::default().fg(color))
+    });
+    let mut spans = vec![
+        Span::styled(format!("{:.10}", s.id), Style::default().fg(Color::Gray)),
+        Span::raw(" "),
+        Span::styled(
+            format!("{:.7}", s.agent),
+            Style::default().fg(theme::agent_color(&s.agent)),
+        ),
+        Span::raw(" "),
+        Span::styled(format!("{tag}"), Style::default().fg(st_color)),
+        Span::raw(" "),
+        Span::styled(age, Style::default().fg(Color::White)),
+        Span::styled(m, Style::default().fg(Color::Gray)),
+    ];
+    if let Some(s) = score_span {
+        spans.push(Span::raw(" "));
+        spans.push(s);
+    }
+    ListItem::new(Line::from(spans))
 }
 
 fn draw_events(f: &mut ratatui::Frame, app: &App, area: ratatui::layout::Rect) {
@@ -462,35 +563,17 @@ fn draw_events(f: &mut ratatui::Frame, app: &App, area: ratatui::layout::Rect) {
     };
     let title = format!("Events — {:.18} — {}", id, model);
     let now = now_ms();
+    let leads = app.detail_state.leads();
+    let spans = app.detail_state.spans();
     if app.detail
-        && let (true, Some(ev)) = (!app.events.is_empty(), app.selected_event())
+        && let Some(ev) = app.selected_event()
     {
         let split = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Min(2), Constraint::Length(10)])
             .split(area);
-        let items: Vec<ListItem> = app
-            .events
-            .iter()
-            .map(|e| {
-                let row = event_row_text(now, e, &app.tool_lead_by_call);
-                ListItem::new(row)
-            })
-            .collect();
-        let mut state = ListState::default();
-        state.select(Some(app.sel_event));
-        let list_block = Block::default()
-            .title(title.clone())
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(border_color));
-        f.render_stateful_widget(
-            List::new(items)
-                .block(list_block)
-                .highlight_style(Style::default().bg(Color::Blue).fg(Color::White)),
-            split[0],
-            &mut state,
-        );
-        let detail = event_detail_text(ev, &app.tool_lead_by_call);
+        render_event_list(f, app, split[0], title.clone(), border_color, now);
+        let detail = event_detail_text(ev, leads);
         let det_block = Block::default()
             .title("Detail")
             .borders(Borders::ALL)
@@ -503,37 +586,15 @@ fn draw_events(f: &mut ratatui::Frame, app: &App, area: ratatui::layout::Rect) {
         );
         return;
     }
-    if !app.span_nodes.is_empty() {
-        let max_depth: u32 = app
-            .span_nodes
-            .iter()
-            .map(|n| n.span.depth)
-            .max()
-            .unwrap_or(0);
+    if !spans.is_empty() {
+        let max_depth: u32 = spans.iter().map(|n| n.span.depth).max().unwrap_or(0);
         let strip_h = (max_depth + 3).min(8) as u16;
         let split = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Min(2), Constraint::Length(strip_h)])
             .split(area);
-        let block = Block::default()
-            .title(title)
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(border_color));
-        let items: Vec<ListItem> = app
-            .events
-            .iter()
-            .map(|e| ListItem::new(event_row_text(now, e, &app.tool_lead_by_call)))
-            .collect();
-        let mut state = ListState::default();
-        state.select(Some(app.sel_event));
-        f.render_stateful_widget(
-            List::new(items)
-                .block(block)
-                .highlight_style(Style::default().bg(Color::Blue).fg(Color::White)),
-            split[0],
-            &mut state,
-        );
-        let span_text: Vec<Line> = span_depth_lines(&app.span_nodes);
+        render_event_list(f, app, split[0], title, border_color, now);
+        let span_text: Vec<Line> = span_depth_lines(spans);
         let span_block = Block::default()
             .title("Span tree")
             .borders(Borders::ALL)
@@ -546,20 +607,53 @@ fn draw_events(f: &mut ratatui::Frame, app: &App, area: ratatui::layout::Rect) {
         );
         return;
     }
+    if matches!(app.detail_state, DetailState::Loading { .. }) && app.events.total_loaded == 0 {
+        let block = Block::default()
+            .title(title)
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(border_color));
+        f.render_widget(Paragraph::new("loading...").block(block), area);
+        return;
+    }
+    if let Some(err) = app.detail_state.error_message()
+        && app.events.total_loaded == 0
+    {
+        let block = Block::default()
+            .title(title)
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(border_color));
+        f.render_widget(Paragraph::new(err.to_string()).block(block), area);
+        return;
+    }
+    render_event_list(f, app, area, title, border_color, now);
+}
+
+fn render_event_list(
+    f: &mut ratatui::Frame,
+    app: &App,
+    area: ratatui::layout::Rect,
+    title: String,
+    border_color: Color,
+    now: u64,
+) {
     let block = Block::default()
         .title(title)
         .borders(Borders::ALL)
         .border_style(Style::default().fg(border_color));
     let items: Vec<ListItem> = app
         .events
-        .iter()
-        .map(|e| {
-            let row = event_row_text(now, e, &app.tool_lead_by_call);
-            ListItem::new(row)
+        .visible_rows(area.height.saturating_sub(2) as usize)
+        .into_iter()
+        .map(|(idx, row)| {
+            row.map(|e| ListItem::new(event_row_text(now, e, app.detail_state.leads())))
+                .unwrap_or_else(|| ListItem::new(format!("{idx:>6}  loading...")))
         })
         .collect();
     let mut state = ListState::default();
-    state.select(Some(app.sel_event));
+    state.select(
+        app.events
+            .selected_local_index(area.height.saturating_sub(2) as usize),
+    );
     f.render_stateful_widget(
         List::new(items)
             .block(block)
@@ -847,10 +941,19 @@ pub async fn run(workspace: &Path) -> Result<()> {
     loop {
         if needs_draw {
             app.sync_metrics_cache();
-            terminal.draw(|f| draw(f, &app))?;
+            terminal.draw(|f| {
+                app.set_viewport_height(f.area().height as usize);
+                app.request_session_pages();
+                app.request_event_pages();
+                draw(f, &app);
+            })?;
             needs_draw = false;
         }
         tokio::select! {
+            Some(response) = app.store_rx.recv() => {
+                app.apply_store_response(response);
+                needs_draw = true;
+            }
             _ = wait_for_deadline(refresh_deadline), if refresh_deadline.is_some() => {
                 refresh_deadline = None;
                 if pending_refresh {
@@ -944,56 +1047,51 @@ pub async fn run(workspace: &Path) -> Result<()> {
                         KeyCode::Char('r') => { let _ = app.refresh_full(); needs_draw = true; }
                         KeyCode::Char('j') | KeyCode::Down => {
                             if app.show_metrics || app.left_focus {
-                                if app.sel_session + 1 < app.sessions.len() {
-                                    app.sel_session += 1;
-                                    needs_draw = true;
-                                }
-                            } else if app.sel_event + 1 < app.events.len() {
-                                app.sel_event += 1;
+                                app.sessions.move_by(1);
+                                app.after_session_cursor_move();
+                                needs_draw = true;
+                            } else {
+                                app.events.move_by(1);
+                                app.request_event_pages();
                                 needs_draw = true;
                             }
                         }
                         KeyCode::Char('k') | KeyCode::Up => {
                             if app.show_metrics || app.left_focus {
-                                if app.sel_session > 0 {
-                                    app.sel_session -= 1;
-                                    needs_draw = true;
-                                }
-                            } else if app.sel_event > 0 {
-                                app.sel_event -= 1;
+                                app.sessions.move_by(-1);
+                                app.after_session_cursor_move();
+                                needs_draw = true;
+                            } else {
+                                app.events.move_by(-1);
+                                app.request_event_pages();
                                 needs_draw = true;
                             }
                         }
                         KeyCode::Char('g') => {
                             if app.show_metrics || app.left_focus {
-                                app.sel_session = 0;
+                                app.sessions.cursor = 0;
+                                app.after_session_cursor_move();
                             } else {
-                                app.sel_event = 0;
+                                app.events.cursor = 0;
+                                app.request_event_pages();
                             }
                             needs_draw = true;
                         }
                         KeyCode::Char('G') => {
                             if app.show_metrics || app.left_focus {
-                                app.sel_session = app.sessions.len().saturating_sub(1);
+                                app.sessions.jump_last();
+                                app.after_session_cursor_move();
                             } else {
-                                app.sel_event = app.events.len().saturating_sub(1);
+                                app.events.jump_last_loaded();
+                                app.request_event_pages();
                             }
                             needs_draw = true;
                         }
-                        KeyCode::Enter if !app.events.is_empty() && !app.show_metrics => {
+                        KeyCode::Enter if app.selected_event().is_some() && !app.show_metrics => {
                             app.detail = !app.detail;
                             needs_draw = true;
                         }
                         _ => {}
-                    }
-                    // Reload events when the selected session index changes.
-                    if matches!(k.code,
-                        KeyCode::Char('j') | KeyCode::Char('k') | KeyCode::Up | KeyCode::Down
-                        | KeyCode::Char('g') | KeyCode::Char('G')
-                    ) && (app.show_metrics || app.left_focus)
-                    {
-                        let _ = app.refresh_selected();
-                        needs_draw = true;
                     }
             }
             else => {}
@@ -1009,6 +1107,7 @@ pub async fn run(workspace: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::event::{EventKind, EventSource};
 
     #[test]
     fn time_ago_just_now() {
@@ -1032,5 +1131,102 @@ mod tests {
         let old = now - (40u64 * 24 * 3600 * 1000);
         let label = time_ago_label(now, old);
         assert!(label.contains('-'), "expected date-like label: {label}");
+    }
+
+    #[test]
+    fn session_view_clamps_cursor_and_suppresses_double_load() {
+        let mut view = view::SessionView::new();
+        view.set_viewport_height(4);
+        assert_eq!(view.needed_page_offsets(4), vec![0]);
+        assert!(view.request_page(0));
+        assert!(!view.request_page(0));
+        view.finish_page(0, vec![session("a", 3), session("b", 2)], 2);
+        view.move_by(99);
+        assert_eq!(view.cursor, 1);
+        assert_eq!(view.selected().unwrap().id, "b");
+    }
+
+    #[test]
+    fn session_view_eviction_keeps_cursor_page() {
+        let mut view = view::SessionView::new();
+        view.page_size = 2;
+        for offset in (0..=20).step_by(2) {
+            view.cursor = offset;
+            view.finish_page(
+                offset,
+                vec![session(&format!("s{offset}"), offset as u64)],
+                30,
+            );
+        }
+        assert!(view.window.contains_key(&20));
+        assert!(!view.window.contains_key(&0));
+    }
+
+    #[test]
+    fn event_view_paginates_from_zero_and_resets_generation() {
+        let mut view = view::EventView::new();
+        view.page_size = 2;
+        view.reset_for("s1");
+        let token = view.generation();
+        assert!(view.needed_after_seq(4).starts_with(&[0, 2]));
+        assert!(view.request_page(0));
+        assert!(!view.request_page(0));
+        view.finish_page(0, vec![event("s1", 0), event("s1", 1)]);
+        view.reset_for("s2");
+        assert_ne!(view.generation(), token);
+        assert!(view.window.is_empty());
+    }
+
+    fn session(id: &str, started_at_ms: u64) -> SessionRecord {
+        SessionRecord {
+            id: id.to_string(),
+            agent: "cursor".to_string(),
+            model: None,
+            workspace: "/ws".to_string(),
+            started_at_ms,
+            ended_at_ms: None,
+            status: SessionStatus::Done,
+            trace_path: "/trace".to_string(),
+            start_commit: None,
+            end_commit: None,
+            branch: None,
+            dirty_start: None,
+            dirty_end: None,
+            repo_binding_source: None,
+            prompt_fingerprint: None,
+            parent_session_id: None,
+            agent_version: None,
+            os: None,
+            arch: None,
+            repo_file_count: None,
+            repo_total_loc: None,
+        }
+    }
+
+    fn event(session_id: &str, seq: u64) -> Event {
+        Event {
+            session_id: session_id.to_string(),
+            seq,
+            ts_ms: seq,
+            ts_exact: true,
+            kind: EventKind::ToolCall,
+            source: EventSource::Tail,
+            tool: None,
+            tool_call_id: None,
+            tokens_in: None,
+            tokens_out: None,
+            reasoning_tokens: None,
+            cost_usd_e6: None,
+            stop_reason: None,
+            latency_ms: None,
+            ttft_ms: None,
+            retry_count: None,
+            context_used_tokens: None,
+            context_max_tokens: None,
+            cache_creation_tokens: None,
+            cache_read_tokens: None,
+            system_prompt_tokens: None,
+            payload: serde_json::Value::Null,
+        }
     }
 }
