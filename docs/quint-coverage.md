@@ -13,6 +13,7 @@ When to add or extend a spec: see [`.cursor/rules/quint-before-code.mdc`](../.cu
 | [`specs/session-lifecycle.qnt`](../specs/session-lifecycle.qnt) | `tests/spec/session_lifecycle.rs` | session states (abstract) |
 | [`specs/init-setup.qnt`](../specs/init-setup.qnt) | `tests/spec/init_setup.rs` | `init` |
 | [`specs/retention.qnt`](../specs/retention.qnt) | `tests/spec/retention.rs` | tier aging |
+| [`specs/event-log-hot.qnt`](../specs/event-log-hot.qnt) | unit tests in `src/store/hot_log.rs` | hot log append, replay, index |
 | [`specs/sync-backpressure.qnt`](../specs/sync-backpressure.qnt) | `tests/spec/sync_backpressure.rs` | sync |
 | [`specs/daemon-handshake.qnt`](../specs/daemon-handshake.qnt) | `tests/spec/daemon_lifecycle.rs` | daemon lifecycle and protocol retry |
 | [`specs/telemetry-exporters.qnt`](../specs/telemetry-exporters.qnt) | `tests/spec/telemetry_exporters.rs` | telemetry (query authority + N-way fan-out) |

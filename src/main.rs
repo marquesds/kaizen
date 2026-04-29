@@ -97,6 +97,12 @@ enum Command {
         #[arg(long)]
         vacuum: bool,
     },
+    /// Migrate local store between SQLite-only and tiered storage.
+    #[command(next_help_heading = "Operate")]
+    Migrate {
+        #[command(subcommand)]
+        subcmd: MigrateCommand,
+    },
     /// Rich session insights: activity by day, top tools, recent sessions.
     #[command(next_help_heading = "Trust & observe")]
     Insights {
@@ -654,6 +660,25 @@ enum Source {
     Claude,
 }
 
+#[derive(Subcommand)]
+enum MigrateCommand {
+    /// Export SQLite rows into hot log + cold Parquet.
+    V2 {
+        /// workspace root (default: cwd)
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        /// Keep future/skewed timestamps instead of failing validation.
+        #[arg(long)]
+        allow_skew: bool,
+    },
+    /// Restore raw SQLite events from hot log + cold Parquet.
+    V1 {
+        /// workspace root (default: cwd)
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+    },
+}
+
 fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
     let cli = Cli::parse();
@@ -746,6 +771,15 @@ fn main() -> anyhow::Result<()> {
             days,
             vacuum,
         } => kaizen::shell::gc::cmd_gc(workspace.as_deref(), days, vacuum),
+        Command::Migrate { subcmd } => match subcmd {
+            MigrateCommand::V2 {
+                workspace,
+                allow_skew,
+            } => kaizen::shell::migrate::cmd_migrate_v2(workspace.as_deref(), allow_skew),
+            MigrateCommand::V1 { workspace } => {
+                kaizen::shell::migrate::cmd_migrate_v1(workspace.as_deref())
+            }
+        },
         Command::Completions { shell } => {
             let sh = match shell {
                 CompletionShell::Bash => clap_complete::Shell::Bash,

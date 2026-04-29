@@ -9,6 +9,7 @@ use crate::store::projector::{DEFAULT_ORPHAN_TTL_MS, Projector, ProjectorEvent};
 use crate::store::tool_span_index::{
     clear_session_spans, rebuild_tool_spans_for_session, upsert_tool_span_record,
 };
+use crate::store::{hot_log::HotLog, outbox_redb::Outbox};
 use crate::sync::context::SyncIngestContext;
 use crate::sync::outbound::outbound_event_from_row;
 use crate::sync::redact::redact_payload;
@@ -20,7 +21,7 @@ use rusqlite::{
 };
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Max `ts_ms` still treated as transcript-only synthetic timing (seq-based fallbacks).
 /// Rows below this use `sessions.started_at_ms` for time-window matching.
@@ -428,6 +429,8 @@ struct SpanTreeCacheEntry {
 
 pub struct Store {
     conn: Connection,
+    root: PathBuf,
+    hot_log: RefCell<Option<HotLog>>,
     span_tree_cache: RefCell<Option<SpanTreeCacheEntry>>,
     projector: RefCell<Projector>,
 }
@@ -466,6 +469,11 @@ impl Store {
         }
         let store = Self {
             conn,
+            root: path
+                .parent()
+                .unwrap_or_else(|| Path::new("."))
+                .to_path_buf(),
+            hot_log: RefCell::new(None),
             span_tree_cache: RefCell::new(None),
             projector: RefCell::new(Projector::default()),
         };
@@ -662,6 +670,7 @@ impl Store {
         if self.conn.changes() == 0 {
             return Ok(());
         }
+        self.append_hot_event(e)?;
         if projector_legacy_mode() {
             index_event_derived(&self.conn, e)?;
             rebuild_tool_spans_for_session(&self.conn, &e.session_id)?;
@@ -711,12 +720,27 @@ impl Store {
         let mut outbound = outbound_event_from_row(e, &session, &salt);
         redact_payload(&mut outbound.payload, ctx.workspace_root(), &salt);
         let row = serde_json::to_string(&outbound)?;
-        self.conn.execute(
-            "INSERT INTO sync_outbox (session_id, kind, payload, sent) VALUES (?1, 'events', ?2, 0)",
-            params![e.session_id, row],
-        )?;
+        self.outbox()?.append(&e.session_id, "events", &row)?;
         enqueue_tool_spans_for_session(self, &e.session_id, ctx)?;
         Ok(())
+    }
+
+    fn append_hot_event(&self, e: &Event) -> Result<()> {
+        if std::env::var("KAIZEN_HOT_LOG").as_deref() == Ok("0") {
+            return Ok(());
+        }
+        let mut slot = self.hot_log.borrow_mut();
+        if slot.is_none() {
+            *slot = Some(HotLog::open(&self.root)?);
+        }
+        if let Some(log) = slot.as_mut() {
+            log.append(e)?;
+        }
+        Ok(())
+    }
+
+    fn outbox(&self) -> Result<Outbox> {
+        Outbox::open(&self.root)
     }
 
     pub fn flush_projector_session(&self, session_id: &str, now_ms: u64) -> Result<()> {
@@ -812,6 +836,10 @@ impl Store {
     }
 
     pub fn list_outbox_pending(&self, limit: usize) -> Result<Vec<(i64, String, String)>> {
+        let rows = self.outbox()?.list_pending(limit)?;
+        if !rows.is_empty() {
+            return Ok(rows);
+        }
         let mut stmt = self.conn.prepare(
             "SELECT id, kind, payload FROM sync_outbox WHERE sent = 0 ORDER BY id ASC LIMIT ?1",
         )?;
@@ -830,6 +858,7 @@ impl Store {
     }
 
     pub fn mark_outbox_sent(&self, ids: &[i64]) -> Result<()> {
+        self.outbox()?.delete_ids(ids)?;
         for id in ids {
             self.conn
                 .execute("UPDATE sync_outbox SET sent = 1 WHERE id = ?1", params![id])?;
@@ -843,6 +872,7 @@ impl Store {
         kind: &str,
         payloads: &[String],
     ) -> Result<()> {
+        self.outbox()?.replace(owner_id, kind, payloads)?;
         self.conn.execute(
             "DELETE FROM sync_outbox WHERE session_id = ?1 AND kind = ?2 AND sent = 0",
             params![owner_id, kind],
@@ -857,6 +887,10 @@ impl Store {
     }
 
     pub fn outbox_pending_count(&self) -> Result<u64> {
+        let redb = self.outbox()?.pending_count()?;
+        if redb > 0 {
+            return Ok(redb);
+        }
         let c: i64 =
             self.conn
                 .query_row("SELECT COUNT(*) FROM sync_outbox WHERE sent = 0", [], |r| {

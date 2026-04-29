@@ -433,7 +433,8 @@ pub fn summary_text(
         maybe_refresh_store(workspace, &store, refresh)?;
         let ws_str = workspace.to_string_lossy().to_string();
         let read_store = Store::open_read_only(&crate::core::workspace::db_path(workspace))?;
-        let mut stats = read_store.summary_stats(&ws_str)?;
+        let query = crate::store::query::QueryStore::open(&workspace.join(".kaizen"))?;
+        let mut stats = query.summary_stats(&read_store, &ws_str)?;
         if source != crate::core::data_source::DataSource::Local
             && let Ok(Some(agg)) =
                 crate::shell::remote_observe::try_remote_event_agg(&read_store, &cfg, workspace)
