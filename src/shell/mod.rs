@@ -12,6 +12,7 @@ pub mod init;
 pub mod insights;
 pub mod kaizen_child;
 pub mod metrics;
+pub mod migrate;
 pub mod outcomes_cmd;
 pub mod prompt;
 pub mod proxy;

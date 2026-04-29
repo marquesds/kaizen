@@ -92,6 +92,31 @@ impl Default for RetentionConfig {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct StorageConfig {
+    pub hot_max_bytes: String,
+    pub cold_after_days: u32,
+    pub retention_days: u32,
+    pub flush_hour_utc: u8,
+}
+
+impl Default for StorageConfig {
+    fn default() -> Self {
+        Self {
+            hot_max_bytes: "1GB".into(),
+            cold_after_days: 7,
+            retention_days: 90,
+            flush_hour_utc: 0,
+        }
+    }
+}
+
+impl StorageConfig {
+    pub fn hot_max_bytes_value(&self) -> u64 {
+        parse_byte_size(&self.hot_max_bytes).unwrap_or(1_073_741_824)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyncConfig {
     /// When empty, sync is disabled (no outbox enqueue, `sync run` no-ops flush).
@@ -510,6 +535,8 @@ pub struct Config {
     #[serde(default)]
     pub retention: RetentionConfig,
     #[serde(default)]
+    pub storage: StorageConfig,
+    #[serde(default)]
     pub sync: SyncConfig,
     #[serde(default)]
     pub telemetry: TelemetryConfig,
@@ -548,6 +575,7 @@ fn merge(base: Config, user: Config) -> Config {
         scan: merge_scan(base.scan, user.scan),
         sources: merge_sources(base.sources, user.sources),
         retention: merge_retention(base.retention, user.retention),
+        storage: merge_storage(base.storage, user.storage),
         sync: merge_sync(base.sync, user.sync),
         telemetry: merge_telemetry(base.telemetry, user.telemetry),
         proxy: merge_proxy(base.proxy, user.proxy),
@@ -751,6 +779,49 @@ fn merge_retention(base: RetentionConfig, user: RetentionConfig) -> RetentionCon
     }
 }
 
+fn merge_storage(base: StorageConfig, user: StorageConfig) -> StorageConfig {
+    let def = StorageConfig::default();
+    StorageConfig {
+        hot_max_bytes: if user.hot_max_bytes != def.hot_max_bytes {
+            user.hot_max_bytes
+        } else {
+            base.hot_max_bytes
+        },
+        cold_after_days: if user.cold_after_days != def.cold_after_days {
+            user.cold_after_days
+        } else {
+            base.cold_after_days
+        },
+        retention_days: if user.retention_days != def.retention_days {
+            user.retention_days
+        } else {
+            base.retention_days
+        },
+        flush_hour_utc: if user.flush_hour_utc != def.flush_hour_utc {
+            user.flush_hour_utc
+        } else {
+            base.flush_hour_utc
+        },
+    }
+}
+
+fn parse_byte_size(raw: &str) -> Option<u64> {
+    let s = raw.trim();
+    let digits = s
+        .chars()
+        .take_while(|c| c.is_ascii_digit())
+        .collect::<String>();
+    let n = digits.parse::<u64>().ok()?;
+    let unit = s[digits.len()..].trim().to_ascii_lowercase();
+    Some(match unit.as_str() {
+        "" | "b" => n,
+        "kb" | "kib" => n.saturating_mul(1024),
+        "mb" | "mib" => n.saturating_mul(1024 * 1024),
+        "gb" | "gib" => n.saturating_mul(1024 * 1024 * 1024),
+        _ => return None,
+    })
+}
+
 fn merge_proxy(base: ProxyConfig, user: ProxyConfig) -> ProxyConfig {
     let def = ProxyConfig::default();
     ProxyConfig {
@@ -950,6 +1021,8 @@ mod tests {
         assert_eq!(cfg.scan.roots, ScanConfig::default().roots);
         assert_eq!(cfg.scan.min_rescan_seconds, 300);
         assert_eq!(cfg.retention.hot_days, 30);
+        assert_eq!(cfg.storage.cold_after_days, 7);
+        assert_eq!(cfg.storage.hot_max_bytes_value(), 1_073_741_824);
     }
 
     #[test]
@@ -1051,6 +1124,31 @@ mod tests {
         let merged = merge(base, user);
         assert_eq!(merged.retention.hot_days, 14);
         assert_eq!(merged.retention.warm_days, 90);
+    }
+
+    #[test]
+    fn merge_storage_user_overrides() {
+        let base = Config {
+            storage: StorageConfig {
+                hot_max_bytes: "2GB".into(),
+                cold_after_days: 14,
+                retention_days: 120,
+                flush_hour_utc: 3,
+            },
+            ..Default::default()
+        };
+        let user = Config {
+            storage: StorageConfig {
+                cold_after_days: 3,
+                ..StorageConfig::default()
+            },
+            ..Default::default()
+        };
+        let merged = merge(base, user);
+        assert_eq!(merged.storage.hot_max_bytes, "2GB");
+        assert_eq!(merged.storage.cold_after_days, 3);
+        assert_eq!(merged.storage.retention_days, 120);
+        assert_eq!(merged.storage.flush_hour_utc, 3);
     }
 
     #[test]

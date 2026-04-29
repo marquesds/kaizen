@@ -81,6 +81,16 @@ kaizen gc --days 14
 kaizen gc --vacuum            # VACUUM after delete (slow; shrinks the DB file)
 ```
 
+## `kaizen migrate`
+
+Bootstrap or roll back tiered storage for a workspace. `v2` exports existing SQLite events into `.kaizen/hot/log.bin` plus daily Parquet files under `.kaizen/cold/events/`, and keeps a `.kaizen/kaizen.db.v1.bak` backup. `v1` restores raw SQLite events from the hot log and cold partitions.
+
+```bash
+kaizen migrate v2
+kaizen migrate v2 --allow-skew
+kaizen migrate v1
+```
+
 ## `kaizen completions`
 
 Print a shell completion script to stdout. Install (examples):

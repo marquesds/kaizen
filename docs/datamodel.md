@@ -14,6 +14,13 @@
   (`stop_reason`, `latency_ms`, `ttft_ms`, `retry_count`, context and cache
   token splits), and `EventKind::Lifecycle` for `payload.type`-discriminated
   behavior signals.
+- HOT event log
+  `.kaizen/hot/log.bin` stores append-only rkyv event records with length and
+  CRC framing. `.kaizen/hot/index.redb` maps session metadata and `(session_id,
+  seq)` lookups to byte offsets.
+- COLD event partitions
+  `.kaizen/cold/events/YYYY-MM-DD.parquet` stores daily UTC event partitions
+  with `kaizen_schema_v` Parquet metadata for analytical scans.
 - `tool_spans`
   derived per-tool spans. One row per closed or orphaned correlated tool
   execution. Open spans live in the incremental projector until close/flush.
@@ -33,6 +40,8 @@
 ## Invariants
 
 - Raw `events` append-only. Derived tables can rebuild from them.
+- During tiered migration, `Event` remains the source of truth across SQLite,
+  the hot log, and Parquet writers.
 - Incremental projector owns hot derived writes for `tool_spans`, `files_touched`,
   `skills_used`, and `rules_used`; `KAIZEN_PROJECTOR=legacy` restores full
   per-session span rebuild.
