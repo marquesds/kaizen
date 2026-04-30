@@ -227,7 +227,7 @@ fn output(bin: &str, home: &Path, cwd: &Path, args: &[&str]) -> anyhow::Result<S
     Ok(String::from_utf8(out.stdout)?)
 }
 
-fn command<'a>(bin: &'a str, home: &Path, cwd: &Path, args: &[&str]) -> Command {
+fn command(bin: &str, home: &Path, cwd: &Path, args: &[&str]) -> Command {
     let mut cmd = Command::new(bin);
     cmd.current_dir(cwd)
         .env("HOME", home)
