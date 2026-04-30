@@ -8,7 +8,7 @@ Run `kaizen --help` for grouped subcommands (Trust & observe, Operate, Improve, 
 Use `kaizen daemon status`, `kaizen daemon stop`, or `--no-daemon` /
 `KAIZEN_DAEMON=0` for direct SQLite mode. See [daemon.md](daemon.md).
 
-**Cache-first reads:** `sessions list`, `summary`, `insights`, `guidance`, `metrics`, and `retro` read the local workspace database first, so the common path stays fast. Pass **`--refresh`** (`-r`) when you want Kaizen to rescan external agent transcripts before rendering the command. See [config.md](config.md).
+**Cache-first reads:** `sessions list`, `summary`, `insights`, `guidance`, `metrics`, `retro`, **`exp report`**, and **`exp power`** read the local workspace database first (respecting `[scan].min_rescan_seconds` for transcript rescans). Pass **`--refresh`** (`-r`) when you want Kaizen to rescan external agent transcripts before rendering the command. See [config.md](config.md).
 
 **Machine-wide aggregation:** `sessions list`, `summary`, `insights`, and `metrics` accept **`--all-workspaces`**. Kaizen records each workspace path you use (canonicalized) in a machine-local JSON list, then opens each repo’s `.kaizen/kaizen.db` and merges results in memory. Details: [config.md#machine-local-registry](config.md#machine-local-registry).
 
@@ -46,6 +46,7 @@ Requires prior measurement with `[collect.outcomes] enabled` and a completed `St
 ```bash
 kaizen sessions list                     # all sessions in workspace
 kaizen sessions list --json             # machine-readable
+kaizen sessions list --limit 20        # cap rows after sort (newest first)
 kaizen sessions list --refresh
 kaizen sessions list --all-workspaces
 kaizen sessions show <id>               # session metadata (id, agent, model, times, status, trace_path)
@@ -72,13 +73,21 @@ kaizen search reindex
 Roll-up of count, total USD, by-agent, by-model across all ingested
 sessions.
 
+**Cost:** `summary` sums `cost_usd_e6` on stored events. Transcript ingest **estimates** USD from line-level token usage (bundled price table) when usage fields are present; Kaizen **proxy** `Cost` events remain authoritative when you use the proxy. After upgrading ingest logic, run **`kaizen summary --refresh`** (or `sessions list --refresh`) so existing workspaces rescan transcripts and backfill estimates.
+
 ```bash
 kaizen summary --json         # same shape as the MCP `kaizen_summary` tool with json=true
 kaizen summary --refresh
 kaizen summary --all-workspaces
 ```
 
-With `--json`, the object includes `workspace`, `stats` (counts and rollups), `cost_usd`, and when metrics data is available for the window, optional **`hotspot`** (hottest file) and **`slowest_tool`** (by p95). Multi-workspace adds a `workspaces` array.
+With `--json`, the object includes `workspace`, `stats` (counts and rollups), `cost_usd`, optional **`cost_note`** when sessions exist but stored cost rollup is zero (same situation as [cost rollup zero](#cost-shows-zero): no `cost_usd_e6` on events), and when metrics data is available for the window, optional **`hotspot`** (hottest file) and **`slowest_tool`** (by p95). Multi-workspace adds a `workspaces` array.
+
+<a id="cost-shows-zero"></a>
+
+### When cost rollup is zero
+
+If **`kaizen summary`** shows **$0.00** but session count is above zero, events in the store have no **`cost_usd_e6`**. That is normal when **Cursor** `agent-transcripts` JSONL lines omit **`tokens`** / **`usage`**. You can still get accurate spend from **Claude** or **Codex** transcripts that include usage, from **hooks** that send **`total_cost_usd`**, or from the **Kaizen LLM proxy** (authoritative **`Cost`** events). After wiring or changing ingest, run **`kaizen summary --refresh`** so the store rescans.
 
 ## `kaizen gc`
 
@@ -222,8 +231,9 @@ Model Context Protocol server over stdio — **most** CLI workflows are availabl
 A/B experiments with bootstrap CI, SRM checks, and sequential testing.
 
 ```bash
-# Size first.
+# Size first. Reads are cache-first; use --refresh for a full transcript rescan first.
 kaizen exp power --metric tokens_per_session --baseline-n 50
+kaizen exp power --metric tokens_per_session --baseline-n 50 --refresh
 
 # Create in Draft; review before starting.
 kaizen exp new --name add-skill \
@@ -239,6 +249,7 @@ kaizen exp status <id>
 kaizen exp tag <id> --session <sid> --variant treatment
 kaizen exp report <id>          # markdown + bootstrap CI + sequential decision
 kaizen exp report <id> --json
+kaizen exp report <id> --refresh   # full transcript rescan before report (slow; use when store may be stale)
 kaizen exp conclude <id>        # Running → Concluded
 kaizen exp archive <id>         # Concluded → Archived
 ```

@@ -18,8 +18,24 @@ Nothing leaves disk unless sync/provider queries are configured.
 
 Best demo: use a real repo where agents already ran. `retro` feels magical when
 it names a hot file, repeated tool loop, unused skill, or model-cost pattern.
-For asciinema, keep font large, terminal width near 100 columns, and pauses
-short enough that playback feels intentional.
+For asciinema, keep font large, terminal width near 100 columns. The automated driver defaults target **readable onboarding** (roughly **3–5+ minutes** of playback depending on machine speed and store size): short gaps via **`KAIZEN_DEMO_PAUSE_SEC`** (default **`1.2`**) and longer dwell after dense output via **`KAIZEN_DEMO_READ_PAUSE_SEC`** (default **`4.8`**—for sessions table, summary, summary JSON preview, metrics, retro, exp report). For faster regeneration or CI smoke, tighten both, e.g. **`KAIZEN_DEMO_PAUSE_SEC=0.6 KAIZEN_DEMO_READ_PAUSE_SEC=1.5`**.
+
+**Automated WOW demo** uses **real** Cursor/Claude sessions from transcript scan in the repo (no synthetic hook seed). From repo root after `cargo build`:
+
+```bash
+KAIZEN_BIN="$PWD/target/debug/kaizen" asciinema rec --overwrite \
+  --window-size 100x30 \
+  -c "zsh -f $PWD/scripts/record-kaizen-walkthrough.sh" \
+  docs/plans/demo-wow.cast
+asciinema play docs/plans/demo-wow.cast
+```
+
+**Prerequisites:** Populate the local store first (e.g. **`kaizen sessions list --refresh`** in a TTY once); the recording driver avoids **`--refresh`** so the cast stays fast. After changing Kaizen versions, **`--refresh`** again if **summary** still shows **$0.00** while transcripts include token usage (ingest must rescan to fill **`cost_usd_e6`** estimates). At least one session must show in **`kaizen sessions list`**. Override workspace with **`KAIZEN_DEMO_ROOT=/path/to/repo`**. Use **`KAIZEN_DEMO_ISOLATED=1`** for a disposable **`KAIZEN_HOME`** only (machine registry); **`.kaizen/` in the repo is still written** (including `exp` steps). **`KAIZEN_DEMO_ALLOW_EMPTY=1`** skips the experiment block when count is zero (debug only). **`KAIZEN_DEMO_REINDEX=1`** runs **`kaizen metrics index --force`** and a second **`kaizen metrics`** (adds tens of seconds—omit for short clips). The driver uses **`kaizen sessions list --json --limit 1`** internally so JSON stays tiny while tagging the newest session.
+
+**Experiment reports** are cache-first like `summary`: **`kaizen exp report`** does not force a full transcript rescan unless you pass **`--refresh`**. Use **`--refresh`** when the store may be stale.
+
+Use **`zsh -f`** so a custom `~/.zshrc` cannot inject aliases (for example shadowing the driver’s **`pause_short`** / **`pause_read`** helpers). Driver: [`scripts/record-kaizen-walkthrough.sh`](../../scripts/record-kaizen-walkthrough.sh).
+`docs/plans/*.cast` is gitignored (paths/timestamps vary by machine).
 
 For a repeatable demo, isolate machine state:
 
@@ -106,6 +122,8 @@ After big refactors, rebuild repo facts first:
 kaizen metrics index --force
 kaizen metrics --days 7
 ```
+
+The scripted **`record-kaizen-walkthrough.sh`** skips **`metrics index --force`** by default so playback stays ~60s; set **`KAIZEN_DEMO_REINDEX=1`** when you want that beat in the recording.
 
 Narrate: `summary` asks "how much agent work happened?" `metrics` asks "where
 did that work hit this repo?" Hot files, slow tools, and token-heavy paths

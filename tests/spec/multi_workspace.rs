@@ -146,7 +146,7 @@ fn sessions_list_stays_repo_scoped_without_machine_flag() -> anyhow::Result<()> 
     seed_session(&ws1, "s1", "read_file")?;
     seed_session(&ws2, "s2", "shell")?;
 
-    let text = sessions_list_text(Some(&ws1), true, false, false)?;
+    let text = sessions_list_text(Some(&ws1), true, false, false, None)?;
     let json: serde_json::Value = serde_json::from_str(&text)?;
     assert_eq!(json["count"], 1);
     assert_eq!(json["sessions"][0]["id"], "s1");
@@ -180,11 +180,11 @@ fn default_reads_skip_global_scan_until_refresh() -> anyhow::Result<()> {
         r#"{"message":{"content":[{"type":"tool_use","id":"toolu_1","name":"read_file","input":{"path":"src/main.rs"}}]}}"#,
     )?;
 
-    let cold = sessions_list_text(Some(&ws), true, false, false)?;
+    let cold = sessions_list_text(Some(&ws), true, false, false, None)?;
     let cold_json: serde_json::Value = serde_json::from_str(&cold)?;
     assert_eq!(cold_json["count"], 0);
 
-    let refreshed = sessions_list_text(Some(&ws), true, true, false)?;
+    let refreshed = sessions_list_text(Some(&ws), true, true, false, None)?;
     let refreshed_json: serde_json::Value = serde_json::from_str(&refreshed)?;
     assert_eq!(refreshed_json["count"], 1);
 

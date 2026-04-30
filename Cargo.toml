@@ -88,6 +88,10 @@ name = "observe_pipeline"
 path = "tests/spec/observe_pipeline.rs"
 
 [[test]]
+name = "summary_cost_rollup"
+path = "tests/spec/summary_cost_rollup.rs"
+
+[[test]]
 name = "session_lookup"
 path = "tests/spec/session_lookup.rs"
 

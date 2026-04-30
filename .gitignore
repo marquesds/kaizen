@@ -21,3 +21,6 @@
 .idea/
 
 dist/
+
+# Local asciinema output (paths/timestamps are machine-specific)
+docs/plans/*.cast

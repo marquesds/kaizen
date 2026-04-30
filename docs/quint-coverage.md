@@ -33,6 +33,7 @@ When to add or extend a spec: see [`.cursor/rules/quint-before-code.mdc`](../.cu
 | [`specs/doctor-diagnostic.qnt`](../specs/doctor-diagnostic.qnt) | `tests/spec/doctor_diagnostic.rs` | `doctor` checks |
 | [`specs/gc-prune.qnt`](../specs/gc-prune.qnt) | `tests/spec/gc_prune.rs` | `gc` / vacuum ordering |
 | [`specs/observe-pipeline.qnt`](../specs/observe-pipeline.qnt) | `tests/spec/observe_pipeline.rs` | `sessions list`, `summary`, `insights`, `guidance` (source; mixed dedupe in spec) |
+| [`specs/summary-cost-rollup.qnt`](../specs/summary-cost-rollup.qnt) | `tests/spec/summary_cost_rollup.rs` | `summary` / MCP zero–cost rollup footnote rule |
 | [`specs/session-lookup.qnt`](../specs/session-lookup.qnt) | `tests/spec/session_lookup.rs` | `sessions show` |
 | [`specs/session-tree.qnt`](../specs/session-tree.qnt) | `tests/spec/session_tree.rs` | `sessions tree` empty/missing/render mode contract |
 | [`specs/metrics-pipeline.qnt`](../specs/metrics-pipeline.qnt) | `tests/spec/metrics_pipeline.rs` | `metrics` git and plain-workspace index paths |

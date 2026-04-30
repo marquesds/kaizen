@@ -107,6 +107,20 @@ pub fn doctor_text(workspace: Option<&Path>) -> Result<(i32, String)> {
                 )
                 .unwrap();
             }
+            if let Ok(query) = crate::store::query::QueryStore::open(&ws.join(".kaizen"))
+                && let Ok(stats) = query.summary_stats(&store, &ws_key)
+                && crate::shell::cli::summary_needs_cost_rollup_note(
+                    stats.session_count,
+                    stats.total_cost_usd_e6,
+                )
+            {
+                writeln!(
+                    &mut out,
+                    "  {}",
+                    crate::shell::cli::cost_rollup_zero_doctor_hint()
+                )
+                .unwrap();
+            }
         }
         Err(e) => {
             hard_fail = true;

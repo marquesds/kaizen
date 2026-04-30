@@ -19,7 +19,7 @@ const MCP_CAPABILITIES: &str = r#"Kaizen MCP exposes most `kaizen` CLI workflows
 
 - kaizen_summary — Session counts, USD cost, by-agent/model, top tools. Use for spend and volume. Optional json=true.
 - kaizen_metrics — Code hotspots, slow tools (p95), token-heavy tools, churn. Use for **repository** and tool latency. Optional json.
-- kaizen_sessions_list / kaizen_session_show — Session list and one session metadata. Optional json on list.
+- kaizen_sessions_list / kaizen_session_show — Session list and one session metadata. Optional json on list; optional `limit` caps rows (newest first). `kaizen_exp_report` supports `refresh: true` for a full transcript rescan before computing the report (matches CLI `kaizen exp report --refresh`).
 - mcp/search_sessions — BM25 event search over current workspace. Supports since, agent, kind, limit.
 - kaizen_insights — Activity dashboard (7d). kaizen_retro — weekly bets. kaizen_exp_* — experiments.
 - List/summary/insights/metrics/retro are cache-first; set refresh=true to force a full transcript rescan (matches CLI --refresh).
@@ -74,6 +74,9 @@ struct WorkspaceJsonArg {
     /// When true, run a full agent transcript rescan (matches `kaizen ... --refresh`).
     #[serde(default)]
     refresh: bool,
+    /// Cap sessions returned (newest first); only `kaizen_sessions_list` uses this.
+    #[serde(default)]
+    limit: Option<u32>,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -245,6 +248,9 @@ struct ExpReportArg {
     id: String,
     #[serde(default)]
     json: bool,
+    /// Full transcript rescan before computing the report.
+    #[serde(default)]
+    refresh: bool,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -300,7 +306,7 @@ impl KaizenMcp {
 
     #[tool(
         name = "kaizen_sessions_list",
-        description = "List agent sessions in the workspace. Set json=true for the same array object as `kaizen sessions list --json`. Default text table."
+        description = "List agent sessions in the workspace. Set json=true for structured output. Optional limit caps rows after sort (newest first). Use refresh=true for a full transcript rescan."
     )]
     async fn kaizen_sessions_list(
         &self,
@@ -309,11 +315,13 @@ impl KaizenMcp {
             all_workspaces,
             json,
             refresh,
+            limit,
         }): Parameters<WorkspaceJsonArg>,
     ) -> Result<CallToolResult, ErrorData> {
         let w = opt_path(&workspace);
+        let lim = limit.map(|n| n as usize);
         let t = run_blocking(move || {
-            cli::sessions_list_text(w.as_deref(), json, refresh, all_workspaces)
+            cli::sessions_list_text(w.as_deref(), json, refresh, all_workspaces, lim)
         })
         .await?;
         ok_str(t)
@@ -368,7 +376,7 @@ impl KaizenMcp {
 
     #[tool(
         name = "kaizen_summary",
-        description = "Roll up session counts, USD cost, top tools, by-agent/model. For **code** hotspots and slow tool p95, use `kaizen_metrics` instead. Set json=true to match `kaizen summary --json`."
+        description = "Roll up session counts, USD cost, top tools, by-agent/model. For **code** hotspots and slow tool p95, use `kaizen_metrics` instead. Set json=true to match `kaizen summary --json` (optional `cost_note` when sessions exist but stored cost rollup is zero)."
     )]
     async fn kaizen_summary(
         &self,
@@ -377,6 +385,7 @@ impl KaizenMcp {
             all_workspaces,
             json,
             refresh,
+            limit: _,
         }): Parameters<WorkspaceJsonArg>,
     ) -> Result<CallToolResult, ErrorData> {
         let w = opt_path(&workspace);
@@ -602,14 +611,20 @@ impl KaizenMcp {
 
     #[tool(
         name = "kaizen_exp_report",
-        description = "Experiment report (kaizen exp report)"
+        description = "Experiment report (kaizen exp report). Optional refresh: true forces a full transcript rescan before computing the report."
     )]
     async fn kaizen_exp_report(
         &self,
-        Parameters(ExpReportArg { ws, id, json }): Parameters<ExpReportArg>,
+        Parameters(ExpReportArg {
+            ws,
+            id,
+            json,
+            refresh,
+        }): Parameters<ExpReportArg>,
     ) -> Result<CallToolResult, ErrorData> {
         let w = opt_path(&ws.workspace);
-        let t = run_blocking(move || exp::exp_report_text(w.as_deref(), &id, json)).await?;
+        let t =
+            run_blocking(move || exp::exp_report_text(w.as_deref(), &id, json, refresh)).await?;
         ok_str(t)
     }
 

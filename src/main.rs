@@ -523,6 +523,9 @@ enum ExpCommand {
         id: String,
         #[arg(long)]
         json: bool,
+        /// Force a full agent transcript rescan (ignore `[scan].min_rescan_seconds`).
+        #[arg(short, long)]
+        refresh: bool,
         #[arg(long)]
         workspace: Option<PathBuf>,
     },
@@ -546,6 +549,9 @@ enum ExpCommand {
         /// Expected sessions per arm.
         #[arg(long)]
         baseline_n: usize,
+        /// Force a full agent transcript rescan (ignore `[scan].min_rescan_seconds`).
+        #[arg(short, long)]
+        refresh: bool,
         #[arg(long)]
         workspace: Option<PathBuf>,
     },
@@ -623,6 +629,9 @@ enum SessionsCommand {
         /// Emit JSON (same as MCP with json=true)
         #[arg(long)]
         json: bool,
+        /// Cap rows after sorting (newest first). Omit for all sessions.
+        #[arg(long)]
+        limit: Option<usize>,
         /// Force a full agent transcript rescan (ignore `[scan].min_rescan_seconds`).
         #[arg(short, long)]
         refresh: bool,
@@ -760,6 +769,7 @@ fn main() -> anyhow::Result<()> {
                     workspace,
                     all_workspaces,
                     json,
+                    limit,
                     refresh,
                 },
         } => kaizen::shell::cli::cmd_sessions_list(
@@ -767,6 +777,7 @@ fn main() -> anyhow::Result<()> {
             json,
             refresh,
             all_workspaces,
+            limit,
         ),
         Command::Sessions {
             subcmd: SessionsCommand::Show { id, workspace },
@@ -1158,15 +1169,17 @@ fn dispatch_exp(cmd: ExpCommand) -> anyhow::Result<()> {
         ExpCommand::Report {
             id,
             json,
+            refresh,
             workspace,
-        } => exp::cmd_report(workspace.as_deref(), &id, json),
+        } => exp::cmd_report(workspace.as_deref(), &id, json, refresh),
         ExpCommand::Conclude { id, workspace } => exp::cmd_conclude(workspace.as_deref(), &id),
         ExpCommand::Archive { id, workspace } => exp::cmd_archive(workspace.as_deref(), &id),
         ExpCommand::Power {
             metric,
             baseline_n,
+            refresh,
             workspace,
-        } => exp::cmd_power(workspace.as_deref(), &metric, baseline_n),
+        } => exp::cmd_power(workspace.as_deref(), &metric, baseline_n, refresh),
     }
 }
 

@@ -42,9 +42,26 @@ struct SummaryJsonOut {
     stats: crate::store::SummaryStats,
     cost_usd: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
+    cost_note: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     hotspot: Option<crate::metrics::types::RankedFile>,
     #[serde(skip_serializing_if = "Option::is_none")]
     slowest_tool: Option<crate::metrics::types::RankedTool>,
+}
+
+/// Summary/MCP: sessions exist but rollup has no stored micro-USD — show honest footnote, not invented spend.
+pub(crate) fn summary_needs_cost_rollup_note(session_count: u64, total_cost_usd_e6: i64) -> bool {
+    session_count > 0 && total_cost_usd_e6 == 0
+}
+
+pub(crate) fn cost_rollup_zero_note_paragraph() -> &'static str {
+    "Cost rollup shows $0.00 because stored events have no cost_usd_e6 — common when Cursor agent-transcript lines omit usage/tokens. \
+If you expect non-zero spend, ingest Claude/Codex transcripts with usage, hooks with total_cost_usd, or Kaizen proxy Cost events; run `kaizen summary --refresh` after ingest changes. \
+See docs/usage.md#cost-shows-zero."
+}
+
+pub(crate) fn cost_rollup_zero_doctor_hint() -> &'static str {
+    "Cost rollup $0.00 with sessions but no cost_usd_e6 — often Cursor transcripts without usage; see docs/usage.md#cost-shows-zero"
 }
 
 struct ScanSpinner(Option<indicatif::ProgressBar>);
@@ -155,6 +172,7 @@ pub fn sessions_list_text(
     json_out: bool,
     refresh: bool,
     all_workspaces: bool,
+    limit: Option<usize>,
 ) -> Result<String> {
     let roots = scope::resolve(workspace, all_workspaces)?;
     let mut sessions = Vec::new();
@@ -187,6 +205,9 @@ pub fn sessions_list_text(
             .cmp(&a.started_at_ms)
             .then_with(|| a.id.cmp(&b.id))
     });
+    if let Some(n) = limit.filter(|&n| n > 0) {
+        sessions.truncate(n);
+    }
     let scope_label = scope::label(&roots);
     let workspaces = if roots.len() > 1 {
         workspace_names(&roots)
@@ -253,10 +274,11 @@ pub fn cmd_sessions_list(
     json_out: bool,
     refresh: bool,
     all_workspaces: bool,
+    limit: Option<usize>,
 ) -> Result<()> {
     print!(
         "{}",
-        sessions_list_text(workspace, json_out, refresh, all_workspaces)?
+        sessions_list_text(workspace, json_out, refresh, all_workspaces, limit)?
     );
     Ok(())
 }
@@ -492,6 +514,8 @@ pub fn summary_text(
     } else {
         Vec::new()
     };
+    let cost_note = summary_needs_cost_rollup_note(stats.session_count, stats.total_cost_usd_e6)
+        .then_some(cost_rollup_zero_note_paragraph().to_string());
     if json_out {
         return Ok(format!(
             "{}\n",
@@ -500,6 +524,7 @@ pub fn summary_text(
                 workspaces,
                 cost_usd: cost_dollars,
                 stats,
+                cost_note,
                 hotspot,
                 slowest_tool,
             })?
@@ -551,6 +576,10 @@ pub fn summary_text(
             .map(|v| format!("{v}ms"))
             .unwrap_or_else(|| "-".into());
         writeln!(&mut out, "Slowest:   {} p95 {}", tool.tool, p95).unwrap();
+    }
+    if cost_note.is_some() {
+        writeln!(&mut out).unwrap();
+        writeln!(&mut out, "Note: {}", cost_rollup_zero_note_paragraph()).unwrap();
     }
     Ok(out)
 }
@@ -755,4 +784,24 @@ pub(crate) fn expand_home(path: &str) -> String {
         return format!("{home}/{rest}");
     }
     path.to_string()
+}
+
+#[cfg(test)]
+mod cost_rollup_note_tests {
+    use super::*;
+
+    #[test]
+    fn needs_note_only_when_sessions_and_zero_cost() {
+        assert!(summary_needs_cost_rollup_note(1, 0));
+        assert!(!summary_needs_cost_rollup_note(0, 0));
+        assert!(!summary_needs_cost_rollup_note(1, 1));
+    }
+
+    #[test]
+    fn paragraph_names_gap_and_doc_anchor() {
+        let s = cost_rollup_zero_note_paragraph();
+        assert!(s.contains("cost_usd_e6"));
+        assert!(s.contains("usage"));
+        assert!(s.contains("docs/usage.md#cost-shows-zero"));
+    }
 }

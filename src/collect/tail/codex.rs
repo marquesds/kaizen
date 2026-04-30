@@ -3,6 +3,7 @@
 //! Pure parser — no notify dependency, no IO beyond file reads.
 
 use crate::collect::model_from_json;
+use crate::core::cost::estimate_tail_event_cost_usd_e6;
 use crate::core::event::{Event, EventKind, EventSource, SessionRecord, SessionStatus};
 use anyhow::{Context, Result};
 use serde_json::Value;
@@ -50,6 +51,13 @@ pub fn parse_codex_line(
 
     let ts_ms = line_ts_ms(obj).unwrap_or(base_ts + seq * 100);
     let ts_exact = line_ts_ms(obj).is_some();
+    let line_model = model_from_json::from_object(obj);
+    let cost_usd_e6 = estimate_tail_event_cost_usd_e6(
+        line_model.as_deref(),
+        tokens_in,
+        tokens_out,
+        reasoning_tokens,
+    );
 
     // Tool calls are in top-level `tool_calls` array
     if let Some(first) = obj
@@ -78,7 +86,7 @@ pub fn parse_codex_line(
             tokens_in,
             tokens_out,
             reasoning_tokens,
-            cost_usd_e6: None,
+            cost_usd_e6,
             stop_reason: None,
             latency_ms: None,
             ttft_ms: None,
@@ -145,8 +153,8 @@ pub fn scan_codex_session_dir(dir: &Path) -> Result<(SessionRecord, Vec<Event>)>
             if line.trim().is_empty() {
                 continue;
             }
-            if model.is_none() {
-                model = model_from_json::from_line(line);
+            if let Some(m) = model_from_json::from_line(line) {
+                model = Some(m);
             }
             if let Some(ev) = parse_codex_line(&session_id, seq, base_ts, line)? {
                 events.push(ev);
@@ -206,7 +214,10 @@ mod tests {
             .unwrap();
         assert_eq!(ev.tokens_in, Some(500));
         assert_eq!(ev.tokens_out, Some(300));
-        assert_eq!(ev.cost_usd_e6, None);
+        assert!(
+            ev.cost_usd_e6.is_some_and(|c| c > 0),
+            "expected tail cost from usage"
+        );
     }
 
     #[test]
@@ -217,5 +228,9 @@ mod tests {
         assert_eq!(record.agent, "codex");
         assert_eq!(record.model.as_deref(), Some("gpt-4o-fixture"));
         assert!(!events.is_empty(), "expected events from fixture files");
+        assert!(
+            events.iter().any(|e| e.cost_usd_e6.is_some_and(|c| c > 0)),
+            "with_usage fixture should yield cost"
+        );
     }
 }

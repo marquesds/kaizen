@@ -9,7 +9,7 @@ use crate::experiment::types::{
     Binding, Classification, Criterion, Direction, Experiment, Metric, State, transition,
 };
 use crate::experiment::{self as exp};
-use crate::shell::cli::{scan_all_agents, workspace_path};
+use crate::shell::cli::{maybe_scan_all_agents, workspace_path};
 use crate::store::Store;
 use anyhow::{Context, Result, anyhow};
 use std::path::Path;
@@ -240,12 +240,17 @@ pub fn cmd_tag(workspace: Option<&Path>, id: &str, session_id: &str, variant: &s
     Ok(())
 }
 
-pub fn exp_report_text(workspace: Option<&Path>, id: &str, json_out: bool) -> Result<String> {
+pub fn exp_report_text(
+    workspace: Option<&Path>,
+    id: &str,
+    json_out: bool,
+    refresh: bool,
+) -> Result<String> {
     let ws = workspace_path(workspace)?;
     let cfg = config::load(&ws)?;
     let store = Store::open(&ws.join(".kaizen/kaizen.db"))?;
     let ws_str = ws.to_string_lossy().to_string();
-    scan_all_agents(&ws, &cfg, &ws_str, &store)?;
+    maybe_scan_all_agents(&ws, &cfg, &ws_str, &store, refresh)?;
     let exp_rec = exp_store::load_experiment(&store, id)?
         .ok_or_else(|| anyhow!("experiment not found: {id}"))?;
     let (start_ms, end_ms) = window_for(&exp_rec);
@@ -259,8 +264,8 @@ pub fn exp_report_text(workspace: Option<&Path>, id: &str, json_out: bool) -> Re
     }
 }
 
-pub fn cmd_report(workspace: Option<&Path>, id: &str, json_out: bool) -> Result<()> {
-    print!("{}", exp_report_text(workspace, id, json_out)?);
+pub fn cmd_report(workspace: Option<&Path>, id: &str, json_out: bool, refresh: bool) -> Result<()> {
+    print!("{}", exp_report_text(workspace, id, json_out, refresh)?);
     Ok(())
 }
 
@@ -312,7 +317,12 @@ pub fn cmd_archive(workspace: Option<&Path>, id: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn exp_power_text(workspace: Option<&Path>, metric: &str, baseline_n: usize) -> Result<String> {
+pub fn exp_power_text(
+    workspace: Option<&Path>,
+    metric: &str,
+    baseline_n: usize,
+    refresh: bool,
+) -> Result<String> {
     use crate::experiment::stats::power;
     use std::fmt::Write;
 
@@ -320,7 +330,7 @@ pub fn exp_power_text(workspace: Option<&Path>, metric: &str, baseline_n: usize)
     let cfg = config::load(&ws)?;
     let store = Store::open(&ws.join(".kaizen/kaizen.db"))?;
     let ws_str = ws.to_string_lossy().to_string();
-    scan_all_agents(&ws, &cfg, &ws_str, &store)?;
+    maybe_scan_all_agents(&ws, &cfg, &ws_str, &store, refresh)?;
 
     let metric_val = Metric::parse(metric).ok_or_else(|| anyhow!("unknown metric: {metric}"))?;
     let now = now_ms();
@@ -356,8 +366,16 @@ pub fn exp_power_text(workspace: Option<&Path>, metric: &str, baseline_n: usize)
     Ok(out)
 }
 
-pub fn cmd_power(workspace: Option<&Path>, metric: &str, baseline_n: usize) -> Result<()> {
-    print!("{}", exp_power_text(workspace, metric, baseline_n)?);
+pub fn cmd_power(
+    workspace: Option<&Path>,
+    metric: &str,
+    baseline_n: usize,
+    refresh: bool,
+) -> Result<()> {
+    print!(
+        "{}",
+        exp_power_text(workspace, metric, baseline_n, refresh)?
+    );
     Ok(())
 }
 

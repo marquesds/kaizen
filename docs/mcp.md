@@ -113,12 +113,12 @@ Set any value to `false` to skip that agent’s local scan (useful if a VS Code 
 |------|----------------|--------|
 | `kaizen_capabilities` | (no CLI; static text) | Read first: which tool to use for cost rollups vs repo metrics, sessions, retro, etc. |
 | `kaizen_ingest_hook` | `kaizen ingest hook` | Pass hook JSON in `payload` (not stdin). `source`: `cursor` or `claude`. |
-| `kaizen_sessions_list` | `kaizen sessions list` | Optional `json: true`, `refresh: true` (full transcript rescan; matches `--refresh`), `all_workspaces: true` for machine-wide aggregation. |
+| `kaizen_sessions_list` | `kaizen sessions list` | Optional `json: true`, `refresh: true` (full transcript rescan; matches `--refresh`), `all_workspaces: true`, `limit` (cap rows, newest first). |
 | `kaizen_session_show` | `kaizen sessions show` | `id` + optional `workspace`. |
 | `mcp/search_sessions` | `kaizen sessions search` | Structured BM25 event search. Args: `query`, optional `since`, `agent`, `kind`, `limit`, `workspace`. Returns `hits[]` with session id, seq, ts, score, snippet, paths, skills, and `tokens_total`. |
 | `kaizen_annotate_session` | `kaizen sessions annotate` | `session_id`, optional `score` (1–5), `label`, `note`, optional `workspace`. |
 | `get_session_span_tree` | `kaizen sessions tree` | `id` + optional `workspace`, `json: true` returns `SpanNode[]` JSON; default returns ASCII tree with subtree-cost flags. **Depth:** unlike CLI `sessions tree --depth`, MCP always requests a large fixed depth (full tree in practice). |
-| `kaizen_summary` | `kaizen summary` | Optional `json: true`, `refresh: true`, `all_workspaces: true`. |
+| `kaizen_summary` | `kaizen summary` | Optional `json: true`, `refresh: true`, `all_workspaces: true`. With `json: true`, response may include optional `cost_note` when sessions exist but cost rollup is zero (no `cost_usd_e6` on events); same as CLI. |
 | `kaizen_tui` | `kaizen tui` | Not runnable over MCP; returns a structured “use CLI” payload with `is_error` semantics. |
 | `kaizen_init` | `kaizen init` | Writes/updates workspace files, same as CLI. |
 | `kaizen_insights` | `kaizen insights` | Optional `refresh: true`, `all_workspaces: true`. |
@@ -131,7 +131,7 @@ Set any value to `false` to skip that agent’s local scan (useful if a VS Code 
 | `kaizen_exp_list` | `kaizen exp list` | |
 | `kaizen_exp_status` | `kaizen exp status` | |
 | `kaizen_exp_tag` | `kaizen exp tag` | |
-| `kaizen_exp_report` | `kaizen exp report` | `json` flag supported. Includes `sequential_decision` and `srm_warning`. |
+| `kaizen_exp_report` | `kaizen exp report` | `json` and optional `refresh: true` (full rescan before report; matches CLI `--refresh`). Includes `sequential_decision` and `srm_warning`. |
 | `kaizen_exp_conclude` | `kaizen exp conclude` | Running → Concluded. |
 | `kaizen_exp_archive` | `kaizen exp archive` | Concluded → Archived. |
 | `kaizen_retro` | `kaizen retro` | `json`, `refresh`, etc. Set `json: true` for the same `Report` JSON as `kaizen retro --json`. |
@@ -140,7 +140,7 @@ Set any value to `false` to skip that agent’s local scan (useful if a VS Code 
 
 - **Workspace**: most tools accept optional `workspace` (string path). If omitted, the server uses the process current directory, matching CLI defaults.
 - **Data source**: `kaizen_summary`, `kaizen_insights`, `kaizen_metrics`, and `kaizen_retro` use the local DB only (`DataSource::Local`), matching CLI default `--source local`. The MCP server does not expose CLI `--source` switches; use the CLI if you need another source.
-- **Rescan**: list/summary/insights/metrics/retro stay on the cached local DB unless you pass `refresh: true` (same as CLI `--refresh`).
+- **Rescan**: list/summary/insights/metrics/retro stay on the cached local DB unless you pass `refresh: true` (same as CLI `--refresh`). `kaizen_exp_report` defaults to cache-first as well; set `refresh: true` to force a full transcript rescan before computing the report.
 - **Aggregation**: `kaizen_sessions_list`, `kaizen_summary`, `kaizen_insights`, and `kaizen_metrics` accept `all_workspaces: true`. Kaizen opens each registered workspace DB separately and merges the results in memory.
 - **Blocking work** is run on a blocking thread pool so the async MCP runtime is not starved; long `retro` or metrics runs may take time.
 - **Version** in the MCP `initialize` response is the built-in string configured for the server (keep in sync with releases when using strict client checks).
