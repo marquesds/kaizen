@@ -10,6 +10,8 @@ struct TfmState {
     file_sink_enabled: bool,
     #[serde(with = "itf::de::As::<itf::de::Integer>")]
     tail_delivered: i64,
+    #[serde(with = "itf::de::As::<itf::de::Integer>")]
+    tail_errors: i64,
     last_includes_envelope: bool,
     last_batch_kind: String,
 }
@@ -19,6 +21,7 @@ struct TfmDriver {
     ndjson_lines: i64,
     file_sink_enabled: bool,
     tail_delivered: i64,
+    tail_errors: i64,
     last_includes_envelope: bool,
     last_batch_kind: String,
 }
@@ -29,6 +32,7 @@ impl State<TfmDriver> for TfmState {
             ndjson_lines: d.ndjson_lines,
             file_sink_enabled: d.file_sink_enabled,
             tail_delivered: d.tail_delivered,
+            tail_errors: d.tail_errors,
             last_includes_envelope: d.last_includes_envelope,
             last_batch_kind: d.last_batch_kind.clone(),
         })
@@ -57,6 +61,7 @@ impl Driver for TfmDriver {
                 self.ndjson_lines = 0;
                 self.file_sink_enabled = false;
                 self.tail_delivered = 0;
+                self.tail_errors = 0;
                 self.last_includes_envelope = false;
                 self.last_batch_kind.clear();
             }
@@ -80,6 +85,17 @@ impl Driver for TfmDriver {
             export_file_disabled => {}
             tail_catchup => {
                 self.tail_delivered = self.ndjson_lines;
+            }
+            tail_no_follow_missing_default => {
+                if self.ndjson_lines != 0 {
+                    anyhow::bail!("tail_no_follow_missing_default requires missing file");
+                }
+            }
+            tail_no_follow_missing_explicit => {
+                if self.ndjson_lines != 0 {
+                    anyhow::bail!("tail_no_follow_missing_explicit requires missing file");
+                }
+                self.tail_errors += 1;
             }
         })
     }

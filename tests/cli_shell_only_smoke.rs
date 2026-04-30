@@ -76,6 +76,15 @@ fn shell_only_smoke_matrix() -> anyhow::Result<()> {
         &["metrics", "index"],
         &["telemetry", "init"],
         &["telemetry", "configure"],
+        &[
+            "telemetry",
+            "configure",
+            "--type",
+            "file",
+            "--path",
+            "telemetry.ndjson",
+        ],
+        &["telemetry", "tail", "--json", "--no-follow"],
     ];
     for a in cases {
         let args: &[&str] = a;
@@ -93,5 +102,19 @@ fn shell_only_smoke_matrix() -> anyhow::Result<()> {
             assert!(!out.stdout.is_empty(), "print-schema empty");
         }
     }
+    let cfg = std::fs::read_to_string(home.join(".kaizen/config.toml"))?;
+    assert!(cfg.contains("type = \"file\""));
+    assert!(cfg.contains("path = \"telemetry.ndjson\""));
+
+    let plain = tmp.path().join("plain");
+    std::fs::create_dir_all(&plain)?;
+    std::fs::write(plain.join("main.rs"), b"fn main() {}\n")?;
+    kaizen::shell::init::init_text(Some(&plain))?;
+    let out = spawn(b, &home, &plain, &["metrics", "index"]);
+    assert!(
+        out.status.success(),
+        "non-git metrics index stderr={}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     Ok(())
 }

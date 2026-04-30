@@ -364,6 +364,12 @@ enum TelemetrySubcommand {
     Init {
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// Exporter template to append without prompting.
+        #[arg(long = "type", value_enum)]
+        exporter_type: Option<TelemetryExporterKind>,
+        /// File exporter path, absolute or relative to each workspace.
+        #[arg(long)]
+        path: Option<PathBuf>,
     },
     /// Call configured provider `health`, show query settings, and exporter resolution (redacted).
     Doctor {
@@ -398,10 +404,16 @@ enum TelemetrySubcommand {
     },
     /// Print JSON shapes for canonical telemetry items (see `sync::canonical`).
     PrintSchema,
-    /// Append `[[telemetry.exporters]]` template to `~/.kaizen/config.toml` (editor fill-in).
+    /// Append `[[telemetry.exporters]]` template to `~/.kaizen/config.toml`.
     Configure {
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// Exporter template to append without prompting.
+        #[arg(long = "type", value_enum)]
+        exporter_type: Option<TelemetryExporterKind>,
+        /// File exporter path, absolute or relative to each workspace.
+        #[arg(long)]
+        path: Option<PathBuf>,
     },
     /// Redacted: merged telemetry exporter resolution (TOML + env).
     PrintEffectiveConfig {
@@ -423,6 +435,27 @@ enum TelemetrySubcommand {
         #[arg(long)]
         json: bool,
     },
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+enum TelemetryExporterKind {
+    File,
+    Posthog,
+    Datadog,
+    Otlp,
+    Dev,
+}
+
+impl TelemetryExporterKind {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::File => "file",
+            Self::Posthog => "posthog",
+            Self::Datadog => "datadog",
+            Self::Otlp => "otlp",
+            Self::Dev => "dev",
+        }
+    }
 }
 
 #[derive(Subcommand)]
@@ -539,9 +572,10 @@ enum SyncCommand {
 
 #[derive(Subcommand)]
 enum DaemonCommand {
-    /// Run daemon in the foreground. Hidden background flag is used by auto-spawn.
+    /// Run daemon in foreground, or spawn it and exit with `--background`.
     Start {
-        #[arg(long, hide = true)]
+        /// Spawn daemon as child process, wait until ready, then exit.
+        #[arg(long)]
         background: bool,
     },
     /// Gracefully stop daemon.
@@ -805,9 +839,10 @@ fn main() -> anyhow::Result<()> {
             all_workspaces,
             source,
         ),
-        Command::Tui { workspace } => tokio::runtime::Runtime::new()?.block_on(
-            kaizen::ui::tui::run(workspace.as_deref().unwrap_or(&std::env::current_dir()?)),
-        ),
+        Command::Tui { workspace } => {
+            let ws = kaizen::core::workspace::resolve(workspace.as_deref())?;
+            tokio::runtime::Runtime::new()?.block_on(kaizen::ui::tui::run(&ws))
+        }
         Command::Init { workspace } => kaizen::shell::cli::cmd_init(workspace.as_deref()),
         Command::Doctor { workspace } => {
             let code = kaizen::shell::doctor::cmd_doctor(workspace.as_deref())?;
@@ -894,9 +929,17 @@ fn main() -> anyhow::Result<()> {
             subcmd: SyncCommand::Status { workspace },
         } => kaizen::shell::sync::cmd_sync_status(workspace.as_deref()),
         Command::Telemetry { subcmd } => match subcmd {
-            TelemetrySubcommand::Init { workspace } => {
-                kaizen::shell::telemetry::cmd_telemetry_init(workspace.as_deref())
-            }
+            TelemetrySubcommand::Init {
+                workspace,
+                exporter_type,
+                path,
+            } => kaizen::shell::telemetry::cmd_telemetry_init(
+                workspace.as_deref(),
+                kaizen::shell::telemetry::ConfigureOptions {
+                    exporter_type: exporter_type.map(|t| t.as_str().to_string()),
+                    path,
+                },
+            ),
             TelemetrySubcommand::Doctor { workspace } => {
                 kaizen::shell::telemetry::cmd_telemetry_doctor(workspace.as_deref())
             }
@@ -917,9 +960,17 @@ fn main() -> anyhow::Result<()> {
             TelemetrySubcommand::PrintSchema => {
                 kaizen::shell::telemetry::cmd_telemetry_print_schema()
             }
-            TelemetrySubcommand::Configure { workspace } => {
-                kaizen::shell::telemetry::cmd_telemetry_configure(workspace.as_deref())
-            }
+            TelemetrySubcommand::Configure {
+                workspace,
+                exporter_type,
+                path,
+            } => kaizen::shell::telemetry::cmd_telemetry_configure(
+                workspace.as_deref(),
+                kaizen::shell::telemetry::ConfigureOptions {
+                    exporter_type: exporter_type.map(|t| t.as_str().to_string()),
+                    path,
+                },
+            ),
             TelemetrySubcommand::PrintEffectiveConfig { workspace } => {
                 kaizen::shell::telemetry::cmd_telemetry_print_effective(workspace.as_deref())
             }
@@ -1022,20 +1073,42 @@ fn main() -> anyhow::Result<()> {
 
 fn dispatch_daemon(cmd: DaemonCommand) -> anyhow::Result<()> {
     match cmd {
-        DaemonCommand::Start { background: _ } => kaizen::daemon::start_foreground(),
+        DaemonCommand::Start { background } => {
+            if !background {
+                return kaizen::daemon::start_foreground();
+            }
+            let started = kaizen::daemon::start_background()?;
+            if started.already_running {
+                println!("daemon already running");
+            } else {
+                println!("daemon started");
+            }
+            println!("pid: {}", started.pid);
+            println!("socket: {}", started.paths.sock.display());
+            println!("log: {}", started.paths.log.display());
+            Ok(())
+        }
         DaemonCommand::Stop => {
             println!("{}", kaizen::daemon::stop()?);
             Ok(())
         }
         DaemonCommand::Status => {
-            let st = kaizen::daemon::try_status()?;
-            println!("pid: {}", st.pid);
-            println!("uptime_ms: {}", st.uptime_ms);
-            println!("queue_depth: {}", st.queue_depth);
-            println!(
-                "last_error: {}",
-                st.last_error.unwrap_or_else(|| "-".to_string())
-            );
+            match kaizen::daemon::status_outcome()? {
+                kaizen::daemon::DaemonStatusOutcome::Running(st) => {
+                    println!("status: running");
+                    println!("pid: {}", st.pid);
+                    println!("uptime_ms: {}", st.uptime_ms);
+                    println!("queue_depth: {}", st.queue_depth);
+                    println!(
+                        "last_error: {}",
+                        st.last_error.unwrap_or_else(|| "-".to_string())
+                    );
+                }
+                kaizen::daemon::DaemonStatusOutcome::Stopped { socket } => {
+                    println!("status: stopped");
+                    println!("socket: {}", socket.display());
+                }
+            }
             Ok(())
         }
     }

@@ -21,9 +21,10 @@ pub fn cmd_telemetry_tail(
     pretty_json: bool,
 ) -> Result<()> {
     let ws = workspace_path(workspace)?;
+    let default_tail = file.is_none();
     let path = resolve_tail_path(&ws, file);
     if no_follow {
-        return dump_file(&path, pretty_json);
+        return dump_file(&path, pretty_json, default_tail);
     }
     follow_file(&path, pretty_json)
 }
@@ -48,7 +49,10 @@ fn print_line(line: &str, pretty: bool) -> Result<()> {
     Ok(())
 }
 
-fn dump_file(path: &Path, pretty: bool) -> Result<()> {
+fn dump_file(path: &Path, pretty: bool, missing_is_empty: bool) -> Result<()> {
+    if missing_is_empty && !path.exists() {
+        return Ok(());
+    }
     let f = std::fs::File::open(path).with_context(|| {
         format!(
             "open {} (set --file or use workspace default; create lines via [[telemetry.exporters]] type = \"file\")",

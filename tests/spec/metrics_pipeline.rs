@@ -5,17 +5,23 @@ use serde::Deserialize;
 #[derive(Debug, Eq, PartialEq, Deserialize)]
 struct MetricsPipeState {
     phase: String,
+    workspace_kind: String,
+    index_succeeded: bool,
 }
 
 #[derive(Debug)]
 struct MetricsPipeDriver {
     phase: String,
+    workspace_kind: String,
+    index_succeeded: bool,
 }
 
 impl Default for MetricsPipeDriver {
     fn default() -> Self {
         Self {
             phase: "Idle".into(),
+            workspace_kind: String::new(),
+            index_succeeded: false,
         }
     }
 }
@@ -24,6 +30,8 @@ impl State<MetricsPipeDriver> for MetricsPipeState {
     fn from_driver(d: &MetricsPipeDriver) -> Result<Self> {
         Ok(MetricsPipeState {
             phase: d.phase.clone(),
+            workspace_kind: d.workspace_kind.clone(),
+            index_succeeded: d.index_succeeded,
         })
     }
 }
@@ -35,15 +43,29 @@ impl Driver for MetricsPipeDriver {
         switch!(step {
             init => {
                 self.phase = "Idle".into();
+                self.workspace_kind.clear();
+                self.index_succeeded = false;
             },
             step => {
                 self.phase = "Idle".into();
+                self.workspace_kind.clear();
+                self.index_succeeded = false;
             },
-            resolve_workspace => {
+            resolve_git_workspace => {
                 if self.phase != "Idle" {
-                    anyhow::bail!("resolve_workspace not enabled");
+                    anyhow::bail!("resolve_git_workspace not enabled");
                 }
                 self.phase = "Resolved".into();
+                self.workspace_kind = "git".into();
+                self.index_succeeded = false;
+            },
+            resolve_plain_workspace => {
+                if self.phase != "Idle" {
+                    anyhow::bail!("resolve_plain_workspace not enabled");
+                }
+                self.phase = "Resolved".into();
+                self.workspace_kind = "plain".into();
+                self.index_succeeded = false;
             },
             load_config => {
                 if self.phase != "Resolved" {
@@ -67,10 +89,14 @@ impl Driver for MetricsPipeDriver {
                 if self.phase != "Scanned" {
                     anyhow::bail!("ensure_index not enabled");
                 }
+                if self.workspace_kind != "git" && self.workspace_kind != "plain" {
+                    anyhow::bail!("ensure_index requires workspace kind");
+                }
                 self.phase = "Indexed".into();
+                self.index_succeeded = true;
             },
             build_report => {
-                if self.phase != "Indexed" {
+                if self.phase != "Indexed" || !self.index_succeeded {
                     anyhow::bail!("build_report not enabled");
                 }
                 self.phase = "Reported".into();

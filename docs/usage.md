@@ -59,7 +59,7 @@ kaizen sessions search 'skill:caveman AND tokens_total:>5000'
 
 `sessions show` prints **one session row**, not the full event stream. For turns, tools, and live tail, use **`kaizen tui`** (or inspect the transcript path shown in `trace_path`).
 
-`sessions tree` renders the nested tool-span tree built from `assign_parents()` during ingest. Each node shows tool name, status, and subtree cost; spans consuming >40% of session cost are flagged. The TUI shows the same tree as a depth-indented strip below the event list.
+`sessions tree` renders the nested tool-span tree built from `assign_parents()` during ingest. Each node shows tool name, status, and subtree cost; spans consuming >40% of session cost are flagged. When a session exists but has no tool spans yet, text output prints a `(no tool spans for session <id>)` placeholder while `--json` returns `[]`. The TUI shows the same tree as a depth-indented strip below the event list.
 
 `sessions search` uses the workspace-local Tantivy index at `.kaizen/search/`. It indexes redacted event text for messages, tool calls, and tool results. Payload bodies are not stored in the index; result snippets are rebuilt from persisted events. If the index is missing or corrupt, Kaizen falls back to an event scan and prints a warning. Rebuild with:
 
@@ -204,10 +204,11 @@ Pluggable sinks receive the same redacted batches as Kaizen sync. Use **`type = 
 
 ```bash
 kaizen telemetry configure                # append an exporter template (interactive)
+kaizen telemetry configure --type file --path telemetry.ndjson  # noninteractive file sink
 kaizen telemetry print-effective-config  # redacted: which fields resolve from env vs TOML
 kaizen telemetry push                     # replay SQLite events through exporters (no Kaizen POST)
 kaizen telemetry tail                    # read NDJSON from the file exporter (default path above)
-kaizen telemetry tail --no-follow        # print the file once and exit
+kaizen telemetry tail --no-follow        # print the file once and exit; missing default file is empty
 kaizen telemetry tail --file /tmp/t.ndjson  # path (absolute or relative to workspace)
 kaizen telemetry tail --json            # pretty-print each JSON line
 ```

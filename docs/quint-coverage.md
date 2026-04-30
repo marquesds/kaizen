@@ -15,9 +15,9 @@ When to add or extend a spec: see [`.cursor/rules/quint-before-code.mdc`](../.cu
 | [`specs/retention.qnt`](../specs/retention.qnt) | `tests/spec/retention.rs` | tier aging |
 | [`specs/event-log-hot.qnt`](../specs/event-log-hot.qnt) | unit tests in `src/store/hot_log.rs` | hot log append, replay, index |
 | [`specs/sync-backpressure.qnt`](../specs/sync-backpressure.qnt) | `tests/spec/sync_backpressure.rs` | sync |
-| [`specs/daemon-handshake.qnt`](../specs/daemon-handshake.qnt) | `tests/spec/daemon_lifecycle.rs` | daemon lifecycle and protocol retry |
+| [`specs/daemon-handshake.qnt`](../specs/daemon-handshake.qnt) | `tests/spec/daemon_lifecycle.rs` | daemon lifecycle, background start readiness, protocol retry |
 | [`specs/telemetry-exporters.qnt`](../specs/telemetry-exporters.qnt) | `tests/spec/telemetry_exporters.rs` | telemetry (query authority + N-way fan-out) |
-| [`specs/telemetry-file-metadata.qnt`](../specs/telemetry-file-metadata.qnt) | `tests/spec/telemetry_file_metadata.rs` | file NDJSON: envelope vs body-only metadata, tail follow |
+| [`specs/telemetry-file-metadata.qnt`](../specs/telemetry-file-metadata.qnt) | `tests/spec/telemetry_file_metadata.rs` | file NDJSON: envelope vs body-only metadata, tail follow, missing-file tail behavior |
 | [`specs/telemetry-push-replay.qnt`](../specs/telemetry-push-replay.qnt) | `tests/spec/telemetry_push_replay.rs` | `telemetry push` (exporter replay, chunking) |
 | [`specs/provider-pull-cache.qnt`](../specs/provider-pull-cache.qnt) | `tests/spec/provider_pull_cache.rs` | provider pull / remote cache |
 | [`specs/workspace-facts-sync.qnt`](../specs/workspace-facts-sync.qnt) | `tests/spec/workspace_facts_sync.rs` | outbox kind order: `events` before `workspace_facts` |
@@ -34,7 +34,8 @@ When to add or extend a spec: see [`.cursor/rules/quint-before-code.mdc`](../.cu
 | [`specs/gc-prune.qnt`](../specs/gc-prune.qnt) | `tests/spec/gc_prune.rs` | `gc` / vacuum ordering |
 | [`specs/observe-pipeline.qnt`](../specs/observe-pipeline.qnt) | `tests/spec/observe_pipeline.rs` | `sessions list`, `summary`, `insights`, `guidance` (source; mixed dedupe in spec) |
 | [`specs/session-lookup.qnt`](../specs/session-lookup.qnt) | `tests/spec/session_lookup.rs` | `sessions show` |
-| [`specs/metrics-pipeline.qnt`](../specs/metrics-pipeline.qnt) | `tests/spec/metrics_pipeline.rs` | `metrics` |
+| [`specs/session-tree.qnt`](../specs/session-tree.qnt) | `tests/spec/session_tree.rs` | `sessions tree` empty/missing/render mode contract |
+| [`specs/metrics-pipeline.qnt`](../specs/metrics-pipeline.qnt) | `tests/spec/metrics_pipeline.rs` | `metrics` git and plain-workspace index paths |
 | [`specs/tui-app.qnt`](../specs/tui-app.qnt) | `tests/spec/tui_app.rs` | TUI lifecycle plus virtualized window invariants |
 | [`specs/eval-h15.qnt`](../specs/eval-h15.qnt) | `tests/spec/eval_h15.rs` | H15 eval trigger invariants |
 | [`specs/h33-automation.qnt`](../specs/h33-automation.qnt) | `tests/spec/h33_automation.rs` | H33 run / subseq gates and token scalars |

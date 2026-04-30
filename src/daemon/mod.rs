@@ -28,6 +28,19 @@ pub struct RuntimePaths {
     pub log: PathBuf,
 }
 
+#[derive(Debug, Clone)]
+pub struct BackgroundStart {
+    pub pid: u32,
+    pub paths: RuntimePaths,
+    pub already_running: bool,
+}
+
+#[derive(Debug, Clone)]
+pub enum DaemonStatusOutcome {
+    Running(DaemonStatus),
+    Stopped { socket: PathBuf },
+}
+
 pub fn enabled() -> bool {
     if let Ok(v) = std::env::var("KAIZEN_DAEMON") {
         return v != "0";
@@ -53,7 +66,18 @@ pub fn ensure_running() -> Result<()> {
     if !enabled() || try_status().is_ok() {
         return Ok(());
     }
+    start_background().map(|_| ())
+}
+
+pub fn start_background() -> Result<BackgroundStart> {
     let paths = runtime_paths()?;
+    if let Ok(status) = try_status() {
+        return Ok(BackgroundStart {
+            pid: status.pid,
+            paths,
+            already_running: true,
+        });
+    }
     std::fs::create_dir_all(&paths.dir)?;
     let log = std::fs::OpenOptions::new()
         .create(true)
@@ -61,8 +85,8 @@ pub fn ensure_running() -> Result<()> {
         .open(&paths.log)
         .with_context(|| format!("open daemon log: {}", paths.log.display()))?;
     let err = log.try_clone()?;
-    Command::new(std::env::current_exe()?)
-        .args(["daemon", "start", "--background"])
+    let mut child = Command::new(std::env::current_exe()?)
+        .args(["daemon", "start"])
         .stdin(Stdio::null())
         .stdout(Stdio::from(log))
         .stderr(Stdio::from(err))
@@ -70,14 +94,25 @@ pub fn ensure_running() -> Result<()> {
         .context("spawn kaizen daemon")?;
     let deadline = Instant::now() + Duration::from_millis(START_WAIT_MS);
     while Instant::now() < deadline {
-        if try_status().is_ok() {
-            return Ok(());
+        if let Some(status) = child.try_wait().context("poll daemon child")? {
+            return Err(anyhow!(
+                "daemon exited before ready with status {status}; see {}",
+                paths.log.display()
+            ));
+        }
+        if let Ok(status) = try_status() {
+            return Ok(BackgroundStart {
+                pid: status.pid,
+                paths,
+                already_running: false,
+            });
         }
         std::thread::sleep(Duration::from_millis(25));
     }
     Err(anyhow!(
-        "daemon did not become ready at {}",
-        paths.sock.display()
+        "daemon did not become ready at {}; see {}",
+        paths.sock.display(),
+        paths.log.display()
     ))
 }
 
@@ -94,6 +129,21 @@ pub fn try_status() -> Result<DaemonStatus> {
         DaemonResponse::Error { message, .. } => Err(anyhow!(message)),
         _ => Err(anyhow!("unexpected daemon status response")),
     }
+}
+
+pub fn status_outcome() -> Result<DaemonStatusOutcome> {
+    match try_status() {
+        Ok(status) => Ok(DaemonStatusOutcome::Running(status)),
+        Err(err) if is_daemon_socket_connect_error(&err) => Ok(DaemonStatusOutcome::Stopped {
+            socket: runtime_paths()?.sock,
+        }),
+        Err(err) => Err(err),
+    }
+}
+
+fn is_daemon_socket_connect_error(err: &anyhow::Error) -> bool {
+    err.chain()
+        .any(|cause| cause.to_string().starts_with("connect daemon socket:"))
 }
 
 pub fn start_foreground() -> Result<()> {

@@ -886,6 +886,8 @@ async fn wait_for_deadline(deadline: Option<Instant>) {
 
 /// Entry point. Opens terminal, refreshes on WAL changes, handles keys.
 pub async fn run(workspace: &Path) -> Result<()> {
+    let workspace_buf = resolved_workspace_path(workspace);
+    let workspace = workspace_buf.as_path();
     let db_path = workspace.join(".kaizen/kaizen.db");
     let metrics_cache = Arc::new(ArcSwapOption::from(None));
     let report_dirty = Arc::new(AtomicBool::new(true));
@@ -1104,6 +1106,10 @@ pub async fn run(workspace: &Path) -> Result<()> {
     Ok(())
 }
 
+fn resolved_workspace_path(workspace: &Path) -> PathBuf {
+    crate::core::workspace::canonical(workspace)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1175,6 +1181,20 @@ mod tests {
         view.reset_for("s2");
         assert_ne!(view.generation(), token);
         assert!(view.window.is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn resolved_workspace_path_follows_symlink() {
+        let tmp = tempfile::tempdir().unwrap();
+        let real = tmp.path().join("real");
+        let link = tmp.path().join("link");
+        std::fs::create_dir_all(&real).unwrap();
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        assert_eq!(
+            resolved_workspace_path(&link),
+            std::fs::canonicalize(real).unwrap()
+        );
     }
 
     fn session(id: &str, started_at_ms: u64) -> SessionRecord {

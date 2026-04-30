@@ -10,18 +10,24 @@ use crate::store::Store;
 use anyhow::Result;
 use std::collections::HashMap;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 const ANALYZER_VERSION: &str = "smart-metrics-v1";
 
 pub fn ensure_indexed(store: &Store, workspace: &Path, force: bool) -> Result<RepoSnapshotRecord> {
     let now = now_ms();
     let workspace_str = workspace.to_string_lossy().to_string();
+    let git_backed = workspace.join(".git").exists();
     let head_commit = repo_head(workspace)?;
-    let dirty = binding_for_session(workspace, now, Some(now))
-        .dirty_end
-        .unwrap_or(false);
-    let dirty_fp = dirty_fingerprint(workspace)?;
+    let dirty = git_backed
+        && binding_for_session(workspace, now, Some(now))
+            .dirty_end
+            .unwrap_or(false);
+    let dirty_fp = if git_backed {
+        dirty_fingerprint(workspace)?
+    } else {
+        filesystem_fingerprint(workspace)?
+    };
     let snapshot_id = snapshot_id(&workspace_str, head_commit.as_deref(), &dirty_fp);
     if !force
         && let Some(existing) = store.latest_repo_snapshot(&workspace_str)?
@@ -30,7 +36,11 @@ pub fn ensure_indexed(store: &Store, workspace: &Path, force: bool) -> Result<Re
         return Ok(existing);
     }
 
-    let tracked = tracked_files(workspace)?;
+    let tracked = if git_backed {
+        tracked_files(workspace)?
+    } else {
+        workspace_files(workspace)?
+    };
     let (history, mut edges) = load_history(workspace, now)?;
     let mut analyses = tracked
         .iter()
@@ -93,6 +103,52 @@ fn analyze_one(workspace: &Path, rel: &str) -> Result<RepoAnalysis> {
     let full = workspace.join(rel);
     let source = fs::read_to_string(&full)?;
     analyzer_for(&full).analyze(rel, &source)
+}
+
+fn workspace_files(workspace: &Path) -> Result<Vec<String>> {
+    let mut out = Vec::new();
+    collect_files(workspace, workspace, &mut out)?;
+    out.sort();
+    Ok(out)
+}
+
+fn collect_files(root: &Path, dir: &Path, out: &mut Vec<String>) -> Result<()> {
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if should_skip(&path) {
+            continue;
+        }
+        if path.is_dir() {
+            collect_files(root, &path, out)?;
+        } else if path.is_file()
+            && let Ok(rel) = path.strip_prefix(root)
+        {
+            out.push(rel.to_string_lossy().replace('\\', "/"));
+        }
+    }
+    Ok(())
+}
+
+fn should_skip(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|n| n.to_str())
+        .is_some_and(|n| n.starts_with('.') || matches!(n, "target" | "node_modules"))
+}
+
+fn filesystem_fingerprint(workspace: &Path) -> Result<String> {
+    let mut hasher = blake3::Hasher::new();
+    for rel in workspace_files(workspace)? {
+        hash_file_meta(workspace.join(&rel), &rel, &mut hasher)?;
+    }
+    Ok(hex::encode(hasher.finalize().as_bytes()))
+}
+
+fn hash_file_meta(path: PathBuf, rel: &str, hasher: &mut blake3::Hasher) -> Result<()> {
+    let meta = fs::metadata(path)?;
+    hasher.update(rel.as_bytes());
+    hasher.update(&meta.len().to_le_bytes());
+    Ok(())
 }
 
 fn resolve_dependencies(analyses: &[RepoAnalysis]) -> Vec<RepoEdge> {
