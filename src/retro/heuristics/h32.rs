@@ -26,5 +26,7 @@ pub fn run(inputs: &Inputs) -> Vec<Bet> {
         evidence: vec![agg.session_id.clone()],
         apply_step: "Break work into shorter sessions; checkpoint progress.".into(),
         evidence_recency_ms: inputs.window_end_ms,
+        confidence: None,
+        category: None,
     }]
 }

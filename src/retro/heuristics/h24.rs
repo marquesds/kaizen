@@ -56,5 +56,7 @@ pub fn run(inputs: &Inputs) -> Vec<Bet> {
             "Tighten AGENTS.md / rules; plan before multi-file edits; smaller diffs per turn."
                 .into(),
         evidence_recency_ms: inputs.window_end_ms,
+        confidence: None,
+        category: None,
     }]
 }

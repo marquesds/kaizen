@@ -55,5 +55,7 @@ pub fn run(inputs: &Inputs) -> Vec<Bet> {
         apply_step:
             "Narrow task scope; skip TodoWrite for small fixes; close or cancel stale items.".into(),
         evidence_recency_ms: inputs.window_end_ms,
+        confidence: None,
+        category: None,
     }]
 }

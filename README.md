@@ -1,170 +1,177 @@
 # kaizen
 
-Kaizen captures coding-agent sessions — Cursor, Claude Code, Codex, **OpenClaw**, Goose, OpenCode, Copilot — into **per-workspace** SQLite while a **machine registry** (`~/.kaizen/machine.db`) records every repo you `kaizen init`, so `doctor`, retention, and **`--all-workspaces`** stay coherent across the host. **Local ingest** is the default (transcript tails, Cursor / Claude Code / OpenClaw hooks, optional Anthropic **HTTP proxy** with token-accurate logging and context policy). When you enable **team sync** and a **PostHog or Datadog query** provider, `summary`, `metrics`, `guidance`, and `retro` can **`--source mixed`** (or `provider`) and **`kaizen telemetry pull`** to reconcile rollups with vendor-side events cached beside your rows. Then Kaizen closes the loop most tools skip: a **heuristic retro engine** that ranks improvement bets by tokens-saved-per-effort, and an **A/B experiment framework** that measures whether each bet worked. Nothing leaves disk until you say so; **redact-first** sync stays the team path.
+Kaizen watches your coding agents work, locally, across Cursor, Claude Code,
+Codex, OpenClaw, Goose, OpenCode, and Copilot.
 
-Narrative guides and references live in this repository under [`docs/`](docs/README.md). The
-**CLI** is published on [crates.io](https://crates.io/crates/kaizen-cli) as **`kaizen-cli`**. 
-Install with **`cargo install kaizen-cli --locked`**, or
-[build from a git clone](#install) if you are developing the project. The **Rust API** is on
-[docs.rs/kaizen-cli](https://docs.rs/kaizen-cli). Long-form markdown stays in this repo. See
-[Install](#install) for `PATH`, Homebrew, and troubleshooting.
+At the end of the week, it tells you what's wasting tokens, causing loops,
+or making agents worse in this repo.
+
+Then it lets you test the fix: "add this rule", "split this file", or
+"delete this unused skill" becomes measurable instead of vibes.
 
 [![crates.io](https://img.shields.io/crates/v/kaizen-cli.svg)](https://crates.io/crates/kaizen-cli)
 [![CI](https://github.com/marquesds/kaizen/actions/workflows/ci.yml/badge.svg)](https://github.com/marquesds/kaizen/actions/workflows/ci.yml)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
 [![Sponsor](https://img.shields.io/badge/Sponsor-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/lucasmarques)
 
-## Agile retrospectives for coding agents
-
-Agents are opaque. They burn tokens on files you didn't expect, loop on module boundaries you haven't mapped, and load skills that never fire. Most tools show you what happened. Kaizen tells you what to change — and proves whether the change worked.
-
-The loop is **observe → summarise → propose → measure**. Each step is a real command.
-
-**Observe** across three ingest tiers, zero agent restarts. `kaizen init` wires transcript tails (file notifications on agent JSONL directories) and hooks: `.cursor/hooks.json`, `.claude/settings.json`, and OpenClaw’s `~/.openclaw/hooks/kaizen-events/handler.ts` (created or backed up idempotently). The optional **LLM HTTP proxy** goes further: run `kaizen proxy run`, set `ANTHROPIC_BASE_URL=http://127.0.0.1:3847`, and every Anthropic API call is logged with precise token counts — no changes to the agent. The proxy optionally applies a **context policy** (`last_messages: 20` or `max_input_tokens: 200000`) that trims billed context before requests leave your machine.
-
-**Summarise** at the repository level, not just the token level. Sessions and tool spans accumulate in a local SQLite WAL; optional **provider pulls** land correlated event-shaped rows in the same DB when `[telemetry.query]` is configured. The metrics pass walks git and your source tree to build a **code graph** (`file_facts`, `repo_edges`), so retros and experiments can answer: which files co-appear in long sessions, which module boundaries cause agent edit loops, which skills are loaded every turn but never triggered.
-
-**Propose** with 30+ deterministic heuristics, no LLM required. `kaizen retro --days 7` ranks bets by `tokens_saved_per_week / effort_minutes`. Each bet includes a hypothesis, estimated impact, evidence links (specific sessions and files), effort in minutes, and a ready-to-run apply command. Deterministic, formally specced in Quint, cheap to run on any schedule. The same engine ships as an **agent skill**: ask *"what should I improve?"* mid-session and kaizen surfaces the top bets inline without leaving your editor.
-
-**Measure** with bootstrap statistics. `kaizen exp new --bind git` ties a hypothesis to a git commit boundary. Kaizen auto-classifies every subsequent session as control or treatment by walking `git log`. After the window closes, `kaizen exp report` shows control vs treatment sample sizes and medians, median delta with a 95% bootstrap CI (10k resamples, winsorized at p1/p99), and a pass/fail against your target. Works for skill additions, rule changes, and architecture refactors — anything you can pin to a commit.
-
-**Distribute** with redact-first sync. Configure a shared team endpoint and kaizen ships redacted batches: Aho-Corasick secret scanning, env var stripping, absolute path normalization, and git email removal run on every event before it leaves disk. The redaction model is formally verified in a Quint spec. Sync is opt-in, idempotent (UUIDv7 dedup), and restartable after failures.
-
-**Optional local depth:** post-stop test/lint snapshots and per-process CPU/RSS samples are off by default; enable in config for stricter retro signals without sending raw command output off disk ([outcomes](docs/outcomes.md), [system telemetry](docs/system-telemetry.md)).
-
-## Why
-
-- **Cost visibility** — tokens and USD per session, model, and agent; same rollups can **merge local SQLite with vendor telemetry** when sync + query provider are set (`--source mixed`).
-- **Session history** — searchable, live-tailable, unified across Cursor, Claude Code, Codex, OpenClaw, and the other tailed agents in config.
-- **Host-level map** — machine registry lists every inited workspace; **`--all-workspaces`** merges per-repo DBs on this machine without hand-maintained paths.
-- **Heuristic retro** — weekly bets: what to change to make agents cheaper / faster.
-- **Experiments** — A/B a rule, skill, or repo change against a real metric.
-- **Fits your topology** — laptop or shared team endpoint; tailable streams; you choose when anything syncs and **redact first**.
-
-## Why kaizen over the alternatives
-
-| You want… | Existing tool | Kaizen |
-|---|---|---|
-| Cost per session for **Claude Code** | `ccusage`, `claude-usage-report` | ✅ plus Cursor, Codex, OpenClaw, hook provenance |
-| Cost per session for **Cursor** | none (transcripts strip usage) | ✅ best-effort token + model from transcript tail |
-| **OpenClaw** / multi-provider gateway sessions | DIY tails | ✅ tail + webhook hooks, workspace filter, channel metadata on events |
-| One pane of glass across agents | glue scripts | ✅ unified store, one CLI, one MCP |
-| Match dashboards **and** local facts | export-only or two UIs | ✅ optional **pull** + `--source mixed` on read commands |
-| Turn observations into change | dashboards only | ✅ weekly heuristic **retro** + **experiments** (A/B) |
-| Self-host, not locked to a vendor cloud | needs an account | ✅ deploy the binary, tail agent sessions live, SQLite + optional **redacted** sync |
-| Ship MCP tools to agents | depends | ✅ most commands as MCP tools; shell-only for doctor, guidance, gc, completions, proxy, telemetry |
-| Rust, single static binary, sub‑second cold start | varies | ✅ build from a checkout (`cargo install --path .` or `./scripts/install-local.sh`) |
-
-Kaizen is not a dashboard — it is an opinionated feedback loop: **capture → summarise → propose change → measure**. Start with `kaizen init` in any repo where you use a coding agent.
-
-## How it works (about 60 seconds)
-
-Kaizen does not run the model. It **observes** agent activity: conversation and tool use land in
-local SQLite; optional HTTP proxy logging adds another path. A metrics pass ties sessions to
-**file-level** and **graph** facts so the CLI, TUI, retro, and experiments can reason about your
-**repo**, not just token totals. Read the full pipeline (with a diagram) in
-[docs/telemetry-journey.md](docs/telemetry-journey.md).
-
-| If you want… | Start here |
-|-------------|------------|
-| Cost and rollups by agent / model | [docs/usage.md](docs/usage.md) (`summary`, `metrics`) |
-| Browse and tail sessions | [docs/usage.md](docs/usage.md) (`sessions`, `tui`) |
-| Heuristic “what to change” weekly bets | [docs/retro.md](docs/retro.md) |
-| A/B a rule or change against a metric | [docs/experiments.md](docs/experiments.md) |
-| The end-to-end data story (ingest → store → facts) | [docs/telemetry-journey.md](docs/telemetry-journey.md) |
-| Hands-on tutorial (all features, exercises) | [docs/tutorial/README.md](docs/tutorial/README.md) |
-
 ## Demo
 
+```markdown
+# Kaizen Retro — Week 2026-W17
 
-https://github.com/user-attachments/assets/3cf4ac40-cef7-480a-9bea-af69df06f3c6
+Span: 2026-04-20 → 2026-04-27 · Sessions: 9 · Cost: $12.40
 
+## High-Confidence Bet
 
+### 1. Stabilize failing shell commands (H10 · High · investigation)
+- Hypothesis: Three sessions hit repeated failing test or shell results before recovery.
+- Evidence: 3 failing command clusters · sessions s_42, s_45, s_51
+- Saves ~1200 tokens/week (est.) · Confidence: High
+- Effort: 45 min · Apply: Add a repo-local smoke command and document expected env vars.
+
+## To Investigate
+
+### 2. Split `src/store/projector.rs` from `src/shell/retro.rs` (H2 · Medium · investigation)
+- Hypothesis: These files are edited together in four sessions, which suggests hidden coupling.
+- Evidence: Co-edit count: 4 · combined complexity: 88
+- Saves ~7280 tokens/week (est.) · Confidence: Medium
+- Effort: 120 min · Apply: Extract shared projection logic behind a smaller interface.
+
+### 3. Reduce large file reads in `src/main.rs` (H12 · High · investigation)
+- Hypothesis: Agents repeatedly read a 900+ LOC command file before small CLI edits.
+- Evidence: 5 read-like calls · 934 LOC
+- Saves ~9340 tokens/week (est.) · Confidence: High
+- Effort: 40 min · Apply: Move command handlers into focused modules.
+
+## Quick Hygiene
+
+### 4. Delete unused skill `cursor-guide` (H1 · High · quick_win)
+- Hypothesis: The skill is on disk but has not fired in the lookback window.
+- Evidence: 0 invocations in 30 days · last edit 78 days ago
+- Saves ~56000 tokens/week (est.) · Confidence: High
+- Effort: 5 min · Apply: rm -rf .cursor/skills/cursor-guide
+
+### 5. Route mechanical work away from premium models (H7 · Medium · hygiene)
+- Hypothesis: Low-cost, repeated sessions still use a premium model name.
+- Evidence: 12 sessions · median session 8 min
+- Saves ~4800 tokens/week (est.) · Confidence: Medium
+- Effort: 25 min · Apply: Set a cheaper default model for routine edit loops.
+
+## Raw Stats
+
+| Metric | Value |
+|---|---|
+| Sessions | 9 |
+| Total cost | $12.40 |
+| Top model | claude-sonnet (62%) |
+| Top tool | read_file (38%) |
+| Median session | 14 min |
+```
 
 ## Install
 
-You need **Rust 1.95+** ([rustup](https://rustup.rs)). **Git** is only required for a source build.
-
-Install the `kaizen` binary from **crates.io** with [`cargo install kaizen-cli --locked`](https://crates.io/crates/kaizen-cli) (step 1). To **build from a clone** of this repo instead, use step 2.
-
-1. **Install the CLI from [crates.io](https://crates.io/crates/kaizen-cli)** (writes `kaizen` to
-   `~/.cargo/bin`, or `$CARGO_HOME/bin`):
-
-   ```bash
-   cargo install kaizen-cli --locked
-   ```
-
-   **Or use Homebrew** from a [tap](https://docs.brew.sh/Taps) once you publish
-   [`packaging/homebrew/kaizen-cli.rb`](packaging/homebrew/kaizen-cli.rb) to a `homebrew-tap` repo:
-   `brew tap <user>/tap && brew install kaizen-cli` (installs the same `kaizen` binary). See
-   [docs/install.md](docs/install.md#from-homebrew-third-party-tap).
-
-2. **Or build from a git clone** (for contributors and `--path` installs):
-
-   ```bash
-   git clone https://github.com/marquesds/kaizen.git
-   cd kaizen
-   ./scripts/install-local.sh
-   ```
-
-   Equivalent: `cargo install --path . --locked` from the repo root (use `--force` to replace an
-   existing install).
-
-3. **Confirm `kaizen` is on your `PATH`** (rustup usually adds `~/.cargo/bin`). If the shell
-   cannot find `kaizen`, add that directory to `PATH` and open a new terminal.
-
-4. **Run `kaizen` in your own project** (where you use Cursor / Claude Code / Codex), not only
-   inside the kaizen repo:
-
-   ```bash
-   cd /path/to/your-project
-   kaizen init
-   ```
-
-Step-by-step guide, uninstall, and troubleshooting: [docs/install.md](docs/install.md).
-
-## Quick start
+You need **Rust 1.95+** from [rustup](https://rustup.rs).
 
 ```bash
-kaizen init                  # scaffold .kaizen/ + wire .cursor/hooks.json + .claude/settings.json
-kaizen doctor                # verify config, DB, and hook wiring
-kaizen sessions list         # index sessions in the current repo
-kaizen summary               # cost / agent / model rollup
-kaizen tui                   # live session browser
-kaizen retro --days 7        # weekly heuristic bets
-kaizen exp new --name add-skill \
-  --hypothesis "skill cuts tokens" --change "add .cursor/skills/x" \
-  --metric tokens_per_session --bind git \
-  --duration-days 14 --target-pct=-10
+cargo install kaizen-cli --locked
 ```
 
-`kaizen init` creates Cursor, Claude Code, and OpenClaw hook files when absent and patches them idempotently when present. Re-running is safe; originals back up under `.kaizen/backup/`.
+The command installs the `kaizen` binary into `~/.cargo/bin` or
+`$CARGO_HOME/bin`. If your shell cannot find it, add that directory to
+`PATH` and open a new terminal.
 
-Full CLI reference: [docs/usage.md](docs/usage.md). Guided walkthrough: [docs/tutorial/README.md](docs/tutorial/README.md).
+Developing Kaizen itself? Use `./scripts/install-local.sh` from a clone,
+or `cargo install --path . --locked`. Detailed install notes live in
+[docs/install.md](docs/install.md).
+
+## Quick Start
+
+```bash
+cargo install kaizen-cli --locked
+cd my-repo
+kaizen init
+# use your coding agent for a day...
+kaizen summary
+kaizen retro
+```
+
+`kaizen init` creates local storage under `.kaizen/` and wires supported
+agent hooks idempotently. Re-running it is safe; originals back up under
+`.kaizen/backup/`.
+
+## How the Loop Works
+
+**Observe.** Kaizen tails agent transcripts and hook events into
+workspace-local SQLite. It can watch Cursor, Claude Code, Codex, OpenClaw,
+Goose, OpenCode, and Copilot without running the model itself.
+
+**Summarise.** `kaizen summary` and `kaizen metrics` roll sessions up by
+agent, model, cost, tool use, and repo facts. The metrics pass also indexes
+file-level and graph facts so retros can talk about this codebase, not only
+token totals.
+
+**Propose.** `kaizen retro` runs deterministic heuristics and groups bets by
+confidence and action type: one high-confidence bet, up to two investigations,
+and up to two quick hygiene fixes.
+
+**Measure.** `kaizen exp new` can bind a change to git history and compare
+control vs treatment sessions with bootstrap confidence intervals.
+
+Nothing leaves disk unless you configure sync or a provider query. Team paths
+redact secrets, env vars, absolute paths, and git emails before upload.
+
+## Why Kaizen
+
+| You want... | Existing tool | Kaizen |
+|---|---|---|
+| Cost per session for Claude Code | `ccusage`, `claude-usage-report` | Yes, plus Cursor, Codex, OpenClaw, and hook provenance |
+| Cost per session for Cursor | Manual transcript work | Best-effort token and model recovery from transcript tails |
+| One local view across agents | Glue scripts | Unified store, one CLI, one MCP surface |
+| Repo-aware improvement bets | Dashboards only | Weekly retro with evidence, confidence, and apply steps |
+| Local-first data | Hosted account | SQLite by default; sync is opt-in and redacted |
+| Measure whether a fix worked | Spreadsheets | Git-bound A/B experiments and bootstrap reports |
+
+Kaizen is not a dashboard. It is an opinionated feedback loop:
+**capture → summarise → propose change → measure**.
+
+## Advanced Features
+
+- **HTTP proxy:** `kaizen proxy run` logs Anthropic API calls with precise
+  token counts and optional context policy trimming.
+- **Provider queries:** PostHog and Datadog rollups can be read with
+  `--source provider` or merged with local rows via `--source mixed` when
+  `[telemetry.query]` is configured.
+- **Redacted sync:** shared endpoints receive batches only after local
+  redaction and UUIDv7 deduplication.
+- **A/B experiments:** `kaizen exp new --bind git` classifies later sessions
+  by commit boundary and reports treatment deltas.
+- **MCP tools:** most read/report commands are exposed to agents; shell-only
+  commands stay in the CLI.
+- **Local depth:** optional test/lint snapshots and CPU/RSS samples improve
+  retro signals without shipping raw command output off disk.
 
 ## Docs
 
 | Doc | Purpose |
 |---|---|
 | [docs/install.md](docs/install.md) | Install, build from source, uninstall |
-| [docs/tutorial/README.md](docs/tutorial/README.md) | Hands-on tutorial (all major features) |
+| [docs/tutorial/README.md](docs/tutorial/README.md) | Hands-on tutorial |
 | [docs/usage.md](docs/usage.md) | CLI reference |
 | [docs/concepts.md](docs/concepts.md) | Sessions, events, retro, experiments |
+| [docs/retro.md](docs/retro.md) | Heuristic retro engine |
+| [docs/experiments.md](docs/experiments.md) | A/B experiment workflow |
 | [docs/architecture.md](docs/architecture.md) | Module graph, data flow |
-| [docs/config.md](docs/config.md) | Config file + env vars |
-| [docs/telemetry-journey.md](docs/telemetry-journey.md) | How sessions become stored facts (learning path) |
+| [docs/config.md](docs/config.md) | Config file and env vars |
+| [docs/telemetry-journey.md](docs/telemetry-journey.md) | How sessions become stored facts |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Dev setup, tests, PR flow |
 | [CHANGELOG.md](CHANGELOG.md) | Release notes |
 
 ## Status
 
-Pre–1.0: breaking changes may appear in minor versions (see
-[CHANGELOG.md](CHANGELOG.md)). Feature set for the initial public line is
-shipped; follow the changelog for new work.
+Pre-1.0: breaking changes may appear in minor versions. Follow
+[CHANGELOG.md](CHANGELOG.md) for release notes.
 
 ## License
 
 [AGPL-3.0-or-later](LICENSE). Contributions are licensed under the same
-terms. See [CONTRIBUTING.md](CONTRIBUTING.md).
-
-Security disclosures: [SECURITY.md](SECURITY.md).
+terms. Security disclosures: [SECURITY.md](SECURITY.md).

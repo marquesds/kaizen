@@ -114,5 +114,7 @@ fn mk_run_bet(
             "Add a batch helper, glob, or short shell loop so one invocation replaces the streak."
                 .into(),
         evidence_recency_ms: window_end_ms,
+        confidence: None,
+        category: None,
     }
 }

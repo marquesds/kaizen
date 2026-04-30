@@ -30,5 +30,7 @@ pub fn run(inputs: &Inputs) -> Vec<Bet> {
         evidence: vec![format!("revert_lines_14d={n}")],
         apply_step: "Tighten review; reduce scope per task; align with main more often.".into(),
         evidence_recency_ms: inputs.window_end_ms,
+        confidence: None,
+        category: None,
     }]
 }

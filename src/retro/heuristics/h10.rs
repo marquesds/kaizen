@@ -128,6 +128,8 @@ pub fn run(inputs: &Inputs) -> Vec<Bet> {
             "Stabilize the failing command (fixture, env, or smaller test target); add a pre-push script or CI signal so the agent stops thrashing."
                 .into(),
         evidence_recency_ms: inputs.window_end_ms,
+    confidence: None,
+    category: None,
     }]
 }
 

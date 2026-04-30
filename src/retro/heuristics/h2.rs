@@ -74,6 +74,8 @@ pub fn run(inputs: &Inputs) -> Vec<Bet> {
                 a, b
             ),
             evidence_recency_ms: inputs.window_end_ms,
+        confidence: None,
+        category: None,
         });
     }
     out

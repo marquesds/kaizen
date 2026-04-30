@@ -37,6 +37,8 @@ fn make_bet(scores: &[(String, f64)], low_count: usize, recency_ms: u64) -> Bet 
         evidence: low_evidence(scores),
         apply_step: "Run `kaizen eval list --min-score 0` to review low-scoring sessions.".into(),
         evidence_recency_ms: recency_ms,
+        confidence: None,
+        category: None,
     }
 }
 

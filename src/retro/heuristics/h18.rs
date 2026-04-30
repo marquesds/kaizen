@@ -36,5 +36,7 @@ pub fn run(inputs: &Inputs) -> Vec<Bet> {
         apply_step: "Flatten the tool call chain; avoid calling tools from within tool handlers."
             .into(),
         evidence_recency_ms: inputs.window_end_ms,
+        confidence: None,
+        category: None,
     }]
 }

@@ -63,6 +63,8 @@ pub fn run(inputs: &Inputs) -> Vec<Bet> {
                 ],
                 apply_step: "Refresh the touched docs to match code, or add a single source of truth link.".into(),
                 evidence_recency_ms: inputs.window_end_ms,
+            confidence: None,
+            category: None,
             });
         }
     }

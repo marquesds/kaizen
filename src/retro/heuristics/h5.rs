@@ -39,5 +39,7 @@ pub fn run(inputs: &Inputs) -> Vec<Bet> {
         apply_step:
             "Tune idle TTL in agent settings or end sessions explicitly when stepping away.".into(),
         evidence_recency_ms: inputs.window_end_ms,
+        confidence: None,
+        category: None,
     }]
 }

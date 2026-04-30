@@ -52,6 +52,8 @@ pub fn run(inputs: &Inputs) -> Vec<Bet> {
                     "Cache MCP results in-repo, narrow tool allowlists, or batch reads instead of chatty MCP loops."
                         .into(),
                 evidence_recency_ms: inputs.window_end_ms,
+            confidence: None,
+            category: None,
             });
         }
     }
@@ -86,6 +88,8 @@ pub fn run(inputs: &Inputs) -> Vec<Bet> {
                     "Prefer single-session workflows where possible; cap subagent depth or narrow delegated prompts."
                         .into(),
                 evidence_recency_ms: inputs.window_end_ms,
+            confidence: None,
+            category: None,
             });
         }
     }

@@ -27,5 +27,7 @@ pub fn run(inputs: &Inputs) -> Vec<Bet> {
         evidence: vec![agg.session_id.clone()],
         apply_step: "Trim context, restart session, or reduce parallel tool work.".into(),
         evidence_recency_ms: inputs.window_end_ms,
+        confidence: None,
+        category: None,
     }]
 }

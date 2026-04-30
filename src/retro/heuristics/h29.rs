@@ -29,5 +29,7 @@ pub fn run(inputs: &Inputs) -> Vec<Bet> {
         apply_step: "Run clippy/tests locally before long agent tasks; fix top errors first."
             .into(),
         evidence_recency_ms: inputs.window_end_ms,
+        confidence: None,
+        category: None,
     }]
 }

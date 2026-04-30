@@ -33,6 +33,8 @@ pub fn run(inputs: &Inputs) -> Vec<Bet> {
         evidence: bad_session_ids(&inputs.feedback),
         apply_step: "Review flagged sessions with `kaizen sessions show <id>`.".into(),
         evidence_recency_ms: inputs.window_end_ms,
+        confidence: None,
+        category: None,
     }]
 }
 

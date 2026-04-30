@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Atomic report files + Markdown rendering for retro.
 
-use crate::retro::types::Report;
+use crate::retro::types::{Bet, BetCategory, Confidence, Report};
 use anyhow::{Context, Result};
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
@@ -32,23 +32,44 @@ pub fn to_markdown(report: &Report) -> String {
         "Span: {} → {} · Sessions: {} · Cost: ${:.2}\n\n",
         report.meta.span_start_ms, report.meta.span_end_ms, report.meta.session_count, cost
     ));
-    s.push_str("## Top Bets\n\n");
-    for (i, b) in report.top_bets.iter().enumerate() {
-        s.push_str(&format!("### {}. {} ({})\n", i + 1, b.title, b.id));
-        s.push_str(&format!("- Hypothesis: {}\n", b.hypothesis));
-        s.push_str(&format!(
-            "- Saves ~{:.0} tokens/week (est.)\n",
-            b.expected_tokens_saved_per_week
-        ));
-        s.push_str(&format!("- Effort: {} min\n", b.effort_minutes));
-        if !b.evidence.is_empty() {
-            s.push_str("- Evidence:\n");
-            for e in &b.evidence {
-                s.push_str(&format!("  - {}\n", e));
-            }
-        }
-        s.push_str(&format!("- Apply: {}\n\n", b.apply_step));
+    let mut index = 1;
+    let high = report
+        .top_bets
+        .iter()
+        .position(|b| b.confidence == Some(Confidence::High));
+    if let Some(high_idx) = high {
+        render_section(
+            &mut s,
+            "High-Confidence Bet",
+            report.top_bets[high_idx..=high_idx].iter(),
+            &mut index,
+        );
+    } else {
+        s.push_str(
+            "> No high-confidence bet this window; treat remaining bets as exploratory.\n\n",
+        );
     }
+    render_section(
+        &mut s,
+        "To Investigate",
+        report.top_bets.iter().enumerate().filter_map(|(i, b)| {
+            (Some(i) != high && b.category == Some(BetCategory::Investigation)).then_some(b)
+        }),
+        &mut index,
+    );
+    render_section(
+        &mut s,
+        "Quick Hygiene",
+        report.top_bets.iter().enumerate().filter_map(|(i, b)| {
+            (Some(i) != high
+                && matches!(
+                    b.category,
+                    None | Some(BetCategory::QuickWin | BetCategory::Hygiene)
+                ))
+            .then_some(b)
+        }),
+        &mut index,
+    );
     if !report.skipped_deduped.is_empty() {
         s.push_str("## Skipped Bets (deduped vs prior reports)\n\n");
         for line in &report.skipped_deduped {
@@ -83,6 +104,57 @@ pub fn to_markdown(report: &Report) -> String {
         s.push_str(&format!("| Median session | {} min |\n", med));
     }
     s
+}
+
+fn render_section<'a, I>(s: &mut String, title: &str, bets: I, index: &mut usize)
+where
+    I: Iterator<Item = &'a Bet>,
+{
+    let start = *index;
+    for bet in bets {
+        if *index == start {
+            s.push_str(&format!("## {}\n\n", title));
+        }
+        render_bet(s, bet, index);
+    }
+}
+
+fn render_bet(s: &mut String, bet: &Bet, index: &mut usize) {
+    s.push_str(&format!(
+        "### {}. {} ({} · {} · {})\n",
+        *index,
+        bet.title,
+        bet.heuristic_id,
+        confidence_label(bet),
+        category_label(bet)
+    ));
+    s.push_str(&format!("- Hypothesis: {}\n", bet.hypothesis));
+    render_evidence(s, bet);
+    s.push_str(&format!(
+        "- Saves ~{:.0} tokens/week (est.) · Confidence: {}\n",
+        bet.expected_tokens_saved_per_week,
+        confidence_label(bet)
+    ));
+    s.push_str(&format!(
+        "- Effort: {} min · Apply: {}\n\n",
+        bet.effort_minutes, bet.apply_step
+    ));
+    *index += 1;
+}
+
+fn render_evidence(s: &mut String, bet: &Bet) {
+    if bet.evidence.is_empty() {
+        return;
+    }
+    s.push_str(&format!("- Evidence: {}\n", bet.evidence.join(" · ")));
+}
+
+fn confidence_label(bet: &Bet) -> &'static str {
+    bet.confidence.map_or("Unknown", Confidence::label)
+}
+
+fn category_label(bet: &Bet) -> &'static str {
+    bet.category.map_or("unknown", BetCategory::label)
 }
 
 /// Write bytes to `path` via temp file + rename.

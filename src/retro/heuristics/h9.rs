@@ -52,6 +52,8 @@ pub fn run(inputs: &Inputs) -> Vec<Bet> {
             "Check recent Error payloads in `kaizen sessions show` / logs; fix upstream tool or tighten retries."
                 .into(),
         evidence_recency_ms: inputs.window_end_ms,
+    confidence: None,
+    category: None,
     }]
 }
 

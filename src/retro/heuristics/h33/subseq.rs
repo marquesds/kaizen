@@ -111,6 +111,8 @@ fn mk_subseq_bet(
         apply_step: "Capture as a small script, Justfile target, or Cursor skill with parameters."
             .into(),
         evidence_recency_ms: window_end_ms,
+        confidence: None,
+        category: None,
     }
 }
 

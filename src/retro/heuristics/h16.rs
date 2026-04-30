@@ -146,6 +146,8 @@ fn maybe_bet(
             "Run `kaizen prompt diff {short_worse} {short_better}` to inspect changes."
         ),
         evidence_recency_ms: recency_ms,
+        confidence: None,
+        category: None,
     })
 }
 

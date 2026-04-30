@@ -47,5 +47,7 @@ pub fn run(inputs: &Inputs) -> Vec<Bet> {
             "Route trivial read/refactor tasks to a smaller model; keep premium for architecture."
                 .into(),
         evidence_recency_ms: inputs.window_end_ms,
+        confidence: None,
+        category: None,
     }]
 }

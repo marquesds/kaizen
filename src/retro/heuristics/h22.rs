@@ -30,6 +30,8 @@ pub fn run(inputs: &Inputs) -> Vec<Bet> {
         apply_step: "Increase output budget (max_tokens) or decompose tasks into smaller turns."
             .into(),
         evidence_recency_ms: inputs.window_end_ms,
+        confidence: None,
+        category: None,
     }]
 }
 
