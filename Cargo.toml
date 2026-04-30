@@ -284,7 +284,7 @@ aho-corasick = "1"
 regex = "1"
 hex = "0.4"
 time = { version = "0.3", features = ["formatting", "macros", "local-offset"] }
-fs4 = { version = "1.0", features = ["sync"] }
+fs4 = { version = "1.1", features = ["sync"] }
 graphqlite = "0.4"
 tree-sitter = "0.26"
 tree-sitter-rust = "0.24"
