@@ -26,5 +26,7 @@ pub fn run(inputs: &Inputs) -> Vec<Bet> {
         evidence: vec![agg.session_id.clone()],
         apply_step: "Smaller batches; avoid hot loops; check for runaway tool retries.".into(),
         evidence_recency_ms: inputs.window_end_ms,
+        confidence: None,
+        category: None,
     }]
 }

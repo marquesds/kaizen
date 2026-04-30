@@ -1,107 +1,159 @@
 # Retro — Heuristic Engine v0
 
-Weekly job. Reads trailing N days of sessions + repo state. Produces
-ranked markdown report of bets to make agents cheaper, faster, more
-accurate in **this** codebase.
+`kaizen retro` reads recent sessions and local repo facts, then produces a
+ranked Markdown report of changes that may make agents cheaper, faster, or
+more accurate in this codebase.
 
-No LLM in v0. Deterministic, specifiable, cheap, replayable.
-
-**Engine is a pure library.** Same `retro::engine::run(Inputs) -> Report`
-called from CLI, scheduler, and the `kaizen-retro` agent skill (below).
-No side effects in the engine — IO at boundary only.
+The engine is deterministic and pure:
+`retro::engine::run(Inputs) -> Report`. CLI commands, schedulers, and the
+`kaizen-retro` agent skill call the same library. IO happens at the boundary.
 
 ## Goal
 
-3+ actionable bets per week, each with:
-
-- Hypothesis (what changes, why).
-- Expected impact (tokens saved/week, success-rate uplift, time saved).
-- Cost (effort to apply).
-- Evidence (links to sessions/files).
-- Apply step (manual command or PR template).
+A useful weekly report should contain at least three actionable bets. Each bet
+includes a hypothesis, evidence, expected token savings, confidence, action
+category, effort estimate, and apply step.
 
 ## Inputs
 
 | Input | Source |
 |---|---|
-| Session events (last N days) | SQLite `events`, `sessions` |
+| Session events | SQLite `events`, `sessions` |
 | Files touched | SQLite `files_touched` |
-| Skills triggered + outcome | SQLite `skills_used` |
+| Skills triggered | SQLite `skills_used` |
 | Repo state | `git ls-files`, file sizes, mtimes |
 | Skill/rule files | `.cursor/skills/`, `.cursor/rules/`, `AGENTS.md` |
-| Past reports | `.kaizen/reports/*.md` (avoid repeat bets) |
+| Past reports | `.kaizen/reports/*.md` |
+| Optional outcomes | test/lint rows, process samples, feedback, eval scores |
 
-## Heuristics (v0)
+## Heuristics
 
-Each heuristic = pure function `Inputs → Vec<Bet>`. Easy to test, easy to spec.
+Each heuristic is a pure function from `Inputs` to `Vec<Bet>`. Confidence and
+category are assigned by the engine after heuristics run, so older heuristic
+constructors stay simple.
 
-| ID | Name | Signal | Bet | Impact estimate |
-|---|---|---|---|---|
-| H1 | Dead Skill / Rule | On-disk skill or `.mdc` rule unused in 30d lookback and not edited recently (stale mtime) | Remove or merge unused `.cursor/skills/<slug>/` or `.cursor/rules/*.mdc`. | size × usage proxy |
-| H2 | Hot File Cluster | Pair of files co-edited in ≥ 3 distinct sessions, different top-level path (window = `--days`) | Refactor `<a>` + `<b>` — hidden coupling. | co-edit count × complexity |
-| H3 | Path churn | Same path touched by ≥ 4 tool calls in one session (edit-loop proxy, not literal test failures) | Tighten guardrails for `<path>`. | touches × complexity |
-| H4 | Dominant tool | One tool ≥ 25% of aggregated tool events and ≥ 15 tool events total | Review read/search shortcuts for that tool. | calls + cost/reasoning proxy |
-| H5 | Idle bloat | ≥ 2 sessions stay `Idle` ≥ 30 minutes | Tune idle TTL / end sessions explicitly. | idle count × constant |
-| H6 | Skill misfire | ≥ 10 skill-like payloads, ≥ 70% “ignored” pattern | Rewrite skill description / triggers. | ignored × constant |
-| H7 | Premium overkill | ≥ 8 sessions, low average $/session, many “premium” model names | Route mechanical work to smaller models. | sessions × constant |
-| H8 | Doc drift | Same session: read under `docs/` then ≥ 3 edits to `.rs`/`.ts`/`.md` elsewhere | Refresh docs vs implementation. | drift hits × complexity |
-| H9 | Error budget | ≥ 6 `Error` events **or** ≥ 22% of sessions (≥ 5 sessions) with ≥ 1 error | Fix flaky tools / proxy / permissions. | error count × constant |
-| H10 | Shell / test failures | ≥ 3 failing shell-like `ToolResult`s in one session (`is_error` or exit/test-fail text heuristics) | Stabilize command or CI signal. | failures × constant |
-| H11 | Cost outlier | ≥ 6 sessions; one session’s attributed cost ≥ 4× the per-session mean and ≥ $0.04 | Inspect longest / hottest session. | cost delta proxy |
-| H12 | Large file reads | Read-like tool hits a path with `file_facts` LOC ≥ 500 or bytes ≥ 80k, ≥ 2 reads | Read-hygiene / split file. | reads × LOC |
-| H13 | Delegation load | MCP: ≥ 12% of tool calls are MCP-named (≥ 20 calls). Subagents: ≥ 15% of sessions have `parent_session_id` set **or** `trace_path` under `subagents/` (≥ 6 sessions; local Cursor best) | Reduce MCP chatter or subagent fan-out. | calls or sessions × constant |
-| H14 | Instruction bloat | ≥ 22 skill + rule files on disk **or** ≥ 140 KiB combined (≥ 10 items) | Consolidate rules/skills. | bytes / 8 proxy |
-| H19 | Context pressure | ≥ 5 sessions with proxy `context_used_tokens / context_max_tokens ≥ 0.8` | Split sessions earlier; prune long instruction files. | sessions × constant |
-| H20 | Cold cache | ≥ 20 Anthropic proxy calls; cache read ratio &lt; 0.2 | Stabilize system prompt for prompt-cache prefix. | calls × constant |
-| H21 | Rate-limit cascade | ≥ 15 retries in one session **or** ≥ 5 sessions with `retry_count ≥ 3` | Route to smaller model or batch requests. | retries × constant |
-| H22 | Truncation rate | ≥ 10% of proxy turns have `stop_reason == max_tokens` | Raise output budget or decompose tasks. | turns × constant |
-| H23 | Todo abandonment | ≥ 3 sessions with `Lifecycle` todo_write snapshots: ≥ 5 todos and &lt; 40% completed | Narrow scope; avoid TodoWrite for tiny tasks. | sessions × constant |
-| H24 | Reject rate | `reject_diff` on ≥ 15% of edit-like `ToolCall`s (from hooks) | Tighten rules; smaller diffs per turn. | rejects × constant |
-| H25 | Mode thrash | Average ≥ 4 `Lifecycle` `mode_transition` events per session (≥ 2 sessions) | Stabilize plan vs agent up front. | transitions × constant |
-| H27 | Outcome test failures | `session_outcomes`: failure rate &gt; 20% with ≥ 5 tests run | Stabilize tests first. | rate × constant |
-| H28 | Revert churn | `revert_lines_14d` ≥ 100 (when column populated) | Smaller steps; rebase more often. | lines × constant |
-| H29 | Lint / test debt | Many clippy `error:` lines or any failed tests in outcome row | Fix top lint; run tests before long sessions. | errors × constant |
-| H30 | High agent CPU | `session_samples` max CPU &gt; 80% | Smaller tasks; check runaway tools. | CPU × constant |
-| H31 | High agent RSS | Peak RSS ≥ ~1 GiB in samples | Trim context; restart session. | GB × constant |
-| H32 | Long sampled session | ≥ 100 process samples in one session | Break work into shorter sessions. | samples × constant |
-| H33 | Automation cue | Same tool ≥ 5 consecutive calls in a session, or repeating 2- / 3-tool blocks (non-overlapping) across tool calls | Batch with a helper/glob/shell loop, or capture pattern as a script or skill. | streak / repeat count × constant |
+| ID | Name | Signal | Bet | Confidence | Category |
+|---|---|---|---|---|---|
+| H1 | Dead Skill / Rule | On-disk skill or `.mdc` rule unused in 30d lookback and not edited recently | Remove or merge unused rule/skill | High | QuickWin |
+| H2 | Hot File Cluster | Pair of files co-edited in at least 3 sessions across top-level paths | Refactor hidden coupling | Medium | Investigation |
+| H3 | Path churn | Same path touched by at least 4 tool calls in one session | Tighten guardrails for path | Medium | Investigation |
+| H4 | Dominant tool | One tool is at least 25% of events and has at least 15 calls | Review read/search shortcuts | Low | Hygiene |
+| H5 | Idle bloat | At least 2 sessions idle for 30+ minutes | Tune idle TTL or end sessions | Low | Hygiene |
+| H6 | Skill misfire | Skill-like payloads are often ignored | Rewrite skill description/triggers | Low | Hygiene |
+| H7 | Premium overkill | Many short or cheap sessions use premium model names | Route mechanical work to smaller models | Medium | Hygiene |
+| H8 | Doc drift | Session reads docs, then edits implementation elsewhere | Refresh docs versus implementation | Low | Hygiene |
+| H9 | Error budget | Many error events or sessions with errors | Fix flaky tools, proxy, or permissions | High | Investigation |
+| H10 | Shell / test failures | Repeated failing shell-like tool results | Stabilize command or CI signal | High | Investigation |
+| H11 | Cost outlier | One session costs at least 4x mean and at least $0.04 | Inspect longest or hottest session | Medium | Investigation |
+| H12 | Large file reads | Repeated reads of large indexed files | Split file or improve read hygiene | High | Investigation |
+| H13 | Delegation load | High MCP call share or frequent subagent sessions | Reduce chatter or fan-out | Low | Hygiene |
+| H14 | Instruction bloat | Many skill/rule files or large combined bytes | Consolidate rules/skills | Medium | Investigation |
+| H15 | Low eval scores | Multiple low LLM-as-judge scores | Review low-scoring sessions | Low | Hygiene |
+| H16 | Prompt variant underperforms | Fingerprint group has worse cost or error rate | Diff prompt variants | Low | Hygiene |
+| H17 | Human feedback struggles | Bad/regression feedback or low mean score | Review flagged sessions | Low | Hygiene |
+| H18 | Deep span tree | Tool span depth or fan-out crosses threshold | Flatten tool chain | Low | Hygiene |
+| H19 | Context pressure | Sessions use at least 80% of context window | Split sessions or prune instructions | High | Investigation |
+| H20 | Cold cache | Anthropic proxy cache read ratio is low | Stabilize prompt-cache prefix | Medium | Hygiene |
+| H21 | Rate-limit cascade | Many retries in one or more sessions | Route or batch requests | High | Investigation |
+| H22 | Truncation rate | At least 10% of proxy turns stop at max tokens | Raise budget or decompose tasks | Medium | Investigation |
+| H23 | Todo abandonment | Large todo snapshots finish less than 40% | Narrow scope | Low | Hygiene |
+| H24 | Reject rate | Hooked edit rejects cross threshold | Tighten rules and smaller diffs | Medium | Investigation |
+| H25 | Mode thrash | Many mode transitions per session | Stabilize planning up front | Low | Hygiene |
+| H27 | Outcome test failures | Test failure rate above 20% with at least 5 runs | Stabilize tests first | High | Investigation |
+| H28 | Revert churn | Reverted lines over 14d cross threshold | Use smaller steps and rebase sooner | Medium | Hygiene |
+| H29 | Lint / test debt | Clippy errors or failed tests in outcomes | Fix top lint/test debt | High | QuickWin |
+| H30 | High agent CPU | Process samples exceed CPU threshold | Smaller tasks or runaway-tool check | Medium | Hygiene |
+| H31 | High agent RSS | Peak sampled RSS is about 1 GiB or higher | Trim context or restart sessions | Medium | Hygiene |
+| H32 | Long sampled session | A session has at least 100 process samples | Break work into shorter sessions | Medium | Hygiene |
+| H33 | Automation cue | Consecutive or repeated tool-call patterns | Batch with helper script or skill | High | Investigation |
 
-**Provider-only note:** Remote cache rows omit `tool_spans` / `files_touched` / local indexes; H12 still uses local `file_facts` when indexed. H13 subagent detection uses `parent_session_id` when present, else `trace_path` containing `subagents/` (often empty on synthetic remote sessions).
+`confidence: low` means the signal is a proxy or best-effort local inference.
+Low-confidence bets can still be useful, but they should read as hygiene or
+follow-up work, not as proven root cause.
+
+Provider-only note: remote cache rows may omit `tool_spans`, `files_touched`,
+or local indexes. H12 still uses local `file_facts` when indexed. H13 detects
+subagents through `parent_session_id` when present, then falls back to
+`trace_path` containing `subagents/`.
 
 ## Ranking
 
-Score = `expected_tokens_saved_per_week / (apply_effort_minutes + 1)`.
-Top 5 by score → report. Ties broken by recency of evidence.
+Score:
+
+```text
+confidence_weight × expected_tokens_saved_per_week / (effort_minutes + 1)
+```
+
+Weights:
+
+| Confidence | Weight |
+|---|---:|
+| High | 1.0 |
+| Medium | 0.6 |
+| Low | 0.3 |
+
+The engine sorts by score, evidence recency, then bet id. It dedupes previous
+reports and selects the report body as `1 + 2 + 2`:
+
+| Section | Rule |
+|---|---|
+| High-Confidence Bet | One highest-scoring high-confidence bet |
+| To Investigate | Up to two medium/high investigation bets |
+| Quick Hygiene | Up to two quick-win or hygiene bets |
+
+`Report.top_bets` remains a single `Vec<Bet>` for JSON compatibility. The order
+is high-confidence bet first, then investigations, then quick hygiene.
 
 ## Output Format
 
-```
+```markdown
 # Kaizen Retro — Week 2026-W17
 
 Span: 2026-04-15 → 2026-04-22 · Sessions: 47 · Cost: $42.10
 
-## Top Bets
+## High-Confidence Bet
 
-### 1. Delete unused skill `cursor-guide` (H1)
-- Saves ~1.2k tokens/session × 47 sessions = ~56k tokens/week (~$0.84)
-- Evidence: 0 invocations in 30d, last edit 78d ago
-- Apply: rm -rf .cursor/skills/cursor-guide
-- Effort: 2 min
+### 1. Stabilize failing shell commands (H10 · High · investigation)
+- Hypothesis: Three sessions hit repeated failing shell results before recovery.
+- Evidence: 3 failing command clusters · sessions s_42, s_45, s_51
+- Saves ~1200 tokens/week (est.) · Confidence: High
+- Effort: 45 min · Apply: Add a repo-local smoke command.
 
-### 2. ...
+## To Investigate
 
-## Skipped Bets (deduped vs prior reports)
-- ...
+### 2. Split `src/store/projector.rs` (H2 · Medium · investigation)
+- Hypothesis: This file co-edits with shell/reporting code in four sessions.
+- Evidence: Co-edit count: 4 · combined complexity: 88
+- Saves ~7280 tokens/week (est.) · Confidence: Medium
+- Effort: 120 min · Apply: Extract shared projection logic.
+
+### 3. Reduce large file reads in `src/main.rs` (H12 · High · investigation)
+- Hypothesis: Agents repeatedly read a large command file before small edits.
+- Evidence: 5 read-like calls · 934 LOC
+- Saves ~9340 tokens/week (est.) · Confidence: High
+- Effort: 40 min · Apply: Move command handlers into focused modules.
+
+## Quick Hygiene
+
+### 4. Delete unused skill `cursor-guide` (H1 · High · quick_win)
+- Hypothesis: The skill is on disk but has not fired in the lookback window.
+- Evidence: 0 invocations in 30 days · last edit 78 days ago
+- Saves ~56000 tokens/week (est.) · Confidence: High
+- Effort: 5 min · Apply: rm -rf .cursor/skills/cursor-guide
 
 ## Raw Stats
+
 | Metric | Value |
 |---|---|
 | Sessions | 47 |
 | Total cost | $42.10 |
-| Top model | claude-4.6-sonnet (62%) |
-| Top tool | read (38% of calls) |
+| Top model | claude-sonnet (62%) |
+| Top tool | read_file (38%) |
 | Median session | 14 min |
 ```
+
+If no high-confidence bet exists, the renderer omits the section and prints a
+warning that remaining bets are exploratory.
 
 ## CLI
 
@@ -109,64 +161,40 @@ Span: 2026-04-15 → 2026-04-22 · Sessions: 47 · Cost: $42.10
 kaizen retro                       # run for last 7 days, write report
 kaizen retro --days 30             # custom window
 kaizen retro --dry-run             # print, do not write
-kaizen retro --json                # emit Report as JSON to stdout (skill uses this)
+kaizen retro --json                # emit Report as JSON to stdout
 kaizen retro --apply <bet-id>      # interactive apply (v0.2)
 ```
 
 ## Retro as Agent Skill
 
-Ships with the binary. Installed at `.cursor/skills/kaizen-retro/SKILL.md`
-in the consuming repo (or auto-discovered if user runs `kaizen init`).
-
-Skill frontmatter:
-
-```yaml
----
-name: kaizen-retro
-description: >
-  Surface ranked bets to make agents cheaper, faster, more accurate in
-  this codebase. Use when user asks "what should I improve", "run retro",
-  "agent productivity bets", "audit my skills", or invokes /retro.
----
-```
-
-Skill body invokes `kaizen retro --json --days 7`, parses the `Report`,
-summarizes top 3 bets to user with: hypothesis, expected impact, evidence
-links, apply step. Suggests one as next action. No autonomous apply.
-
-Why both surfaces:
-
-- **CLI / scheduler** — recurring discipline, weekly markdown for the team.
-- **Skill** — on-demand, in-flow, when dev asks "what's wrong with my
-  agent setup right now?". Cheap because engine is pure.
+Kaizen can install a `kaizen-retro` skill into consuming repos. The skill calls
+`kaizen retro --json --days 7`, parses the `Report`, and summarizes the best
+bets with hypothesis, impact, evidence, confidence, and apply step. It suggests
+one next action but does not apply changes automatically.
 
 ## Quint Spec
 
-Spec retro pipeline as state machine:
+`specs/retro-pipeline.qnt` models pipeline phase and locking behavior:
 
+```text
+Idle → Loading → Computing → Ranking → Writing → Idle
 ```
-states: Idle → Loading → Computing → Ranking → Writing → Idle
-invariants:
-  - At most one retro running per workspace at a time
-  - Report file written atomically (tmp + rename)
-  - Bet ranking is total order on (score, recency, id)
-  - Deduped bets vs last report never appear in current
-```
+
+Core invariants:
+
+- At most one retro runs per workspace at a time.
+- Report files are written atomically with temp-file rename.
+
+Ranking, metadata assignment, dedupe, and `1 + 2 + 2` selection are pure data
+transforms covered by Rust unit tests in `src/retro/engine.rs`. Add a new Quint
+module only if selection becomes stateful, concurrent, or coupled to IO.
 
 ## Validation Plan
 
-Before shipping:
+Before shipping heuristic changes:
 
-1. Backtest on this repo, 4 weeks of sessions. Manually rate each
-   bet: actionable / noise / wrong. Target ≥ 60% actionable.
-2. Run on 2 partner team repos. Same rating. Target ≥ 50%.
-3. Iterate heuristic thresholds based on noise rate.
-
-## Future (v0.2+)
-
-- LLM augmentation: take top heuristic bets, ask LLM to refine
-  hypothesis + draft PR. Spec the prompt boundary in Quint.
-- Auto-apply low-risk bets (delete unused skill, tighten rule).
-- A/B framework: split team between "applied bet" and "control",
-  measure success-rate delta over 2 weeks.
-- Learn from feedback: thumbs-up/down on bets feeds heuristic weights.
+1. Backtest on this repo over four weeks of sessions.
+2. Manually rate each bet as actionable, noisy, or wrong.
+3. Run on two partner repos and compare noise rate.
+4. Tune thresholds until at least 60% of local bets and 50% of partner bets
+   are actionable.

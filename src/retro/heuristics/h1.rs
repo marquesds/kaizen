@@ -38,6 +38,8 @@ pub fn run(inputs: &Inputs) -> Vec<Bet> {
             )],
             apply_step: format!("rm -rf .cursor/skills/{}", sf.slug),
             evidence_recency_ms: sf.mtime_ms,
+        confidence: None,
+        category: None,
         });
     }
     for rf in &inputs.rule_files_on_disk {
@@ -65,6 +67,8 @@ pub fn run(inputs: &Inputs) -> Vec<Bet> {
             )],
             apply_step: format!("rm .cursor/rules/{}.mdc", rf.slug),
             evidence_recency_ms: rf.mtime_ms,
+        confidence: None,
+        category: None,
         });
     }
     out

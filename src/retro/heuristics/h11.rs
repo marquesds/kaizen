@@ -59,6 +59,8 @@ pub fn run(inputs: &Inputs) -> Vec<Bet> {
             "Open the hottest session transcript; trim tool fan-out, shorten prompts, or downgrade model for mechanical steps."
                 .into(),
         evidence_recency_ms: inputs.window_end_ms,
+    confidence: None,
+    category: None,
     }]
 }
 

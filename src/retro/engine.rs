@@ -2,14 +2,17 @@
 //! Merge heuristics, dedupe vs prior reports, rank top bets.
 
 use crate::retro::heuristics;
-use crate::retro::types::{Inputs, Report, RetroMeta, RetroStats};
+use crate::retro::types::{Bet, BetCategory, Confidence, Inputs, Report, RetroMeta, RetroStats};
 use std::collections::{HashMap, HashSet};
 
-const TOP_N: usize = 5;
+const TOP_BET_N: usize = 1;
+const INVESTIGATE_N: usize = 2;
+const HYGIENE_N: usize = 2;
 
 /// Pure ranking step after `Inputs` are assembled.
 pub fn run(inputs: &Inputs, prior_bet_ids: &HashSet<String>) -> Report {
     let mut candidates = heuristics::all_bets(inputs);
+    candidates.iter_mut().for_each(enrich_bet);
     candidates.sort_by(|a, b| {
         b.score()
             .partial_cmp(&a.score())
@@ -18,21 +21,8 @@ pub fn run(inputs: &Inputs, prior_bet_ids: &HashSet<String>) -> Report {
             .then_with(|| a.id.cmp(&b.id))
     });
 
-    let mut skipped = Vec::new();
-    let mut seen: HashSet<String> = HashSet::new();
-    let mut top = Vec::new();
-    for bet in candidates {
-        if prior_bet_ids.contains(&bet.id) {
-            skipped.push(format!("{} ({})", bet.title, bet.id));
-            continue;
-        }
-        if !seen.insert(bet.id.clone()) {
-            continue;
-        }
-        if top.len() < TOP_N {
-            top.push(bet);
-        }
-    }
+    let (available, skipped) = available_candidates(candidates, prior_bet_ids);
+    let top = select_grouped_bets(&available);
 
     let session_count = inputs.aggregates.unique_session_ids.len() as u64;
     let (top_model, top_model_pct) = top_model_share(&inputs.aggregates.model_session_counts);
@@ -58,6 +48,89 @@ pub fn run(inputs: &Inputs, prior_bet_ids: &HashSet<String>) -> Report {
             top_tool_pct,
             median_session_minutes: median_min,
         },
+    }
+}
+
+fn enrich_bet(bet: &mut Bet) {
+    let (confidence, category) = heuristic_metadata(&bet.heuristic_id);
+    bet.confidence = Some(confidence);
+    bet.category = Some(category);
+}
+
+fn heuristic_metadata(heuristic_id: &str) -> (Confidence, BetCategory) {
+    match heuristic_id {
+        "H1" | "H29" => (Confidence::High, BetCategory::QuickWin),
+        "H9" | "H10" | "H12" | "H19" | "H21" | "H27" | "H33" => {
+            (Confidence::High, BetCategory::Investigation)
+        }
+        "H2" | "H3" | "H11" | "H14" | "H22" | "H24" => {
+            (Confidence::Medium, BetCategory::Investigation)
+        }
+        "H7" | "H20" | "H28" | "H30" | "H31" | "H32" => (Confidence::Medium, BetCategory::Hygiene),
+        _ => (Confidence::Low, BetCategory::Hygiene),
+    }
+}
+
+fn available_candidates(
+    candidates: Vec<Bet>,
+    prior_bet_ids: &HashSet<String>,
+) -> (Vec<Bet>, Vec<String>) {
+    let mut skipped = Vec::new();
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut available = Vec::new();
+    for bet in candidates {
+        if prior_bet_ids.contains(&bet.id) {
+            skipped.push(format!("{} ({})", bet.title, bet.id));
+        } else if seen.insert(bet.id.clone()) {
+            available.push(bet);
+        }
+    }
+    (available, skipped)
+}
+
+fn select_grouped_bets(candidates: &[Bet]) -> Vec<Bet> {
+    let mut selected_ids: HashSet<String> = HashSet::new();
+    let mut top = Vec::new();
+    push_matches(&mut top, &mut selected_ids, candidates, TOP_BET_N, |b| {
+        b.confidence == Some(Confidence::High)
+    });
+    push_matches(
+        &mut top,
+        &mut selected_ids,
+        candidates,
+        INVESTIGATE_N,
+        |b| {
+            b.category == Some(BetCategory::Investigation)
+                && matches!(b.confidence, Some(Confidence::High | Confidence::Medium))
+        },
+    );
+    push_matches(&mut top, &mut selected_ids, candidates, HYGIENE_N, |b| {
+        matches!(
+            b.category,
+            Some(BetCategory::QuickWin | BetCategory::Hygiene)
+        )
+    });
+    top
+}
+
+fn push_matches<F>(
+    out: &mut Vec<Bet>,
+    selected_ids: &mut HashSet<String>,
+    candidates: &[Bet],
+    limit: usize,
+    mut pred: F,
+) where
+    F: FnMut(&Bet) -> bool,
+{
+    let mut added = 0;
+    for bet in candidates {
+        if added == limit {
+            break;
+        }
+        if pred(bet) && selected_ids.insert(bet.id.clone()) {
+            out.push(bet.clone());
+            added += 1;
+        }
     }
 }
 
@@ -106,7 +179,7 @@ fn median_session_minutes(inputs: &Inputs) -> Option<u64> {
 mod tests {
     use super::*;
     use crate::core::event::{Event, EventKind, EventSource, SessionRecord, SessionStatus};
-    use crate::retro::types::{RetroAggregates, SkillFileOnDisk};
+    use crate::retro::types::{Bet, RetroAggregates, SkillFileOnDisk};
     use serde_json::json;
     use std::collections::HashSet;
 
@@ -197,5 +270,47 @@ mod tests {
         let r = run(&inputs, &prior);
         assert!(r.top_bets.iter().all(|b| b.id != "H4:read_file"));
         assert!(!r.skipped_deduped.is_empty() || r.top_bets.len() <= 4);
+    }
+
+    #[test]
+    fn metadata_is_added_to_bets() {
+        let inputs = minimal_inputs();
+        let r = run(&inputs, &HashSet::new());
+        assert!(r.top_bets.iter().all(|b| b.confidence.is_some()));
+        assert!(r.top_bets.iter().all(|b| b.category.is_some()));
+    }
+
+    #[test]
+    fn selection_uses_one_two_two_shape() {
+        let mut bets = vec![
+            bet("H1:a", "H1", 1000.0),
+            bet("H9:a", "H9", 900.0),
+            bet("H2:a", "H2", 800.0),
+            bet("H7:a", "H7", 700.0),
+            bet("H4:a", "H4", 600.0),
+        ];
+        bets.iter_mut().for_each(enrich_bet);
+        bets.sort_by(|a, b| b.score().partial_cmp(&a.score()).unwrap());
+        let top = select_grouped_bets(&bets);
+        assert_eq!(
+            top.iter().map(|b| b.id.as_str()).collect::<Vec<_>>(),
+            vec!["H1:a", "H9:a", "H2:a", "H7:a", "H4:a"]
+        );
+    }
+
+    fn bet(id: &str, heuristic_id: &str, tokens: f64) -> Bet {
+        Bet {
+            id: id.into(),
+            heuristic_id: heuristic_id.into(),
+            title: id.into(),
+            hypothesis: String::new(),
+            expected_tokens_saved_per_week: tokens,
+            effort_minutes: 10,
+            evidence: vec![],
+            apply_step: String::new(),
+            evidence_recency_ms: 0,
+            confidence: None,
+            category: None,
+        }
     }
 }

@@ -64,6 +64,52 @@ pub struct SpanTreeStats {
     pub deepest_span_id: String,
 }
 
+/// Strength of evidence behind a bet.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Confidence {
+    High,
+    Medium,
+    Low,
+}
+
+impl Confidence {
+    pub fn weight(self) -> f64 {
+        match self {
+            Self::High => 1.0,
+            Self::Medium => 0.6,
+            Self::Low => 0.3,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::High => "High",
+            Self::Medium => "Medium",
+            Self::Low => "Low",
+        }
+    }
+}
+
+/// Action shape for grouping retro output.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BetCategory {
+    QuickWin,
+    Investigation,
+    Hygiene,
+}
+
+impl BetCategory {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::QuickWin => "quick_win",
+            Self::Investigation => "investigation",
+            Self::Hygiene => "hygiene",
+        }
+    }
+}
+
 /// One ranked improvement bet.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Bet {
@@ -78,11 +124,16 @@ pub struct Bet {
     pub apply_step: String,
     #[serde(default)]
     pub evidence_recency_ms: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confidence: Option<Confidence>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub category: Option<BetCategory>,
 }
 
 impl Bet {
     pub fn score(&self) -> f64 {
-        self.expected_tokens_saved_per_week / (self.effort_minutes as f64 + 1.0)
+        let weight = self.confidence.map_or(1.0, Confidence::weight);
+        weight * self.expected_tokens_saved_per_week / (self.effort_minutes as f64 + 1.0)
     }
 }
 

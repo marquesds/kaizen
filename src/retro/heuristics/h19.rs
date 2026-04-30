@@ -24,6 +24,8 @@ pub fn run(inputs: &Inputs) -> Vec<Bet> {
         evidence: vec![format!("{sessions_at_pressure} high-pressure sessions")],
         apply_step: "Split sessions earlier or prune CLAUDE.md / injected context.".into(),
         evidence_recency_ms: inputs.window_end_ms,
+        confidence: None,
+        category: None,
     }]
 }
 

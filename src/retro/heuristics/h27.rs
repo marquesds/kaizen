@@ -44,5 +44,7 @@ pub fn run(inputs: &Inputs) -> Vec<Bet> {
         evidence: vec![sid.clone()],
         apply_step: "Stabilize tests before long agent runs; fix or quarantine flakies.".into(),
         evidence_recency_ms: inputs.window_end_ms,
+        confidence: None,
+        category: None,
     }]
 }

@@ -38,6 +38,8 @@ pub fn run(inputs: &Inputs) -> Vec<Bet> {
         )],
         apply_step: "Stabilize the system prompt and promote it to a cached prefix block.".into(),
         evidence_recency_ms: inputs.window_end_ms,
+        confidence: None,
+        category: None,
     }]
 }
 
