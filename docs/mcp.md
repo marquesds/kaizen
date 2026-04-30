@@ -115,6 +115,7 @@ Set any value to `false` to skip that agent’s local scan (useful if a VS Code 
 | `kaizen_ingest_hook` | `kaizen ingest hook` | Pass hook JSON in `payload` (not stdin). `source`: `cursor` or `claude`. |
 | `kaizen_sessions_list` | `kaizen sessions list` | Optional `json: true`, `refresh: true` (full transcript rescan; matches `--refresh`), `all_workspaces: true` for machine-wide aggregation. |
 | `kaizen_session_show` | `kaizen sessions show` | `id` + optional `workspace`. |
+| `mcp/search_sessions` | `kaizen sessions search` | Structured BM25 event search. Args: `query`, optional `since`, `agent`, `kind`, `limit`, `workspace`. Returns `hits[]` with session id, seq, ts, score, snippet, paths, skills, and `tokens_total`. |
 | `kaizen_annotate_session` | `kaizen sessions annotate` | `session_id`, optional `score` (1–5), `label`, `note`, optional `workspace`. |
 | `get_session_span_tree` | `kaizen sessions tree` | `id` + optional `workspace`, `json: true` returns `SpanNode[]` JSON; default returns ASCII tree with subtree-cost flags. **Depth:** unlike CLI `sessions tree --depth`, MCP always requests a large fixed depth (full tree in practice). |
 | `kaizen_summary` | `kaizen summary` | Optional `json: true`, `refresh: true`, `all_workspaces: true`. |

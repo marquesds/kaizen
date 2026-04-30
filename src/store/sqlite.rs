@@ -376,6 +376,7 @@ pub struct SessionSampleAgg {
 /// `sync_state` keys for agent rescan throttling and auto-prune.
 pub const SYNC_STATE_LAST_AGENT_SCAN_MS: &str = "last_agent_scan_ms";
 pub const SYNC_STATE_LAST_AUTO_PRUNE_MS: &str = "last_auto_prune_ms";
+pub const SYNC_STATE_SEARCH_DIRTY_MS: &str = "search_dirty_ms";
 
 pub struct ToolSpanSyncRow {
     pub span_id: String,
@@ -431,6 +432,7 @@ pub struct Store {
     conn: Connection,
     root: PathBuf,
     hot_log: RefCell<Option<HotLog>>,
+    search_writer: RefCell<Option<crate::search::PendingWriter>>,
     span_tree_cache: RefCell<Option<SpanTreeCacheEntry>>,
     projector: RefCell<Projector>,
 }
@@ -474,6 +476,7 @@ impl Store {
                 .unwrap_or_else(|| Path::new("."))
                 .to_path_buf(),
             hot_log: RefCell::new(None),
+            search_writer: RefCell::new(None),
             span_tree_cache: RefCell::new(None),
             projector: RefCell::new(Projector::default()),
         };
@@ -694,6 +697,7 @@ impl Store {
             }
             self.invalidate_span_tree_cache();
         }
+        self.append_search_event(e);
         let Some(ctx) = ctx else {
             return Ok(());
         };
@@ -735,6 +739,37 @@ impl Store {
         }
         if let Some(log) = slot.as_mut() {
             log.append(e)?;
+        }
+        Ok(())
+    }
+
+    fn append_search_event(&self, e: &Event) {
+        if let Err(err) = self.try_append_search_event(e) {
+            tracing::warn!(session_id = %e.session_id, seq = e.seq, "search index skipped: {err:#}");
+            let _ = self.sync_state_set_u64(SYNC_STATE_SEARCH_DIRTY_MS, now_ms());
+        }
+    }
+
+    fn try_append_search_event(&self, e: &Event) -> Result<()> {
+        let Some(session) = self.get_session(&e.session_id)? else {
+            return Ok(());
+        };
+        let workspace = PathBuf::from(&session.workspace);
+        let cfg = crate::core::config::load(&workspace).unwrap_or_default();
+        let salt = try_team_salt(&cfg.sync).unwrap_or([0; 32]);
+        let Some(doc) = crate::search::extract_doc(e, &session, &workspace, &salt) else {
+            return Ok(());
+        };
+        let mut slot = self.search_writer.borrow_mut();
+        if slot.is_none() {
+            *slot = Some(crate::search::PendingWriter::open(&self.root)?);
+        }
+        slot.as_mut().expect("writer").add(&doc)
+    }
+
+    pub fn flush_search(&self) -> Result<()> {
+        if let Some(writer) = self.search_writer.borrow_mut().as_mut() {
+            writer.commit()?;
         }
         Ok(())
     }
@@ -1000,6 +1035,7 @@ impl Store {
     /// Delete sessions with `started_at_ms` strictly before `cutoff_ms` and all dependent rows.
     pub fn prune_sessions_started_before(&self, cutoff_ms: i64) -> Result<PruneStats> {
         let tx = rusqlite::Transaction::new_unchecked(&self.conn, TransactionBehavior::Deferred)?;
+        let old_ids = old_session_ids(&tx, cutoff_ms)?;
         let sessions_to_remove: i64 = tx.query_row(
             "SELECT COUNT(*) FROM sessions WHERE started_at_ms < ?1",
             params![cutoff_ms],
@@ -1065,6 +1101,13 @@ impl Store {
             params![cutoff_ms],
         )?;
         tx.commit()?;
+        if let Some(mut writer) = self.search_writer.borrow_mut().take() {
+            let _ = writer.commit();
+        }
+        if let Err(err) = crate::search::delete_sessions(&self.root, &old_ids) {
+            tracing::warn!("search prune skipped: {err:#}");
+            let _ = self.sync_state_set_u64(SYNC_STATE_SEARCH_DIRTY_MS, now_ms());
+        }
         self.invalidate_span_tree_cache();
         Ok(PruneStats {
             sessions_removed: sessions_to_remove as u64,
@@ -1232,6 +1275,33 @@ impl Store {
 
     pub fn list_events_for_session(&self, session_id: &str) -> Result<Vec<Event>> {
         self.list_events_page(session_id, 0, i64::MAX as usize)
+    }
+
+    pub fn get_event(&self, session_id: &str, seq: u64) -> Result<Option<Event>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT session_id, seq, ts_ms, COALESCE(ts_exact, 0), kind, source, tool, tool_call_id,
+                    tokens_in, tokens_out, reasoning_tokens, cost_usd_e6, payload,
+                    stop_reason, latency_ms, ttft_ms, retry_count,
+                    context_used_tokens, context_max_tokens,
+                    cache_creation_tokens, cache_read_tokens, system_prompt_tokens
+             FROM events WHERE session_id = ?1 AND seq = ?2",
+        )?;
+        stmt.query_row(params![session_id, seq as i64], event_row)
+            .optional()
+            .map_err(Into::into)
+    }
+
+    pub fn workspace_events(&self, workspace: &str) -> Result<Vec<(SessionRecord, Event)>> {
+        let mut out = Vec::new();
+        for session in self.list_sessions(workspace)? {
+            for event in self.list_events_for_session(&session.id)? {
+                out.push((session.clone(), event));
+            }
+        }
+        out.sort_by(|a, b| {
+            (a.1.ts_ms, &a.1.session_id, a.1.seq).cmp(&(b.1.ts_ms, &b.1.session_id, b.1.seq))
+        });
+        Ok(out)
     }
 
     pub fn list_events_page(
@@ -2565,11 +2635,25 @@ impl Store {
     }
 }
 
+impl Drop for Store {
+    fn drop(&mut self) {
+        if let Some(writer) = self.search_writer.get_mut().as_mut() {
+            let _ = writer.commit();
+        }
+    }
+}
+
 fn now_ms() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis() as u64
+}
+
+fn old_session_ids(tx: &rusqlite::Transaction<'_>, cutoff_ms: i64) -> Result<Vec<String>> {
+    let mut stmt = tx.prepare("SELECT id FROM sessions WHERE started_at_ms < ?1")?;
+    let rows = stmt.query_map(params![cutoff_ms], |r| r.get::<_, String>(0))?;
+    Ok(rows.filter_map(|r| r.ok()).collect())
 }
 
 fn mmap_size_bytes_from_mb(raw: Option<&str>) -> i64 {

@@ -70,7 +70,11 @@ fn handle_request(request: DaemonRequest) -> Result<DaemonResponse> {
             workspace,
         } => {
             let workspace = workspace.map(|p| crate::core::paths::canonical(&PathBuf::from(p)));
-            crate::shell::ingest::ingest_hook_text(source, &payload, workspace)?;
+            crate::shell::ingest::ingest_hook_text(source, &payload, workspace.clone())?;
+            if let Some(ws) = workspace {
+                let store = Store::open(&crate::core::workspace::db_path(&ws))?;
+                store.flush_search().ok();
+            }
             Ok(DaemonResponse::Ack {
                 message: "ingested".to_string(),
             })

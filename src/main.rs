@@ -44,6 +44,12 @@ enum Command {
         #[command(subcommand)]
         subcmd: SessionsCommand,
     },
+    /// Search indexed session events.
+    #[command(next_help_heading = "Trust & observe")]
+    Search {
+        #[command(subcommand)]
+        subcmd: SearchCommand,
+    },
     /// Aggregate session + cost stats across all agents.
     #[command(next_help_heading = "Trust & observe")]
     Summary {
@@ -616,6 +622,30 @@ enum SessionsCommand {
         #[arg(long)]
         workspace: Option<PathBuf>,
     },
+    /// Full-text search session events.
+    Search {
+        query: String,
+        #[arg(long)]
+        since: Option<String>,
+        #[arg(long)]
+        agent: Option<String>,
+        #[arg(long)]
+        kind: Option<String>,
+        #[arg(long, default_value_t = 50)]
+        limit: usize,
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand)]
+enum SearchCommand {
+    /// Drop and rebuild the workspace search index.
+    Reindex {
+        /// workspace root (default: cwd)
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -732,6 +762,27 @@ fn main() -> anyhow::Result<()> {
                     workspace,
                 },
         } => kaizen::shell::cli::cmd_sessions_tree(&id, depth, json, workspace.as_deref()),
+        Command::Sessions {
+            subcmd:
+                SessionsCommand::Search {
+                    query,
+                    since,
+                    agent,
+                    kind,
+                    limit,
+                    workspace,
+                },
+        } => kaizen::shell::search::cmd_sessions_search(
+            workspace.as_deref(),
+            &query,
+            since.as_deref(),
+            agent.as_deref(),
+            kind.as_deref(),
+            limit,
+        ),
+        Command::Search {
+            subcmd: SearchCommand::Reindex { workspace },
+        } => kaizen::shell::search::cmd_search_reindex(workspace.as_deref()),
         Command::Feedback {
             subcmd:
                 FeedbackCommand::List {

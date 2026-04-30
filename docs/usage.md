@@ -52,11 +52,20 @@ kaizen sessions show <id>               # session metadata (id, agent, model, ti
 kaizen sessions tree <id>               # ASCII nested tool-span tree
 kaizen sessions tree <id> --depth 3     # limit display depth
 kaizen sessions tree <id> --json        # JSON SpanNode tree (subtree costs + hierarchy)
+kaizen sessions search "deadlock" --since 7d --agent claude-code --limit 50
+kaizen sessions search 'path:src/store/sqlite.rs' --kind tool_use
+kaizen sessions search 'skill:caveman AND tokens_total:>5000'
 ```
 
 `sessions show` prints **one session row**, not the full event stream. For turns, tools, and live tail, use **`kaizen tui`** (or inspect the transcript path shown in `trace_path`).
 
 `sessions tree` renders the nested tool-span tree built from `assign_parents()` during ingest. Each node shows tool name, status, and subtree cost; spans consuming >40% of session cost are flagged. The TUI shows the same tree as a depth-indented strip below the event list.
+
+`sessions search` uses the workspace-local Tantivy index at `.kaizen/search/`. It indexes redacted event text for messages, tool calls, and tool results. Payload bodies are not stored in the index; result snippets are rebuilt from persisted events. If the index is missing or corrupt, Kaizen falls back to an event scan and prints a warning. Rebuild with:
+
+```bash
+kaizen search reindex
+```
 
 ## `kaizen summary`
 

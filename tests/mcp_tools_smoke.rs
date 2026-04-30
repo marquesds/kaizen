@@ -177,6 +177,12 @@ async fn every_mcp_tool_runs() -> anyhow::Result<()> {
     .await?;
     tcall(
         &client,
+        "mcp/search_sessions",
+        json!({ "workspace": ws, "query": "bash", "limit": 5 }),
+    )
+    .await?;
+    tcall(
+        &client,
         "kaizen_summary",
         json!({ "workspace": ws, "json": true }),
     )

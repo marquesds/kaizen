@@ -26,4 +26,5 @@ pub const KAIZEN_MCP_TOOL_NAMES: &[&str] = &[
     "kaizen_sync_run",
     "kaizen_sync_status",
     "kaizen_tui",
+    "mcp/search_sessions",
 ];

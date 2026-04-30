@@ -5,7 +5,7 @@ include!("mcp_tool_names.inc");
 
 #[test]
 fn mcp_exposes_full_tool_set() {
-    const EXPECTED: usize = 23;
+    const EXPECTED: usize = 24;
     let names = KAIZEN_MCP_TOOL_NAMES;
     assert_eq!(
         names.len(),
