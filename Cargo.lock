@@ -1482,9 +1482,9 @@ dependencies = [
 
 [[package]]
 name = "fs4"
-version = "1.0.1"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6b6586049770567845c3091bca401cf6f70d418dcd3d01a1e897db0da7765429"
+checksum = "7e72ed92b67c146290f88e9c89d60ca163ea417a446f61ffd7b72df3e7f1dfd5"
 dependencies = [
  "rustix 1.1.4",
  "windows-sys 0.61.2",
@@ -2238,7 +2238,7 @@ dependencies = [
  "crossterm 0.29.0",
  "duckdb",
  "flate2",
- "fs4 1.0.1",
+ "fs4 1.1.0",
  "graphqlite",
  "hex",
  "indicatif",
@@ -3933,7 +3933,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.4.15",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
