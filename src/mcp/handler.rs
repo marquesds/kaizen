@@ -20,6 +20,7 @@ const MCP_CAPABILITIES: &str = r#"Kaizen MCP exposes most `kaizen` CLI workflows
 - kaizen_summary — Session counts, USD cost, by-agent/model, top tools. Use for spend and volume. Optional json=true.
 - kaizen_metrics — Code hotspots, slow tools (p95), token-heavy tools, churn. Use for **repository** and tool latency. Optional json.
 - kaizen_sessions_list / kaizen_session_show — Session list and one session metadata. Optional json on list.
+- mcp/search_sessions — BM25 event search over current workspace. Supports since, agent, kind, limit.
 - kaizen_insights — Activity dashboard (7d). kaizen_retro — weekly bets. kaizen_exp_* — experiments.
 - List/summary/insights/metrics/retro are cache-first; set refresh=true to force a full transcript rescan (matches CLI --refresh).
 - sessions_list/summary/insights/metrics also accept all_workspaces=true to aggregate across registered workspace-local DBs.
@@ -99,6 +100,25 @@ struct GetSpanTreeArg {
     id: String,
     #[serde(default)]
     json: bool,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct SearchSessionsArg {
+    #[serde(flatten)]
+    ws: WorkspaceArg,
+    query: String,
+    #[serde(default)]
+    since: Option<String>,
+    #[serde(default)]
+    agent: Option<String>,
+    #[serde(default)]
+    kind: Option<String>,
+    #[serde(default = "default_search_limit")]
+    limit: usize,
+}
+
+fn default_search_limit() -> usize {
+    50
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -310,6 +330,40 @@ impl KaizenMcp {
         let w = opt_path(&ws.workspace);
         let t = run_blocking(move || cli::session_show_text(&id, w.as_deref())).await?;
         ok_str(t)
+    }
+
+    #[tool(
+        name = "mcp/search_sessions",
+        description = "BM25 full-text search over session events. Args match `kaizen sessions search`: query, since, agent, kind, limit, workspace."
+    )]
+    async fn search_sessions(
+        &self,
+        Parameters(SearchSessionsArg {
+            ws,
+            query,
+            since,
+            agent,
+            kind,
+            limit,
+        }): Parameters<SearchSessionsArg>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let w = opt_path(&ws.workspace);
+        let (hits, fallback) = run_blocking(move || {
+            crate::shell::search::sessions_search_hits(
+                w.as_deref(),
+                &query,
+                since.as_deref(),
+                agent.as_deref(),
+                kind.as_deref(),
+                limit,
+            )
+        })
+        .await?;
+        Ok(CallToolResult::structured(serde_json::json!({
+            "fallback": fallback,
+            "count": hits.len(),
+            "hits": hits,
+        })))
     }
 
     #[tool(

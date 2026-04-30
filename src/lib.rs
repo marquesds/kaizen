@@ -29,6 +29,7 @@ pub mod provider;
 pub mod proxy;
 pub mod report;
 pub mod retro;
+pub mod search;
 pub mod shell;
 pub mod store;
 pub mod sync;

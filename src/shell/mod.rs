@@ -21,6 +21,7 @@ pub mod remote_pull;
 pub mod retro;
 pub mod sampler_cmd;
 pub mod scope;
+pub mod search;
 pub mod sync;
 pub mod telemetry;
 pub mod telemetry_tail;
