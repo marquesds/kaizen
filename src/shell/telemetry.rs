@@ -15,10 +15,16 @@ use crate::sync::workspace_hash;
 use crate::telemetry::{self, DatadogResolved, OtlpResolved, PostHogResolved};
 use anyhow::{Context, Result};
 use std::io::{BufRead, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-/// Interactive: append a PostHog stub row to `~/.kaizen/config.toml` (keys via env or paste).
-pub fn cmd_telemetry_configure(workspace: Option<&Path>) -> Result<()> {
+#[derive(Debug, Clone, Default)]
+pub struct ConfigureOptions {
+    pub exporter_type: Option<String>,
+    pub path: Option<PathBuf>,
+}
+
+/// Append an exporter stub row to `~/.kaizen/config.toml`.
+pub fn cmd_telemetry_configure(workspace: Option<&Path>, options: ConfigureOptions) -> Result<()> {
     let ws = workspace_path(workspace)?;
     let home = std::env::var("HOME").context("HOME not set")?;
     let p = std::path::PathBuf::from(home).join(".kaizen/config.toml");
@@ -29,53 +35,47 @@ pub fn cmd_telemetry_configure(workspace: Option<&Path>) -> Result<()> {
         "This command appends a `[[telemetry.exporters]]` table to {}.",
         p.display()
     );
-    print!("Type `file`, `posthog`, `datadog`, `otlp`, or `dev` (or empty to abort): ");
-    std::io::stdout().flush()?;
-    let mut line = String::new();
-    std::io::stdin().lock().read_line(&mut line)?;
-    let t = line.trim().to_lowercase();
+    let t = match options.exporter_type {
+        Some(t) => t.trim().to_lowercase(),
+        None => {
+            print!("Type `file`, `posthog`, `datadog`, `otlp`, or `dev` (or empty to abort): ");
+            std::io::stdout().flush()?;
+            let mut line = String::new();
+            std::io::stdin().lock().read_line(&mut line)?;
+            line.trim().to_lowercase()
+        }
+    };
     if t.is_empty() {
         println!("Aborted.");
         return Ok(());
     }
     let block = match t.as_str() {
-        "file" => {
-            r#"
-[[telemetry.exporters]]
-type = "file"
-enabled = true
-# path = "telemetry.ndjson"   # optional; default .kaizen/telemetry.ndjson under each workspace
-"#
-        }
-        "posthog" => {
-            r#"
+        "file" => file_exporter_block(options.path.as_deref()),
+        "posthog" => r#"
 [[telemetry.exporters]]
 type = "posthog"
 # project_api_key = "phc_..."  # or set POSTHOG_API_KEY
 # host = "https://us.i.posthog.com"
 "#
-        }
-        "datadog" => {
-            r#"
+        .to_string(),
+        "datadog" => r#"
 [[telemetry.exporters]]
 type = "datadog"
 # api_key = "..."   # or set DD_API_KEY
 # site = "datadoghq.com"
 "#
-        }
-        "otlp" => {
-            r#"
+        .to_string(),
+        "otlp" => r#"
 [[telemetry.exporters]]
 type = "otlp"
 # endpoint = "http://127.0.0.1:4318"  # or set OTEL_EXPORTER_OTLP_ENDPOINT
 "#
-        }
-        "dev" => {
-            r#"
+        .to_string(),
+        "dev" => r#"
 [[telemetry.exporters]]
 type = "dev"
 "#
-        }
+        .to_string(),
         _ => anyhow::bail!("unknown type (use file, posthog, datadog, otlp, dev)"),
     };
 
@@ -92,6 +92,29 @@ type = "dev"
         "Appended. `file` needs no extra feature; use `--features telemetry-posthog` for PostHog."
     );
     Ok(())
+}
+
+fn file_exporter_block(path: Option<&Path>) -> String {
+    let mut block = String::from(
+        r#"
+[[telemetry.exporters]]
+type = "file"
+enabled = true
+"#,
+    );
+    if let Some(path) = path {
+        use std::fmt::Write as _;
+        let path = path
+            .to_string_lossy()
+            .replace('\\', "\\\\")
+            .replace('"', "\\\"");
+        writeln!(&mut block, "path = \"{path}\"").unwrap();
+    } else {
+        block.push_str(
+            "# path = \"telemetry.ndjson\"   # optional; default .kaizen/telemetry.ndjson under each workspace\n",
+        );
+    }
+    block
 }
 
 /// Redacted: show which env/Toml fields are visible for `telemetry` sinks.
@@ -162,8 +185,8 @@ pub fn cmd_telemetry_print_effective(workspace: Option<&Path>) -> Result<()> {
 }
 
 /// Alias of [`cmd_telemetry_configure`].
-pub fn cmd_telemetry_init(workspace: Option<&Path>) -> Result<()> {
-    cmd_telemetry_configure(workspace)
+pub fn cmd_telemetry_init(workspace: Option<&Path>, options: ConfigureOptions) -> Result<()> {
+    cmd_telemetry_configure(workspace, options)
 }
 
 /// Resolve config, run provider `health` when available, show redacted exporter view.

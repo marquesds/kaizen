@@ -7,7 +7,8 @@ Phase 3 adds a local daemon so one process owns store writes.
 | Command | Purpose |
 |---|---|
 | `kaizen daemon start` | Run daemon in foreground for debugging |
-| `kaizen daemon status` | Print pid, uptime, queue depth, last error |
+| `kaizen daemon start --background` | Spawn daemon, wait until ready, print pid/socket/log, exit |
+| `kaizen daemon status` | Print `status: running` plus pid/uptime/queue/error, or `status: stopped` plus socket path |
 | `kaizen daemon stop` | Request graceful daemon shutdown |
 | `--no-daemon` or `KAIZEN_DAEMON=0` | Use direct SQLite mode |
 

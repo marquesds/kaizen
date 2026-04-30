@@ -3,11 +3,13 @@
 // only for ingest bodies that include an envelope (events, tool_spans, repo_snapshots, workspace_facts).
 // session_evals / session_feedback: items-only batch bodies — metadata omits team/workspace (v1).
 // Tail follow mode never delivers lines before they exist: delivered line count <= lines on disk.
+// `tail --no-follow` on the default missing file is empty success; explicit missing file errors.
 module telemetry_file_metadata {
   var ndjson_lines: int
   var file_sink_enabled: bool
   // Lines already observed by a tail -f client (abstract).
   var tail_delivered: int
+  var tail_errors: int
   var last_includes_envelope: bool
   var last_batch_kind: str
 
@@ -15,6 +17,7 @@ module telemetry_file_metadata {
     ndjson_lines' = 0,
     file_sink_enabled' = false,
     tail_delivered' = 0,
+    tail_errors' = 0,
     last_includes_envelope' = false,
     last_batch_kind' = "",
   }
@@ -23,6 +26,7 @@ module telemetry_file_metadata {
     file_sink_enabled' = true,
     ndjson_lines' = ndjson_lines,
     tail_delivered' = tail_delivered,
+    tail_errors' = tail_errors,
     last_includes_envelope' = last_includes_envelope,
     last_batch_kind' = last_batch_kind,
   }
@@ -37,6 +41,7 @@ module telemetry_file_metadata {
       last_includes_envelope' = true,
       last_batch_kind' = k,
       tail_delivered' = tail_delivered,
+      tail_errors' = tail_errors,
     }
   }
 
@@ -50,6 +55,7 @@ module telemetry_file_metadata {
       last_includes_envelope' = false,
       last_batch_kind' = k,
       tail_delivered' = tail_delivered,
+      tail_errors' = tail_errors,
     }
   }
 
@@ -58,6 +64,7 @@ module telemetry_file_metadata {
     file_sink_enabled' = file_sink_enabled,
     ndjson_lines' = ndjson_lines,
     tail_delivered' = tail_delivered,
+    tail_errors' = tail_errors,
     last_includes_envelope' = last_includes_envelope,
     last_batch_kind' = last_batch_kind,
   }
@@ -67,6 +74,29 @@ module telemetry_file_metadata {
     tail_delivered' = ndjson_lines,
     ndjson_lines' = ndjson_lines,
     file_sink_enabled' = file_sink_enabled,
+    tail_errors' = tail_errors,
+    last_includes_envelope' = last_includes_envelope,
+    last_batch_kind' = last_batch_kind,
+  }
+
+  // `telemetry tail --no-follow` with the default path and no file yet: empty success.
+  action tail_no_follow_missing_default: bool = all {
+    ndjson_lines == 0,
+    tail_delivered' = tail_delivered,
+    tail_errors' = tail_errors,
+    ndjson_lines' = ndjson_lines,
+    file_sink_enabled' = file_sink_enabled,
+    last_includes_envelope' = last_includes_envelope,
+    last_batch_kind' = last_batch_kind,
+  }
+
+  // Explicit missing `--file` remains an error.
+  action tail_no_follow_missing_explicit: bool = all {
+    ndjson_lines == 0,
+    tail_delivered' = tail_delivered,
+    tail_errors' = tail_errors + 1,
+    ndjson_lines' = ndjson_lines,
+    file_sink_enabled' = file_sink_enabled,
     last_includes_envelope' = last_includes_envelope,
     last_batch_kind' = last_batch_kind,
   }
@@ -74,6 +104,8 @@ module telemetry_file_metadata {
   val nonneg: bool = ndjson_lines >= 0
 
   val tail_not_ahead: bool = tail_delivered <= ndjson_lines
+
+  val tail_errors_non_negative: bool = tail_errors >= 0
 
   // session_* batches never carry team/workspace in file metadata in v1.
   val body_only_no_envelope: bool =
@@ -97,6 +129,14 @@ module telemetry_file_metadata {
     init.then(export_file_disabled).expect(ndjson_lines == 0)
   }
 
+  run missing_default_empty_success = {
+    init.then(tail_no_follow_missing_default).expect(tail_errors == 0 and tail_delivered == 0)
+  }
+
+  run missing_explicit_file_errors = {
+    init.then(tail_no_follow_missing_explicit).expect(tail_errors == 1)
+  }
+
   // For `quint-connect` random walks (see tests/spec/telemetry_file_metadata.rs).
   action step: bool = any {
     enable_file_sink,
@@ -104,5 +144,7 @@ module telemetry_file_metadata {
     export_body_only,
     export_file_disabled,
     tail_catchup,
+    tail_no_follow_missing_default,
+    tail_no_follow_missing_explicit,
   }
 }

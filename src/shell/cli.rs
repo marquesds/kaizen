@@ -342,6 +342,12 @@ pub fn sessions_tree_text(id: &str, max_depth: u32, workspace: Option<&Path>) ->
     let ws = workspace_path(workspace)?;
     let store = open_workspace_store(&ws)?;
     let nodes = store.session_span_tree(id)?;
+    if nodes.is_empty() {
+        if store.get_session(id)?.is_none() {
+            anyhow::bail!("session not found: {id}");
+        }
+        return Ok(format!("(no tool spans for session {id})\n"));
+    }
     let total_cost: i64 = nodes.iter().map(|n| n.subtree_cost_usd_e6).sum();
     let mut out = String::new();
     for node in &nodes {

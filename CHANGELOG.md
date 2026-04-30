@@ -45,6 +45,21 @@ here explicitly.
 
 ### Fixed
 
+- `kaizen daemon status` now exits successfully with a stable `status: stopped` line after the
+  daemon has been stopped, instead of surfacing a raw Unix socket connection error.
+- `kaizen sessions tree <id>` now prints a non-empty placeholder for existing sessions with no
+  tool spans while preserving `[]` for `--json`; missing sessions return a clear error.
+- Local smoke docs now run the actual MCP tool smoke test and no longer mention already-covered
+  nested help paths.
+- `kaizen daemon start --background` now starts the daemon, waits until the socket is ready, prints
+  pid/socket/log paths, and exits instead of occupying the caller's process.
+- `kaizen telemetry configure` / `telemetry init` now support noninteractive
+  `--type file|posthog|datadog|otlp|dev` plus `--path` for the file exporter; `telemetry tail
+  --no-follow` treats the default missing NDJSON file as empty output.
+- `kaizen metrics index` now works in non-git throwaway workspaces via a bounded filesystem
+  fallback, while git repositories keep their richer git-backed history.
+- `kaizen tui --workspace` canonicalizes the workspace path before querying the store, fixing
+  `/tmp` versus `/private/tmp` aliases on macOS.
 - `kaizen metrics` / `kaizen metrics index` returned `PARSE_ERROR` on `CONTAINS` because GraphQLite treats it as a reserved keyword; the codegraph now uses `HAS_FILE`.
 - Repeated edges of the same kind between two files no longer abort the repo snapshot with a `UNIQUE constraint failed` error; duplicates now accumulate into a single edge weight.
 - `kaizen ingest hook` now records the session `agent` as `cursor` / `claude` instead of literal `unknown`, falls back to the wall-clock timestamp when the hook payload omits `timestamp_ms` (Claude Code never sends one), and auto-provisions a session stub when the first observed event is a non-`SessionStart` (hooks installed mid-session).

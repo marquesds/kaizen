@@ -1,6 +1,6 @@
 [package]
 name = "kaizen-cli"
-version = "0.1.17"
+version = "0.1.19"
 edition = "2024"
 rust-version = "1.95"
 authors = ["Lucas Marques <hi@lucasmarques.me>"]
@@ -90,6 +90,10 @@ path = "tests/spec/observe_pipeline.rs"
 [[test]]
 name = "session_lookup"
 path = "tests/spec/session_lookup.rs"
+
+[[test]]
+name = "session_tree"
+path = "tests/spec/session_tree.rs"
 
 [[test]]
 name = "metrics_pipeline"

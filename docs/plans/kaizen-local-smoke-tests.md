@@ -36,6 +36,12 @@ export WORKDIR="$TMP/ws-main"
 mkdir -p "$WORKDIR"
 ```
 
+Use current timestamps for newly ingested sessions so retention/GC checks do not prune them before later feedback or experiment steps:
+
+```bash
+NOW_MS="$(($(date +%s) * 1000))"
+```
+
 - Optional second workspace for `--all-workspaces` tests:
 
 ```bash
@@ -59,8 +65,6 @@ Treat these as **SKIP** rows in your runner, not blockers:
 ### CLI parity note (`--help`)
 
 Nested `--help` for subcommands is covered in CI by [`tests/cli_help_smoke.rs`](../../tests/cli_help_smoke.rs) and [`tests/cli_help_matrix.inc`](../../tests/cli_help_matrix.inc).
-
-**Gap:** [`tests/cli_help_matrix.inc`](../../tests/cli_help_matrix.inc) currently omits **`sessions search`** and **`search reindex`** help paths (`kaizen sessions search --help`, `kaizen search reindex --help`). The smoke tiers below include those commands; consider extending the `.inc` file in the same PR as new help smoke entries.
 
 ---
 
@@ -94,7 +98,7 @@ Matches the integration pattern in [`tests/spec/daemon_lifecycle.rs`](../../test
 
 | ID | Action | PASS |
 |----|--------|------|
-| B.D1 | `$KAIZEN_BIN daemon start --background` with `KAIZEN_HOME` set | Daemon starts (`daemon.pid` / socket under `$KAIZEN_HOME`) |
+| B.D1 | `$KAIZEN_BIN daemon start --background` with `KAIZEN_HOME` set | Exits `0`; stdout prints pid/socket/log; `daemon.pid` and socket exist under `$KAIZEN_HOME` |
 | B.D2 | `$KAIZEN_BIN daemon status` | Exit `0`; prints pid/uptime-ish fields |
 | B.D3 | After ingest (Tier B below), `$KAIZEN_BIN daemon stop` | Exit `0`; subsequent `daemon status` reflects stopped state |
 
@@ -107,13 +111,19 @@ Alternatively run ingest with **`--no-daemon`** / `KAIZEN_DAEMON=0` for simpler 
 **Minimal hook line** (SessionStart)—pipe on stdin:
 
 ```json
-{"event":"SessionStart","session_id":"smoke-s1","timestamp_ms":1714000000000}
+{"event":"SessionStart","session_id":"smoke-s1","timestamp_ms":CURRENT_NOW_MS}
+```
+
+Claude Code uses `hook_event_name` instead of Cursor's `event` key:
+
+```json
+{"hook_event_name":"SessionStart","session_id":"smoke-s2","timestamp_ms":CURRENT_NOW_MS}
 ```
 
 | ID | Command | stdin | PASS |
 |----|---------|-------|------|
 | B1 | `$KAIZEN_BIN ingest hook --source cursor --workspace "$WORKDIR"` | SessionStart JSON | `0`; session id appears in later list |
-| B2 | SessionStart with new `session_id` + **`--source claude`** | JSON | `0`; second session appears |
+| B2 | SessionStart with new `session_id` + **`--source claude`** | Claude-shaped JSON | `0`; second session appears |
 | B3 | `$KAIZEN_BIN sessions list --workspace "$WORKDIR"` and `--json` | — | `0`; JSON parses; contains expected ids |
 | B4 | `$KAIZEN_BIN sessions show <id> --workspace "$WORKDIR"` | — | `0`; includes `trace_path` (possibly empty string) |
 | B5 | `$KAIZEN_BIN sessions tree <id> --workspace "$WORKDIR"` | — | `0`; ASCII tree |
@@ -141,6 +151,8 @@ Keep default **`--source local`** everywhere below (do not pull provider cache).
 | C4 | `metrics --days 7`, `--json`, **`--force`**, `--refresh`, `--all-workspaces` | `0` |
 | C5 | `metrics index`, `metrics index --force --workspace "$WORKDIR"` | `0` |
 
+`metrics index` works in plain throwaway directories via filesystem fallback. For git-history/branch binding assertions, run `git init` + one commit in that disposable workspace.
+
 **`--all-workspaces` recipe:** register two roots by running **`init` (and optionally ingest)** in `$WORKDIR` and `$WORKDIR2` with shared `KAIZEN_HOME`; then invoke read commands from either cwd with `--all-workspaces`.
 
 ---
@@ -150,7 +162,7 @@ Keep default **`--source local`** everywhere below (do not pull provider cache).
 | ID | Command | PASS |
 |----|---------|------|
 | D1 | `retro`, `retro --dry-run`, `retro --json`, `retro --force` | `0`; `--dry-run` / `--json` avoid file write per [usage](../usage.md) |
-| D2 | `gc --days 365` or large window on disposable data | `0` |
+| D2 | `gc --days 365` or large window on disposable data | `0`; run after feedback/experiment checks when using historical fixture timestamps |
 | D2b | **`gc --vacuum`** | `0` (slow; acceptable on throwaway WS only) |
 | D3 | **`migrate v2`** on copy of populated workspace | Use **dedicated clone**; `0`; backup artifact per docs |
 | D3b | **`migrate v1`** rollback on same disposable tree | `0`; or STOP if no v2 migration was done |
@@ -176,7 +188,7 @@ Invalid lifecycle commands (best-effort): e.g. `exp archive` before conclude—e
 Minimal **manual binding** path (aligned with MCP smoke in [`tests/mcp_tools_smoke.rs`](../../tests/mcp_tools_smoke.rs)):
 
 1. **`exp power --metric tokens_per_session --baseline-n 50`**
-2. **`exp new --name smoke --hypothesis h --change c --metric cost_per_session --bind manual`** (capture printed id).
+2. **`exp new --name smoke --hypothesis h --change c --metric cost_per_session --bind manual`** (capture printed UUID after `created `).
 3. **`exp list`**, **`exp status <id>`**
 4. **`exp start <id>`**
 5. **`exp tag <id> --session <sid> --variant control`** (`sid` from Tier B ingest)
@@ -238,7 +250,7 @@ enabled = true
 |----|---------|------|
 | I1 | `telemetry print-schema` | `0`; JSON-ish schema listing |
 | I2 | `telemetry print-effective-config --workspace "$WORKDIR"` | `0`; redacted merged resolution |
-| I3 | (optional template) **`telemetry configure`** against fake `HOME` | Appends exporter template; verify file diff |
+| I3 | **`telemetry configure --type file --path telemetry.ndjson`** against fake `HOME` | Appends file exporter template; verify file diff |
 | I4 | Trigger at least one exporter write (e.g. run `sync run --once` if outbox path exercises fan-out, or document **SKIP** if no events batch in test env) | **If** `telemetry.ndjson` exists: **`telemetry tail --no-follow --workspace "$WORKDIR"`** `0` |
 | I5 | `telemetry tail --json --no-follow` | `0`; each line parses as JSON when file non-empty |
 
@@ -323,7 +335,7 @@ After `initialize` + `notifications/initialized`, exercises matching [`tests/mcp
 Prefer reusing **`rmcp`** client patterns from tests or a short Python **`json.dumps` per line over stdio**—wire format must match MCP/stdio expectations of the pinned `rmcp` version. Agents may **delegate** MCP smoke to:
 
 ```bash
-cargo test -p kaizen-cli --test mcp_tools_smoke -- mcp_tools_smoke::every_mcp_tool_runs
+cargo test -p kaizen-cli --test mcp_tools_smoke -- every_mcp_tool_runs
 cargo test -p kaizen-cli --test mcp_parity
 ```
 
@@ -377,4 +389,3 @@ cargo test && cargo clippy -- -D warnings && cargo fmt --check
 ```
 
 Add targeted tests after automating subsets of this plan (Rust integration tests mirroring tiers B–K).
-
