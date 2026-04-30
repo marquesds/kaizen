@@ -3,7 +3,7 @@
 
 use crate::core::config::{self, try_team_salt};
 use crate::search::{SearchHit, SearchQuery};
-use crate::shell::cli::workspace_path;
+use crate::shell::cli::{open_workspace_read_store, workspace_path};
 use crate::shell::fmt::fmt_ts;
 use crate::store::Store;
 use anyhow::{Context, Result};
@@ -45,8 +45,7 @@ pub fn sessions_search_hits(
     limit: usize,
 ) -> Result<(Vec<SearchHit>, bool)> {
     let ws = workspace_path(workspace)?;
-    let store = Store::open(&crate::core::workspace::db_path(&ws))?;
-    store.flush_search().ok();
+    let store = open_workspace_read_store(&ws, false)?;
     let cfg = config::load(&ws)?;
     let salt = try_team_salt(&cfg.sync).unwrap_or([0; 32]);
     let opts = SearchQuery {
@@ -60,7 +59,7 @@ pub fn sessions_search_hits(
         store.get_event(s, q)
     }) {
         Ok(hits) => Ok((hits, false)),
-        Err(_) => Ok((scan_fallback(&store, &ws, &opts, &salt)?, true)),
+        Err(e) => anyhow::bail!("search index unavailable: {e}; run `kaizen search reindex`"),
     }
 }
 
@@ -101,48 +100,6 @@ fn render_hits(hits: &[SearchHit], fallback: bool) -> Result<String> {
         )?;
     }
     Ok(out)
-}
-
-fn scan_fallback(
-    store: &Store,
-    ws: &Path,
-    opts: &SearchQuery,
-    salt: &[u8; 32],
-) -> Result<Vec<SearchHit>> {
-    let mut out = Vec::new();
-    for (session, event) in store.workspace_events(&ws.to_string_lossy())? {
-        if out.len() >= opts.limit {
-            break;
-        }
-        let Some(doc) = crate::search::extract_doc(&event, &session, ws, salt) else {
-            continue;
-        };
-        if !scan_match(&doc, opts) {
-            continue;
-        }
-        out.push(SearchHit {
-            session_id: doc.session_id,
-            seq: doc.seq,
-            ts_ms: doc.ts_ms,
-            agent: doc.agent,
-            kind: doc.kind,
-            score: 0.0,
-            snippet: crate::search::extract::snippet(&doc.text, &opts.query),
-            paths: doc.paths,
-            skills: doc.skills,
-            tokens_total: doc.tokens_total,
-        });
-    }
-    Ok(out)
-}
-
-fn scan_match(doc: &crate::search::SearchDoc, opts: &SearchQuery) -> bool {
-    let q = opts.query.trim_matches('"').to_lowercase();
-    opts.agent.as_ref().is_none_or(|a| &doc.agent == a)
-        && opts.kind.as_ref().is_none_or(|k| &doc.kind == k)
-        && opts.since_ms.is_none_or(|ms| doc.ts_ms >= ms)
-        && (doc.text.to_lowercase().contains(&q)
-            || doc.paths.iter().any(|p| opts.query.contains(p)))
 }
 
 fn parse_since(raw: Option<&str>) -> Result<Option<u64>> {

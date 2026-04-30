@@ -4,7 +4,7 @@
 use crate::core::config;
 use crate::core::data_source::DataSource;
 use crate::metrics::report;
-use crate::shell::cli::maybe_refresh_store;
+use crate::shell::cli::{maybe_refresh_store, open_workspace_read_store};
 use crate::shell::fmt::fmt_ts;
 use crate::shell::remote_pull::maybe_telemetry_pull;
 use crate::shell::scope;
@@ -27,7 +27,7 @@ pub fn insights_text(
     let mut guidance = String::new();
     for workspace in &roots {
         let cfg = config::load(workspace)?;
-        let store = crate::store::Store::open(&crate::core::workspace::db_path(workspace))?;
+        let store = open_workspace_read_store(workspace, refresh || source != DataSource::Local)?;
         maybe_telemetry_pull(workspace, &store, &cfg, source, refresh)?;
         maybe_refresh_store(workspace, &store, refresh)?;
         let ws_str = workspace.to_string_lossy().to_string();

@@ -4,7 +4,7 @@
 use crate::core::config;
 use crate::core::data_source::DataSource;
 use crate::retro::inputs::{scan_rule_files, scan_skill_files};
-use crate::shell::cli::{maybe_refresh_store, workspace_path};
+use crate::shell::cli::{maybe_refresh_store, open_workspace_read_store, workspace_path};
 use crate::shell::remote_pull::maybe_telemetry_pull;
 use crate::store::{GuidanceKind, GuidanceReport, Store};
 use anyhow::Result;
@@ -45,8 +45,7 @@ pub fn guidance_text(
     source: DataSource,
 ) -> Result<String> {
     let ws = workspace_path(workspace)?;
-    let db_path = ws.join(".kaizen/kaizen.db");
-    let store = Store::open(&db_path)?;
+    let store = open_workspace_read_store(&ws, refresh || source != DataSource::Local)?;
     let ws_str = ws.to_string_lossy().to_string();
     let cfg = config::load(&ws)?;
     maybe_telemetry_pull(&ws, &store, &cfg, source, refresh)?;

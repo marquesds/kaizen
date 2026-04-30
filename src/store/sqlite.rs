@@ -272,6 +272,10 @@ const MIGRATIONS: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS tool_spans_ended_idx ON tool_spans(ended_at_ms)",
     "CREATE INDEX IF NOT EXISTS session_samples_ts_idx ON session_samples(ts_ms)",
     "CREATE INDEX IF NOT EXISTS events_ts_idx ON events(ts_ms)",
+    "CREATE INDEX IF NOT EXISTS events_ts_session_seq_idx ON events(ts_ms, session_id, seq)",
+    "CREATE INDEX IF NOT EXISTS events_session_ts_seq_idx ON events(session_id, ts_ms, seq)",
+    "CREATE INDEX IF NOT EXISTS tool_spans_session_started_idx ON tool_spans(session_id, started_at_ms)",
+    "CREATE INDEX IF NOT EXISTS tool_spans_session_ended_idx ON tool_spans(session_id, ended_at_ms)",
     "CREATE INDEX IF NOT EXISTS feedback_session_idx ON session_feedback(session_id)",
 ];
 
@@ -450,6 +454,10 @@ impl Store {
         Self::open_with_mode(path, StoreOpenMode::ReadOnlyQuery)
     }
 
+    pub fn open_query(path: &Path) -> Result<Self> {
+        Self::open_with_mode(path, StoreOpenMode::ReadOnlyQuery)
+    }
+
     pub fn open_with_mode(path: &Path, mode: StoreOpenMode) -> Result<Self> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
@@ -458,7 +466,7 @@ impl Store {
             StoreOpenMode::ReadWrite => Connection::open(path),
             StoreOpenMode::ReadOnlyQuery => Connection::open_with_flags(
                 path,
-                OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+                OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
             ),
         }
         .with_context(|| format!("open db: {}", path.display()))?;
@@ -1465,6 +1473,108 @@ impl Store {
             out.push(r?);
         }
         Ok(out)
+    }
+
+    pub fn experiment_metric_values_in_window(
+        &self,
+        workspace: &str,
+        start_ms: u64,
+        end_ms: u64,
+        metric: crate::experiment::types::Metric,
+    ) -> Result<Vec<(SessionRecord, f64)>> {
+        use crate::experiment::types::Metric;
+        let session_cols = "s.id, s.agent, s.model, s.workspace, s.started_at_ms, s.ended_at_ms,
+            s.status, s.trace_path, s.start_commit, s.end_commit, s.branch, s.dirty_start,
+            s.dirty_end, s.repo_binding_source, s.prompt_fingerprint, s.parent_session_id,
+            s.agent_version, s.os, s.arch, s.repo_file_count, s.repo_total_loc";
+        let window = "s.workspace = ?1 AND ((e.ts_ms >= ?2 AND e.ts_ms <= ?3)
+            OR (e.ts_ms < ?4 AND s.started_at_ms >= ?2 AND s.started_at_ms <= ?3))";
+        let sql = match metric {
+            Metric::TokensPerSession => format!(
+                "SELECT {session_cols},
+                    SUM(COALESCE(e.tokens_in,0)+COALESCE(e.tokens_out,0)+COALESCE(e.reasoning_tokens,0)) AS value
+                 FROM sessions s JOIN events e ON e.session_id = s.id
+                 WHERE {window}
+                 GROUP BY s.id"
+            ),
+            Metric::CostPerSession => format!(
+                "SELECT {session_cols}, SUM(COALESCE(e.cost_usd_e6,0)) / 1000000.0 AS value
+                 FROM sessions s JOIN events e ON e.session_id = s.id
+                 WHERE {window}
+                 GROUP BY s.id"
+            ),
+            Metric::SuccessRate => format!(
+                "SELECT {session_cols},
+                    CASE WHEN SUM(CASE WHEN e.kind='Error' THEN 1 ELSE 0 END) > 0 THEN 0.0 ELSE 1.0 END AS value
+                 FROM sessions s JOIN events e ON e.session_id = s.id
+                 WHERE {window}
+                 GROUP BY s.id"
+            ),
+            Metric::DurationMinutes => format!(
+                "SELECT {session_cols},
+                    (s.ended_at_ms - s.started_at_ms) / 60000.0 AS value
+                 FROM sessions s
+                 WHERE s.workspace = ?1
+                   AND s.ended_at_ms IS NOT NULL
+                   AND EXISTS (
+                     SELECT 1 FROM events e
+                     WHERE e.session_id = s.id
+                       AND ((e.ts_ms >= ?2 AND e.ts_ms <= ?3)
+                         OR (e.ts_ms < ?4 AND s.started_at_ms >= ?2 AND s.started_at_ms <= ?3))
+                   )"
+            ),
+            Metric::FilesPerSession => format!(
+                "SELECT {session_cols}, COUNT(DISTINCT ft.path) AS value
+                 FROM sessions s
+                 JOIN events e ON e.session_id = s.id
+                 LEFT JOIN files_touched ft ON ft.session_id = s.id
+                 WHERE {window}
+                 GROUP BY s.id"
+            ),
+            Metric::SuccessRateByPrompt => format!(
+                "SELECT {session_cols},
+                    1.0 - (MIN(
+                      SUM(CASE WHEN e.kind='Error' THEN 1 ELSE 0 END),
+                      SUM(CASE WHEN e.kind='Message' THEN 1 ELSE 0 END)
+                    ) * 1.0 / SUM(CASE WHEN e.kind='Message' THEN 1 ELSE 0 END)) AS value
+                 FROM sessions s JOIN events e ON e.session_id = s.id
+                 WHERE {window}
+                 GROUP BY s.id
+                 HAVING SUM(CASE WHEN e.kind='Message' THEN 1 ELSE 0 END) > 0"
+            ),
+            Metric::CostByPrompt => format!(
+                "SELECT {session_cols},
+                    SUM(COALESCE(e.cost_usd_e6,0)) / 1000000.0 /
+                    SUM(CASE WHEN e.kind='Message' THEN 1 ELSE 0 END) AS value
+                 FROM sessions s JOIN events e ON e.session_id = s.id
+                 WHERE {window}
+                 GROUP BY s.id
+                 HAVING SUM(CASE WHEN e.kind='Message' THEN 1 ELSE 0 END) > 0"
+            ),
+            Metric::ToolLoops => format!(
+                "WITH calls AS (
+                   SELECT e.session_id, e.tool,
+                     LAG(e.tool) OVER (PARTITION BY e.session_id ORDER BY e.ts_ms, e.seq) AS prev_tool
+                   FROM events e JOIN sessions s ON s.id = e.session_id
+                   WHERE {window} AND e.kind='ToolCall' AND e.tool IS NOT NULL
+                 )
+                 SELECT {session_cols},
+                    SUM(CASE WHEN calls.tool = calls.prev_tool THEN 1 ELSE 0 END) AS value
+                 FROM sessions s JOIN calls ON calls.session_id = s.id
+                 GROUP BY s.id"
+            ),
+        };
+        let mut stmt = self.conn.prepare(&sql)?;
+        let rows = stmt.query_map(
+            params![
+                workspace,
+                start_ms as i64,
+                end_ms as i64,
+                SYNTHETIC_TS_CEILING_MS,
+            ],
+            |row| Ok((session_row(row)?, row.get::<_, f64>(21)?)),
+        )?;
+        rows.map(|r| r.map_err(anyhow::Error::from)).collect()
     }
 
     /// Distinct `(session_id, path)` for sessions with activity in the time window.

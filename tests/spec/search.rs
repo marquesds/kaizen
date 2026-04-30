@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use kaizen::core::event::{Event, EventKind, EventSource, SessionRecord, SessionStatus};
 use kaizen::search::{SearchQuery, reindex_workspace, search};
+use kaizen::shell::search::sessions_search_text;
 use kaizen::store::Store;
 use quint_connect::*;
 use serde_json::json;
@@ -54,6 +55,23 @@ fn reindex_and_query_round_trip() -> anyhow::Result<()> {
     })?;
     assert_eq!(hits.len(), 1);
     assert_eq!(hits[0].session_id, "s1");
+    Ok(())
+}
+
+#[test]
+fn missing_index_errors_with_reindex_hint() -> anyhow::Result<()> {
+    let dir = TempDir::new()?;
+    let ws = dir.path();
+    let store = Store::open(&ws.join(".kaizen/kaizen.db"))?;
+    let session = session(ws);
+    store.upsert_session(&session)?;
+    store.append_event(&event("deadlock inside scheduler", 6_000))?;
+    drop(store);
+    let _ = std::fs::remove_dir_all(ws.join(".kaizen/search"));
+
+    let err = sessions_search_text(Some(ws), "deadlock", None, None, None, 10)
+        .expect_err("missing index should not fall back to DB scan");
+    assert!(err.to_string().contains("kaizen search reindex"));
     Ok(())
 }
 

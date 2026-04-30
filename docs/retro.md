@@ -1,8 +1,10 @@
 # Retro — Heuristic Engine v0
 
-`kaizen retro` reads recent sessions and local repo facts, then produces a
-ranked Markdown report of changes that may make agents cheaper, faster, or
-more accurate in this codebase.
+`kaizen retro` reads recent sessions and cached local repo facts, then produces
+a ranked Markdown report of changes that may make agents cheaper, faster, or
+more accurate in this codebase. Default runs are cache-first. Use `--refresh`
+when the local store may be stale; it rescans agent transcripts first and can
+take a while on large workspaces.
 
 The engine is deterministic and pure:
 `retro::engine::run(Inputs) -> Report`. CLI commands, schedulers, and the

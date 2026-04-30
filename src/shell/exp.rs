@@ -2,14 +2,13 @@
 //! `kaizen exp` — experiment CRUD + report rendering.
 
 use crate::core::config;
-use crate::core::event::{Event, SessionRecord};
 use crate::core::repo::repo_head;
 use crate::experiment::store as exp_store;
 use crate::experiment::types::{
     Binding, Classification, Criterion, Direction, Experiment, Metric, State, transition,
 };
 use crate::experiment::{self as exp};
-use crate::shell::cli::{maybe_scan_all_agents, workspace_path};
+use crate::shell::cli::{maybe_scan_all_agents, open_workspace_read_store, workspace_path};
 use crate::store::Store;
 use anyhow::{Context, Result, anyhow};
 use std::path::Path;
@@ -247,16 +246,33 @@ pub fn exp_report_text(
     refresh: bool,
 ) -> Result<String> {
     let ws = workspace_path(workspace)?;
-    let cfg = config::load(&ws)?;
-    let store = Store::open(&ws.join(".kaizen/kaizen.db"))?;
+    let store = open_workspace_read_store(&ws, refresh)?;
     let ws_str = ws.to_string_lossy().to_string();
-    maybe_scan_all_agents(&ws, &cfg, &ws_str, &store, refresh)?;
+    if refresh {
+        let cfg = config::load(&ws)?;
+        maybe_scan_all_agents(&ws, &cfg, &ws_str, &store, true)?;
+    }
     let exp_rec = exp_store::load_experiment(&store, id)?
         .ok_or_else(|| anyhow!("experiment not found: {id}"))?;
     let (start_ms, end_ms) = window_for(&exp_rec);
-    let sessions = sessions_with_events_in(&store, &ws_str, start_ms, end_ms)?;
     let manual = exp_store::manual_tags(&store, id)?;
-    let report = exp::run(&exp_rec, &sessions, &manual, &ws, false);
+    let (sessions, values) =
+        metric_values_by_session(&store, &ws_str, start_ms, end_ms, exp_rec.metric)?;
+    let mut guardrail_values = std::collections::HashMap::new();
+    for guardrail in &exp_rec.guardrails {
+        let (_, values) =
+            metric_values_by_session(&store, &ws_str, start_ms, end_ms, guardrail.metric)?;
+        guardrail_values.insert(guardrail.metric, values);
+    }
+    let report = exp::run_from_metric_values(
+        &exp_rec,
+        &sessions,
+        &values,
+        &guardrail_values,
+        &manual,
+        &ws,
+        false,
+    );
     if json_out {
         Ok(serde_json::to_string_pretty(&report)?)
     } else {
@@ -327,22 +343,26 @@ pub fn exp_power_text(
     use std::fmt::Write;
 
     let ws = workspace_path(workspace)?;
-    let cfg = config::load(&ws)?;
-    let store = Store::open(&ws.join(".kaizen/kaizen.db"))?;
+    let store = open_workspace_read_store(&ws, refresh)?;
     let ws_str = ws.to_string_lossy().to_string();
-    maybe_scan_all_agents(&ws, &cfg, &ws_str, &store, refresh)?;
+    if refresh {
+        let cfg = config::load(&ws)?;
+        maybe_scan_all_agents(&ws, &cfg, &ws_str, &store, true)?;
+    }
 
     let metric_val = Metric::parse(metric).ok_or_else(|| anyhow!("unknown metric: {metric}"))?;
     let now = now_ms();
     let lookback_ms = 90 * 86_400_000_u64;
-    let sessions = sessions_with_events_in(&store, &ws_str, now.saturating_sub(lookback_ms), now)?;
-    let session_records: Vec<crate::core::event::SessionRecord> =
-        sessions.iter().map(|(s, _)| s.clone()).collect();
-    let _ = session_records; // kept for future cluster key use
-    let values: Vec<f64> = sessions
-        .iter()
-        .filter_map(|(s, evs)| crate::experiment::metric::value_for(metric_val, s, evs))
-        .collect();
+    let values = store
+        .experiment_metric_values_in_window(
+            &ws_str,
+            now.saturating_sub(lookback_ms),
+            now,
+            metric_val,
+        )?
+        .into_iter()
+        .map(|(_, value)| value)
+        .collect::<Vec<_>>();
 
     let mut out = String::new();
     match power::mde(&values, baseline_n) {
@@ -366,6 +386,26 @@ pub fn exp_power_text(
     Ok(out)
 }
 
+fn metric_values_by_session(
+    store: &Store,
+    ws: &str,
+    start_ms: u64,
+    end_ms: u64,
+    metric: Metric,
+) -> Result<(
+    Vec<crate::core::event::SessionRecord>,
+    std::collections::HashMap<String, f64>,
+)> {
+    let rows = store.experiment_metric_values_in_window(ws, start_ms, end_ms, metric)?;
+    let mut sessions = Vec::with_capacity(rows.len());
+    let mut values = std::collections::HashMap::with_capacity(rows.len());
+    for (session, value) in rows {
+        values.insert(session.id.clone(), value);
+        sessions.push(session);
+    }
+    Ok((sessions, values))
+}
+
 pub fn cmd_power(
     workspace: Option<&Path>,
     metric: &str,
@@ -384,25 +424,6 @@ fn window_for(e: &Experiment) -> (u64, u64) {
         .concluded_at_ms
         .unwrap_or_else(|| e.created_at_ms + (e.duration_days as u64) * 86_400_000);
     (e.created_at_ms, end.max(e.created_at_ms))
-}
-
-fn sessions_with_events_in(
-    store: &Store,
-    ws: &str,
-    start_ms: u64,
-    end_ms: u64,
-) -> Result<Vec<(SessionRecord, Vec<Event>)>> {
-    let rows = store.retro_events_in_window(ws, start_ms, end_ms)?;
-    let mut by_id: std::collections::BTreeMap<String, (SessionRecord, Vec<Event>)> =
-        std::collections::BTreeMap::new();
-    for (s, e) in rows {
-        by_id
-            .entry(s.id.clone())
-            .or_insert_with(|| (s.clone(), Vec::new()))
-            .1
-            .push(e);
-    }
-    Ok(by_id.into_values().collect())
 }
 
 fn now_ms() -> u64 {

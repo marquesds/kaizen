@@ -1,7 +1,8 @@
 // Retro pipeline: single-flight lock while non-Idle; Writing implies lock held.
 // For source ∈ { provider, mixed }, an optional RemotePull runs before load when
 // the cache is stale (TTL miss) or the user asked for --refresh. Atomic report
-// write (Writing→Idle) is unchanged; pull stays under the same lock.
+// write (Writing→Idle) is unchanged; pull stays under the same lock. Local
+// reads use cached repo facts; refresh owns scan/index work.
 module retro_pipeline {
   var phase: str
   var lockHeld: bool
@@ -11,13 +12,15 @@ module retro_pipeline {
   var cache_fresh: bool
   // User- or policy-driven force refresh.
   var wants_refresh: bool
+  var indexed_repo: bool
 
   action init: bool = all {
     phase' = "Idle",
     lockHeld' = false,
     source' = "local",
     cache_fresh' = true,
-    wants_refresh' = false
+    wants_refresh' = false,
+    indexed_repo' = false
   }
 
   // Workspaces that will read from the provider cache.
@@ -26,7 +29,8 @@ module retro_pipeline {
     lockHeld' = false,
     source' = "provider",
     cache_fresh' = true,
-    wants_refresh' = false
+    wants_refresh' = false,
+    indexed_repo' = false
   }
 
   // Stale cache: provider/mixed will require RemotePull before load.
@@ -35,7 +39,17 @@ module retro_pipeline {
     lockHeld' = false,
     source' = "provider",
     cache_fresh' = false,
-    wants_refresh' = false
+    wants_refresh' = false,
+    indexed_repo' = false
+  }
+
+  action init_refresh_local: bool = all {
+    phase' = "Idle",
+    lockHeld' = false,
+    source' = "local",
+    cache_fresh' = true,
+    wants_refresh' = true,
+    indexed_repo' = false
   }
 
   // load from local store only: straight to Loading.
@@ -47,7 +61,8 @@ module retro_pipeline {
     phase' = "Loading",
     source' = source,
     cache_fresh' = cache_fresh,
-    wants_refresh' = wants_refresh
+    wants_refresh' = wants_refresh,
+    indexed_repo' = indexed_repo
   }
 
   // provider/mixed, cache is fresh and not forcing refresh: skip pull.
@@ -61,7 +76,8 @@ module retro_pipeline {
     phase' = "Loading",
     source' = source,
     cache_fresh' = cache_fresh,
-    wants_refresh' = wants_refresh
+    wants_refresh' = wants_refresh,
+    indexed_repo' = indexed_repo
   }
 
   // provider/mixed, TTL miss or --refresh: pull first under the same single-flight lock.
@@ -74,7 +90,8 @@ module retro_pipeline {
     phase' = "RemotePull",
     source' = source,
     cache_fresh' = cache_fresh,
-    wants_refresh' = wants_refresh
+    wants_refresh' = wants_refresh,
+    indexed_repo' = indexed_repo
   }
 
   action pull_done: bool = all {
@@ -83,7 +100,19 @@ module retro_pipeline {
     phase' = "Loading",
     source' = source,
     cache_fresh' = true,
-    wants_refresh' = false
+    wants_refresh' = false,
+    indexed_repo' = indexed_repo
+  }
+
+  action index_repo: bool = all {
+    phase == "Loading",
+    wants_refresh,
+    lockHeld' = lockHeld,
+    phase' = "Loading",
+    source' = source,
+    cache_fresh' = cache_fresh,
+    wants_refresh' = wants_refresh,
+    indexed_repo' = true
   }
 
   action load_done: bool = all {
@@ -92,7 +121,8 @@ module retro_pipeline {
     phase' = "Computing",
     source' = source,
     cache_fresh' = cache_fresh,
-    wants_refresh' = wants_refresh
+    wants_refresh' = wants_refresh,
+    indexed_repo' = indexed_repo
   }
 
   action compute_done: bool = all {
@@ -101,7 +131,8 @@ module retro_pipeline {
     phase' = "Ranking",
     source' = source,
     cache_fresh' = cache_fresh,
-    wants_refresh' = wants_refresh
+    wants_refresh' = wants_refresh,
+    indexed_repo' = indexed_repo
   }
 
   action rank_done: bool = all {
@@ -110,7 +141,8 @@ module retro_pipeline {
     phase' = "Writing",
     source' = source,
     cache_fresh' = cache_fresh,
-    wants_refresh' = wants_refresh
+    wants_refresh' = wants_refresh,
+    indexed_repo' = indexed_repo
   }
 
   action write_done: bool = all {
@@ -119,7 +151,8 @@ module retro_pipeline {
     phase' = "Idle",
     source' = source,
     cache_fresh' = cache_fresh,
-    wants_refresh' = wants_refresh
+    wants_refresh' = wants_refresh,
+    indexed_repo' = indexed_repo
   }
 
   action step: bool = any {
@@ -127,6 +160,7 @@ module retro_pipeline {
     acquire_from_cache,
     acquire_start_pull,
     pull_done,
+    index_repo,
     load_done,
     compute_done,
     rank_done,
@@ -142,6 +176,9 @@ module retro_pipeline {
   val pull_holds_lock: bool =
     (phase == "RemotePull") implies lockHeld
 
+  val default_local_does_not_index: bool =
+    (source == "local" and not(wants_refresh)) implies not(indexed_repo)
+
   run linear_with_pull = {
     init_stale_provider
       .then(acquire_start_pull)
@@ -151,5 +188,16 @@ module retro_pipeline {
       .then(rank_done)
       .then(write_done)
       .expect(phase == "Idle" and not(lockHeld) and cache_fresh)
+  }
+
+  run local_refresh_indexes_before_compute = {
+    init_refresh_local
+      .then(acquire)
+      .then(index_repo)
+      .then(load_done)
+      .then(compute_done)
+      .then(rank_done)
+      .then(write_done)
+      .expect(phase == "Idle" and indexed_repo)
   }
 }

@@ -8,6 +8,7 @@ use crate::experiment::stats::sequential::{Decision, decide as seq_decide};
 use crate::experiment::stats::{DEFAULT_RESAMPLES, Summary, summarize};
 use crate::experiment::types::{Classification, Criterion, Direction, Experiment, GuardrailResult};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::Path;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -94,6 +95,74 @@ pub fn run(
         sequential_decision: seq.decision,
         ever_significant: seq.ever_significant,
     }
+}
+
+pub fn run_from_metric_values(
+    exp: &Experiment,
+    sessions: &[SessionRecord],
+    values: &HashMap<String, f64>,
+    guardrail_values: &HashMap<crate::experiment::types::Metric, HashMap<String, f64>>,
+    manual_tags: &ManualTags,
+    workspace: &Path,
+    ever_significant: bool,
+) -> Report {
+    let (control_s, treatment_s, excluded_s) =
+        partition(sessions, &exp.binding, manual_tags, workspace);
+    let control = values_for(&control_s, values);
+    let treatment = values_for(&treatment_s, values);
+    let summary = summarize(
+        &control,
+        &treatment,
+        stable_seed(&exp.id),
+        DEFAULT_RESAMPLES,
+    );
+    let target_met = evaluate_criterion(&exp.success_criterion, &summary);
+    let seq = seq_decide(
+        &control,
+        &treatment,
+        stable_seed(&exp.id),
+        DEFAULT_RESAMPLES,
+        ever_significant,
+    );
+    let guardrail_results = exp
+        .guardrails
+        .iter()
+        .map(|g| {
+            let empty = HashMap::new();
+            let vals = guardrail_values.get(&g.metric).unwrap_or(&empty);
+            let gs = summarize(
+                &values_for(&control_s, vals),
+                &values_for(&treatment_s, vals),
+                stable_seed(&exp.id),
+                DEFAULT_RESAMPLES,
+            );
+            let violated = match g.regression_direction {
+                Direction::Increase => gs.ci95_lo.map(|lo| lo > 0.0).unwrap_or(false),
+                Direction::Decrease => gs.ci95_hi.map(|hi| hi < 0.0).unwrap_or(false),
+            };
+            GuardrailResult {
+                metric: g.metric,
+                delta_pct: gs.delta_pct,
+                violated,
+            }
+        })
+        .collect();
+    Report {
+        experiment: exp.clone(),
+        summary,
+        excluded_count: excluded_s.len(),
+        target_met,
+        guardrail_results,
+        sequential_decision: seq.decision,
+        ever_significant: seq.ever_significant,
+    }
+}
+
+fn values_for(sessions: &[&SessionRecord], values: &HashMap<String, f64>) -> Vec<f64> {
+    sessions
+        .iter()
+        .filter_map(|s| values.get(&s.id).copied())
+        .collect()
 }
 
 fn metric_values(
