@@ -4,7 +4,7 @@ use kaizen::DataSource;
 use kaizen::core::event::{Event, EventKind, EventSource, SessionRecord, SessionStatus};
 use kaizen::shell::cli::{sessions_list_text, summary_text};
 use kaizen::shell::scope;
-use kaizen::store::Store;
+use kaizen::store::{SYNC_STATE_LAST_AGENT_SCAN_MS, Store};
 use serde_json::json;
 use std::path::Path;
 use std::sync::{Mutex, OnceLock};
@@ -183,10 +183,46 @@ fn default_reads_skip_global_scan_until_refresh() -> anyhow::Result<()> {
     let cold = sessions_list_text(Some(&ws), true, false, false, None)?;
     let cold_json: serde_json::Value = serde_json::from_str(&cold)?;
     assert_eq!(cold_json["count"], 0);
+    let store = Store::open(&ws.join(".kaizen/kaizen.db"))?;
+    assert_eq!(
+        store.sync_state_get_u64(SYNC_STATE_LAST_AGENT_SCAN_MS)?,
+        None
+    );
 
     let refreshed = sessions_list_text(Some(&ws), true, true, false, None)?;
     let refreshed_json: serde_json::Value = serde_json::from_str(&refreshed)?;
     assert_eq!(refreshed_json["count"], 1);
+    assert!(
+        Store::open(&ws.join(".kaizen/kaizen.db"))?
+            .sync_state_get_u64(SYNC_STATE_LAST_AGENT_SCAN_MS)?
+            .is_some()
+    );
+
+    clear_env("KAIZEN_HOME");
+    clear_env("HOME");
+    Ok(())
+}
+
+#[test]
+fn sessions_list_defaults_to_100_and_limit_zero_returns_all() -> anyhow::Result<()> {
+    let _guard = env_lock().lock().unwrap_or_else(|e| e.into_inner());
+    let home = TempDir::new()?;
+    let ws = home.path().join("repo");
+    std::fs::create_dir_all(&ws)?;
+    let ws = std::fs::canonicalize(ws)?;
+    set_env("HOME", home.path());
+    set_env("KAIZEN_HOME", home.path().join(".kaizen"));
+    for i in 0..105 {
+        seed_session(&ws, &format!("s{i:03}"), "read_file")?;
+    }
+
+    let capped = sessions_list_text(Some(&ws), true, false, false, None)?;
+    let capped_json: serde_json::Value = serde_json::from_str(&capped)?;
+    assert_eq!(capped_json["count"], 100);
+
+    let all = sessions_list_text(Some(&ws), true, false, false, Some(0))?;
+    let all_json: serde_json::Value = serde_json::from_str(&all)?;
+    assert_eq!(all_json["count"], 105);
 
     clear_env("KAIZEN_HOME");
     clear_env("HOME");

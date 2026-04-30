@@ -166,6 +166,15 @@ fn open_workspace_store(workspace: &Path) -> Result<Store> {
     Store::open(&crate::core::workspace::db_path(workspace))
 }
 
+pub(crate) fn open_workspace_read_store(workspace: &Path, refresh: bool) -> Result<Store> {
+    let db_path = crate::core::workspace::db_path(workspace);
+    if refresh || !db_path.exists() {
+        Store::open(&db_path)
+    } else {
+        Store::open_query(&db_path)
+    }
+}
+
 /// `kaizen sessions list` — same output as CLI stdout.
 pub fn sessions_list_text(
     workspace: Option<&Path>,
@@ -194,7 +203,7 @@ pub fn sessions_list_text(
         }
     } else {
         for workspace in &roots {
-            let store = open_workspace_store(workspace)?;
+            let store = open_workspace_read_store(workspace, refresh)?;
             maybe_refresh_store(workspace, &store, refresh)?;
             let ws_str = workspace.to_string_lossy().to_string();
             sessions.extend(store.list_sessions(&ws_str)?);
@@ -205,7 +214,9 @@ pub fn sessions_list_text(
             .cmp(&a.started_at_ms)
             .then_with(|| a.id.cmp(&b.id))
     });
-    if let Some(n) = limit.filter(|&n| n > 0) {
+    let output_limit = limit.unwrap_or(100);
+    if output_limit > 0 {
+        let n = output_limit;
         sessions.truncate(n);
     }
     let scope_label = scope::label(&roots);
@@ -423,7 +434,7 @@ pub fn cmd_sessions_tree_text(
 ) -> Result<String> {
     if json {
         let ws = workspace_path(workspace)?;
-        let store = open_workspace_store(&ws)?;
+        let store = open_workspace_read_store(&ws, false)?;
         let nodes = store.session_span_tree(id)?;
         Ok(serde_json::to_string_pretty(&nodes)?)
     } else {
@@ -456,11 +467,14 @@ pub fn summary_text(
 
     for workspace in &roots {
         let cfg = config::load(workspace)?;
-        let store = open_workspace_store(workspace)?;
+        let store = open_workspace_read_store(
+            workspace,
+            refresh || source != crate::core::data_source::DataSource::Local,
+        )?;
         crate::shell::remote_pull::maybe_telemetry_pull(workspace, &store, &cfg, source, refresh)?;
         maybe_refresh_store(workspace, &store, refresh)?;
         let ws_str = workspace.to_string_lossy().to_string();
-        let read_store = Store::open_read_only(&crate::core::workspace::db_path(workspace))?;
+        let read_store = open_workspace_read_store(workspace, false)?;
         let query = crate::store::query::QueryStore::open(&workspace.join(".kaizen"))?;
         let mut stats = query.summary_stats(&read_store, &ws_str)?;
         if source != crate::core::data_source::DataSource::Local

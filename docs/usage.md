@@ -8,7 +8,7 @@ Run `kaizen --help` for grouped subcommands (Trust & observe, Operate, Improve, 
 Use `kaizen daemon status`, `kaizen daemon stop`, or `--no-daemon` /
 `KAIZEN_DAEMON=0` for direct SQLite mode. See [daemon.md](daemon.md).
 
-**Cache-first reads:** `sessions list`, `summary`, `insights`, `guidance`, `metrics`, `retro`, **`exp report`**, and **`exp power`** read the local workspace database first (respecting `[scan].min_rescan_seconds` for transcript rescans). Pass **`--refresh`** (`-r`) when you want Kaizen to rescan external agent transcripts before rendering the command. See [config.md](config.md).
+**Cache-first reads:** `sessions list`, `summary`, `insights`, `guidance`, `metrics`, `retro`, **`exp report`**, and **`exp power`** read the local workspace database first and avoid transcript scans. Pass **`--refresh`** (`-r`) only when you want Kaizen to rescan external agent transcripts before rendering. That can take a while on large workspaces; with `--source provider|mixed`, it can also refresh remote provider cache. See [config.md](config.md).
 
 **Machine-wide aggregation:** `sessions list`, `summary`, `insights`, and `metrics` accept **`--all-workspaces`**. Kaizen records each workspace path you use (canonicalized) in a machine-local JSON list, then opens each repo’s `.kaizen/kaizen.db` and merges results in memory. Details: [config.md#machine-local-registry](config.md#machine-local-registry).
 
@@ -44,9 +44,10 @@ Requires prior measurement with `[collect.outcomes] enabled` and a completed `St
 ## `kaizen sessions`
 
 ```bash
-kaizen sessions list                     # all sessions in workspace
+kaizen sessions list                     # latest 100 sessions in workspace
 kaizen sessions list --json             # machine-readable
 kaizen sessions list --limit 20        # cap rows after sort (newest first)
+kaizen sessions list --limit 0         # full output; not part of the fast-read budget
 kaizen sessions list --refresh
 kaizen sessions list --all-workspaces
 kaizen sessions show <id>               # session metadata (id, agent, model, times, status, trace_path)
@@ -62,7 +63,7 @@ kaizen sessions search 'skill:caveman AND tokens_total:>5000'
 
 `sessions tree` renders the nested tool-span tree built from `assign_parents()` during ingest. Each node shows tool name, status, and subtree cost; spans consuming >40% of session cost are flagged. When a session exists but has no tool spans yet, text output prints a `(no tool spans for session <id>)` placeholder while `--json` returns `[]`. The TUI shows the same tree as a depth-indented strip below the event list.
 
-`sessions search` uses the workspace-local Tantivy index at `.kaizen/search/`. It indexes redacted event text for messages, tool calls, and tool results. Payload bodies are not stored in the index; result snippets are rebuilt from persisted events. If the index is missing or corrupt, Kaizen falls back to an event scan and prints a warning. Rebuild with:
+`sessions search` uses the workspace-local Tantivy index at `.kaizen/search/`. It indexes redacted event text for messages, tool calls, and tool results. Payload bodies are not stored in the index; result snippets are rebuilt from persisted events. If the index is missing or corrupt, Kaizen returns a fast error instead of scanning the full event table. Rebuild with:
 
 ```bash
 kaizen search reindex
@@ -231,7 +232,7 @@ Model Context Protocol server over stdio — **most** CLI workflows are availabl
 A/B experiments with bootstrap CI, SRM checks, and sequential testing.
 
 ```bash
-# Size first. Reads are cache-first; use --refresh for a full transcript rescan first.
+# Size first. Reads are cache-first; use --refresh only when the store may be stale.
 kaizen exp power --metric tokens_per_session --baseline-n 50
 kaizen exp power --metric tokens_per_session --baseline-n 50 --refresh
 

@@ -12,6 +12,8 @@ struct RetroPipelineState {
     cache_fresh: bool,
     #[serde(rename = "wants_refresh")]
     wants_refresh: bool,
+    #[serde(rename = "indexed_repo")]
+    indexed_repo: bool,
 }
 
 #[derive(Debug, Default)]
@@ -21,6 +23,7 @@ struct RetroDriver {
     source: String,
     cache_fresh: bool,
     wants_refresh: bool,
+    indexed_repo: bool,
 }
 
 impl State<RetroDriver> for RetroPipelineState {
@@ -31,6 +34,7 @@ impl State<RetroDriver> for RetroPipelineState {
             source: d.source.clone(),
             cache_fresh: d.cache_fresh,
             wants_refresh: d.wants_refresh,
+            indexed_repo: d.indexed_repo,
         })
     }
 }
@@ -46,6 +50,7 @@ impl Driver for RetroDriver {
                 self.source = "local".into();
                 self.cache_fresh = true;
                 self.wants_refresh = false;
+                self.indexed_repo = false;
             },
             init_with_remote_source => {
                 self.phase = "Idle".into();
@@ -53,6 +58,7 @@ impl Driver for RetroDriver {
                 self.source = "provider".into();
                 self.cache_fresh = true;
                 self.wants_refresh = false;
+                self.indexed_repo = false;
             },
             init_stale_provider => {
                 self.phase = "Idle".into();
@@ -60,6 +66,15 @@ impl Driver for RetroDriver {
                 self.source = "provider".into();
                 self.cache_fresh = false;
                 self.wants_refresh = false;
+                self.indexed_repo = false;
+            },
+            init_refresh_local => {
+                self.phase = "Idle".into();
+                self.lock_held = false;
+                self.source = "local".into();
+                self.cache_fresh = true;
+                self.wants_refresh = true;
+                self.indexed_repo = false;
             },
             step => {}
             acquire => {
@@ -67,6 +82,12 @@ impl Driver for RetroDriver {
                     self.lock_held = true;
                     self.phase = "Loading".into();
                 }
+            },
+            index_repo => {
+                if self.phase != "Loading" || !self.wants_refresh {
+                    anyhow::bail!("index_repo not enabled");
+                }
+                self.indexed_repo = true;
             },
             acquire_from_cache => {
                 if self.phase == "Idle" && !self.lock_held

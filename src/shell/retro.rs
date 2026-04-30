@@ -7,7 +7,7 @@ use crate::metrics::index;
 use crate::report::{ReportsDirLock, iso_week_label_utc, to_json, to_markdown, write_atomic};
 use crate::retro::types::Report;
 use crate::retro::{engine, inputs};
-use crate::shell::cli::{maybe_refresh_store, workspace_path};
+use crate::shell::cli::{maybe_refresh_store, open_workspace_read_store, workspace_path};
 use crate::shell::remote_pull::maybe_telemetry_pull;
 use crate::store::Store;
 use anyhow::Result;
@@ -21,11 +21,12 @@ fn compute_retro(
 ) -> Result<(PathBuf, Report)> {
     let cfg = config::load(workspace)?;
     let db_path = workspace.join(".kaizen/kaizen.db");
-    let store = Store::open(&db_path)?;
+    let store = open_workspace_read_store(workspace, refresh || source != DataSource::Local)?;
     let ws_str = workspace.to_string_lossy().to_string();
     maybe_telemetry_pull(workspace, &store, &cfg, source, refresh)?;
     maybe_refresh_store(workspace, &store, refresh)?;
-    if let Ok(snapshot) = index::ensure_indexed(&store, workspace, refresh)
+    if refresh
+        && let Ok(snapshot) = index::ensure_indexed(&store, workspace, true)
         && let Some(ctx) = crate::sync::ingest_ctx(&cfg, workspace.to_path_buf())
     {
         if let (Ok(facts), Ok(edges)) = (
@@ -37,7 +38,7 @@ fn compute_retro(
         }
         let _ = crate::sync::smart::enqueue_workspace_fact_snapshot(&store, workspace, &ctx);
     }
-    let read_store = Store::open_read_only(&db_path)?;
+    let read_store = Store::open_query(&db_path)?;
 
     let end_ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

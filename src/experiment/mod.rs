@@ -8,7 +8,7 @@ pub mod stats;
 pub mod store;
 pub mod types;
 
-pub use engine::{Report, run, to_markdown};
+pub use engine::{Report, run, run_from_metric_values, to_markdown};
 pub use types::{
     Binding, Classification, Criterion, Direction, Experiment, GuardrailResult, GuardrailSpec,
     Metric, State, transition,

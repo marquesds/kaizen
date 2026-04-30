@@ -180,6 +180,10 @@ name = "eval_h15"
 path = "tests/spec/eval_h15.rs"
 
 [[test]]
+name = "read_report_perf"
+path = "tests/spec/read_report_perf.rs"
+
+[[test]]
 name = "h33_automation"
 path = "tests/spec/h33_automation.rs"
 
@@ -246,6 +250,10 @@ path = "tests/perf/projector_phase2.rs"
 [[test]]
 name = "perf_migrate_v2"
 path = "tests/perf/migrate_v2.rs"
+
+[[test]]
+name = "perf_read_report"
+path = "tests/perf/read_report.rs"
 
 [features]
 default = ["analytics-duckdb"]

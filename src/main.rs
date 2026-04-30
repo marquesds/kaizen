@@ -62,10 +62,10 @@ enum Command {
         /// Emit JSON (same fields as the MCP `kaizen_summary` tool with json=true).
         #[arg(long)]
         json: bool,
-        /// Force a full agent transcript rescan (ignore `[scan].min_rescan_seconds`).
+        /// Force a full agent transcript rescan before reading. This can take a while on large workspaces.
         #[arg(short, long)]
         refresh: bool,
-        /// `local` (default) \| `provider` (remote cache) \| `mixed`. With `provider`/`mixed`, use `--refresh` to force a query pull.
+        /// `local` (default) | `provider` (remote cache) | `mixed`. With `provider`/`mixed`, `--refresh` can call remote APIs.
         #[arg(long, value_enum, default_value_t = DataSource::Local)]
         source: DataSource,
     },
@@ -118,10 +118,10 @@ enum Command {
         /// Read from every registered workspace on this machine.
         #[arg(long)]
         all_workspaces: bool,
-        /// Force a full agent transcript rescan (ignore `[scan].min_rescan_seconds`).
+        /// Force a full agent transcript rescan before reading. This can take a while on large workspaces.
         #[arg(short, long)]
         refresh: bool,
-        /// `local` \| `provider` \| `mixed` (see `kaizen summary --help`).
+        /// `local` | `provider` | `mixed`; `--refresh` can call remote APIs.
         #[arg(long, value_enum, default_value_t = DataSource::Local)]
         source: DataSource,
     },
@@ -137,9 +137,10 @@ enum Command {
         /// workspace root (default: cwd)
         #[arg(long)]
         workspace: Option<PathBuf>,
-        /// Force a full agent transcript rescan (ignore `[scan].min_rescan_seconds`).
+        /// Force a full agent transcript rescan before reading. This can take a while on large workspaces.
         #[arg(short, long)]
         refresh: bool,
+        /// `local` | `provider` | `mixed`; `--refresh` can call remote APIs.
         #[arg(long, value_enum, default_value_t = DataSource::Local)]
         source: DataSource,
     },
@@ -163,9 +164,10 @@ enum Command {
         /// Read from every registered workspace on this machine.
         #[arg(long)]
         all_workspaces: bool,
-        /// Force a full agent transcript rescan (ignore `[scan].min_rescan_seconds`).
+        /// Force a full agent transcript rescan before reading. This can take a while on large workspaces.
         #[arg(short, long)]
         refresh: bool,
+        /// `local` | `provider` | `mixed`; `--refresh` can call remote APIs.
         #[arg(long, value_enum, default_value_t = DataSource::Local)]
         source: DataSource,
     },
@@ -205,7 +207,7 @@ enum Command {
         /// workspace root (default: cwd)
         #[arg(long)]
         workspace: Option<PathBuf>,
-        /// Force a full agent transcript rescan (ignore `[scan].min_rescan_seconds`).
+        /// Force a full agent transcript rescan before reading. This can take a while on large workspaces.
         #[arg(short, long)]
         refresh: bool,
         #[arg(long, value_enum, default_value_t = DataSource::Local)]
@@ -523,7 +525,7 @@ enum ExpCommand {
         id: String,
         #[arg(long)]
         json: bool,
-        /// Force a full agent transcript rescan (ignore `[scan].min_rescan_seconds`).
+        /// Force a full agent transcript rescan before reading. This can take a while on large workspaces.
         #[arg(short, long)]
         refresh: bool,
         #[arg(long)]
@@ -549,7 +551,7 @@ enum ExpCommand {
         /// Expected sessions per arm.
         #[arg(long)]
         baseline_n: usize,
-        /// Force a full agent transcript rescan (ignore `[scan].min_rescan_seconds`).
+        /// Force a full agent transcript rescan before reading. This can take a while on large workspaces.
         #[arg(short, long)]
         refresh: bool,
         #[arg(long)]
@@ -629,10 +631,10 @@ enum SessionsCommand {
         /// Emit JSON (same as MCP with json=true)
         #[arg(long)]
         json: bool,
-        /// Cap rows after sorting (newest first). Omit for all sessions.
+        /// Cap rows after sorting (newest first). Omit for 100 rows; 0 returns all.
         #[arg(long)]
         limit: Option<usize>,
-        /// Force a full agent transcript rescan (ignore `[scan].min_rescan_seconds`).
+        /// Force a full agent transcript rescan before reading. This can take a while on large workspaces.
         #[arg(short, long)]
         refresh: bool,
     },

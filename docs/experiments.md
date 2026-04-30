@@ -95,7 +95,9 @@ No p-values. CI excludes zero in the wrong direction → success.
 - **Guardrails**: add `guardrails` to an experiment to flag secondary metric
   regressions even when the primary criterion passes.
 - **Power / MDE**: `kaizen exp power --metric <m> --baseline-n <n>` prints the
-  minimum detectable effect at 80% power / 95% CI given observed variance.
+  minimum detectable effect at 80% power / 95% CI given observed variance. It
+  reads cached per-session aggregates by default; use `--refresh` only when the
+  local store may be stale, because refresh rescans transcripts first.
 
 ## CLI
 
@@ -118,7 +120,7 @@ kaizen exp list
 kaizen exp status <id>
 kaizen exp tag <id> --variant treatment   # manual override
 kaizen exp report <id>                    # markdown + bootstrap CI + sequential decision
-kaizen exp report <id> --refresh         # optional: full transcript rescan first
+kaizen exp report <id> --refresh         # optional: full transcript rescan first; can take a while
 kaizen exp conclude <id>                  # Running → Concluded
 kaizen exp archive <id>                   # Concluded → Archived
 ```
