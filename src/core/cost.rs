@@ -4,6 +4,7 @@
 
 use anyhow::Result;
 use serde::Deserialize;
+use std::sync::OnceLock;
 
 const COST_TOML: &str = include_str!("../../assets/cost.toml");
 
@@ -56,6 +57,51 @@ impl CostTable {
     pub fn find(&self, model: &str) -> Option<&ModelPrice> {
         self.models.iter().find(|p| p.id == model)
     }
+
+    /// Transcript tail rows: charge only when at least one usage field is set **and**
+    /// prompt + output (including reasoning) are not all zero. Omits proxy-style
+    /// `avg_tokens_per_turn` fallback so thousands of tool lines do not each get a heuristic charge.
+    pub fn estimate_tail_event_cost_usd_e6(
+        &self,
+        model: Option<&str>,
+        tokens_in: Option<u32>,
+        tokens_out: Option<u32>,
+        reasoning_tokens: Option<u32>,
+    ) -> Option<i64> {
+        let any_field = tokens_in.is_some() || tokens_out.is_some() || reasoning_tokens.is_some();
+        if !any_field {
+            return None;
+        }
+        let tin = tokens_in.unwrap_or(0);
+        let tout = tokens_out
+            .unwrap_or(0)
+            .saturating_add(reasoning_tokens.unwrap_or(0));
+        if tin == 0 && tout == 0 {
+            return None;
+        }
+        Some(self.estimate(model, tin, tout))
+    }
+}
+
+static BUNDLED_COST: OnceLock<CostTable> = OnceLock::new();
+
+fn bundled_cost_table() -> &'static CostTable {
+    BUNDLED_COST.get_or_init(|| CostTable::load().expect("bundled assets/cost.toml"))
+}
+
+/// [`CostTable::estimate_tail_event_cost_usd_e6`] on the bundled table.
+pub fn estimate_tail_event_cost_usd_e6(
+    model: Option<&str>,
+    tokens_in: Option<u32>,
+    tokens_out: Option<u32>,
+    reasoning_tokens: Option<u32>,
+) -> Option<i64> {
+    bundled_cost_table().estimate_tail_event_cost_usd_e6(
+        model,
+        tokens_in,
+        tokens_out,
+        reasoning_tokens,
+    )
 }
 
 #[cfg(test)]
@@ -90,5 +136,45 @@ mod tests {
         let cost = table.estimate(Some("unknown-model-xyz"), 1000, 500);
         let cost2 = table.estimate(None, 1000, 500);
         assert_eq!(cost, cost2);
+    }
+
+    #[test]
+    fn tail_estimate_none_without_usage_fields() {
+        let table = CostTable::load().unwrap();
+        assert!(
+            table
+                .estimate_tail_event_cost_usd_e6(None, None, None, None)
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn tail_estimate_none_when_fields_present_but_all_zero() {
+        let table = CostTable::load().unwrap();
+        assert!(table
+            .estimate_tail_event_cost_usd_e6(
+                Some("claude-sonnet-4"),
+                Some(0),
+                Some(0),
+                Some(0),
+            )
+            .is_none());
+    }
+
+    #[test]
+    fn tail_estimate_adds_reasoning_to_output_side() {
+        let table = CostTable::load().unwrap();
+        let with_reasoning = table
+            .estimate_tail_event_cost_usd_e6(
+                Some("claude-sonnet-4"),
+                Some(1000),
+                Some(100),
+                Some(400),
+            )
+            .expect("cost");
+        let output_only = table
+            .estimate_tail_event_cost_usd_e6(Some("claude-sonnet-4"), Some(1000), Some(500), None)
+            .expect("cost");
+        assert_eq!(with_reasoning, output_only);
     }
 }

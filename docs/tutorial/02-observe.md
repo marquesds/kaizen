@@ -34,7 +34,7 @@ kaizen summary
 kaizen summary --json
 ```
 
-The JSON shape includes rollups by agent and model, total cost, and when available a **hotspot** file and **slowest_tool** hint — useful when you want one object for dashboards or agents.
+The JSON shape includes rollups by agent and model, total cost, and when available a **hotspot** file and **slowest_tool** hint — useful when you want one object for dashboards or agents. If sessions exist but rollup cost is **$0.00**, Kaizen may add optional **`cost_note`** in JSON (and a short note in plain text) because stored events have no **`cost_usd_e6`**; see [usage.md — When cost rollup is zero](usage.md#cost-shows-zero).
 
 ## Data source: local, provider, or mixed
 

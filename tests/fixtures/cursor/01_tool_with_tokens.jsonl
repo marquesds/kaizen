@@ -1,0 +1,1 @@
+{"role":"assistant","model":"cursor-model-with-usage","message":{"content":[{"type":"tool_use","id":"toolu_usage","name":"Read","input":{"path":"README.md"}}]},"tokens":{"inputTokens":100,"outputTokens":50}}

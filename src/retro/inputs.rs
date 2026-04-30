@@ -14,7 +14,7 @@ use std::path::Path;
 
 const USAGE_LOOKBACK_MIN_DAYS: u64 = 30;
 
-/// Load retro inputs after the store has been refreshed (e.g. `scan_all_agents`).
+/// Load retro inputs after the store has been refreshed (e.g. `maybe_scan_all_agents` with `refresh: true` or `scan_all_agents`).
 pub fn load_inputs(
     store: &Store,
     workspace_root: &Path,

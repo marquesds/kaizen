@@ -3,6 +3,7 @@
 //! Pure parser — no notify dependency, no IO beyond file reads.
 
 use crate::collect::model_from_json;
+use crate::core::cost::estimate_tail_event_cost_usd_e6;
 use crate::core::event::{Event, EventKind, EventSource, SessionRecord, SessionStatus};
 use anyhow::{Context, Result};
 use serde_json::Value;
@@ -34,7 +35,14 @@ pub fn parse_cursor_line(
 
     let ts_ms = line_ts_ms(obj).unwrap_or(base_ts + seq * 100);
     let ts_exact = line_ts_ms(obj).is_some();
-    let reasoning_tokens = reasoning_tokens(obj);
+    let (tokens_in, tokens_out, reasoning_tokens) = line_usage_tokens(obj);
+    let line_model = model_from_json::from_object(obj);
+    let cost_usd_e6 = estimate_tail_event_cost_usd_e6(
+        line_model.as_deref(),
+        tokens_in,
+        tokens_out,
+        reasoning_tokens,
+    );
 
     for block in content {
         let block_type = block.get("type").and_then(|t| t.as_str()).unwrap_or("");
@@ -51,7 +59,7 @@ pub fn parse_cursor_line(
                         seq,
                         ts_ms,
                         ts_exact,
-                        reasoning_tokens,
+                        (tokens_in, tokens_out, reasoning_tokens, cost_usd_e6),
                         block,
                     )));
                 }
@@ -67,10 +75,10 @@ pub fn parse_cursor_line(
                         .get("id")
                         .and_then(|v| v.as_str())
                         .map(ToOwned::to_owned),
-                    tokens_in: None,
-                    tokens_out: None,
+                    tokens_in,
+                    tokens_out,
                     reasoning_tokens,
-                    cost_usd_e6: None,
+                    cost_usd_e6,
                     stop_reason: None,
                     latency_ms: None,
                     ttft_ms: None,
@@ -98,7 +106,7 @@ pub fn parse_cursor_line(
                         .map(ToOwned::to_owned),
                     tokens_in: None,
                     tokens_out: None,
-                    reasoning_tokens,
+                    reasoning_tokens: None,
                     cost_usd_e6: None,
                     stop_reason: None,
                     latency_ms: None,
@@ -134,14 +142,17 @@ fn todo_counts(input: &Value) -> (u32, u32, u32) {
     (arr.len() as u32, comp, canc)
 }
 
+type CursorLineUsage = (Option<u32>, Option<u32>, Option<u32>, Option<i64>);
+
 fn todo_write_lifecycle(
     session_id: &str,
     seq: u64,
     ts_ms: u64,
     ts_exact: bool,
-    reasoning_tokens: Option<u32>,
+    usage: CursorLineUsage,
     block: &Value,
 ) -> Event {
+    let (tokens_in, tokens_out, reasoning_tokens, cost_usd_e6) = usage;
     let input = block.get("input").unwrap_or(block);
     let (total, comp, canc) = todo_counts(input);
     Event {
@@ -156,10 +167,10 @@ fn todo_write_lifecycle(
             .get("id")
             .and_then(|v| v.as_str())
             .map(ToOwned::to_owned),
-        tokens_in: None,
-        tokens_out: None,
+        tokens_in,
+        tokens_out,
         reasoning_tokens,
-        cost_usd_e6: None,
+        cost_usd_e6,
         stop_reason: None,
         latency_ms: None,
         ttft_ms: None,
@@ -196,17 +207,50 @@ fn line_ts_ms(obj: &serde_json::Map<String, Value>) -> Option<u64> {
     None
 }
 
-fn reasoning_tokens(obj: &serde_json::Map<String, Value>) -> Option<u32> {
-    obj.get("usage")
-        .and_then(|u| u.get("reasoning_tokens"))
-        .and_then(|v| v.as_u64())
-        .map(|v| v as u32)
-        .or_else(|| {
-            obj.get("tokens")
-                .and_then(|u| u.get("reasoningTokens"))
+/// Top-level `tokens` (Cursor/Claude shape) and OpenAI-style `usage` on the line.
+fn line_usage_tokens(
+    obj: &serde_json::Map<String, Value>,
+) -> (Option<u32>, Option<u32>, Option<u32>) {
+    let mut tokens_in = None;
+    let mut tokens_out = None;
+    let mut reasoning_tokens = None;
+
+    if let Some(t) = obj.get("tokens").and_then(|x| x.as_object()) {
+        tokens_in = t
+            .get("inputTokens")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as u32);
+        tokens_out = t
+            .get("outputTokens")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as u32);
+        reasoning_tokens = t
+            .get("reasoningTokens")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as u32);
+    }
+
+    if let Some(u) = obj.get("usage").and_then(|x| x.as_object()) {
+        tokens_in = tokens_in.or_else(|| {
+            u.get("prompt_tokens")
+                .or_else(|| u.get("input_tokens"))
                 .and_then(|v| v.as_u64())
                 .map(|v| v as u32)
-        })
+        });
+        tokens_out = tokens_out.or_else(|| {
+            u.get("completion_tokens")
+                .or_else(|| u.get("output_tokens"))
+                .and_then(|v| v.as_u64())
+                .map(|v| v as u32)
+        });
+        reasoning_tokens = reasoning_tokens.or_else(|| {
+            u.get("reasoning_tokens")
+                .and_then(|v| v.as_u64())
+                .map(|v| v as u32)
+        });
+    }
+
+    (tokens_in, tokens_out, reasoning_tokens)
 }
 
 fn file_mtime_ms(path: &Path) -> u64 {
@@ -222,7 +266,7 @@ fn file_mtime_ms(path: &Path) -> u64 {
 }
 
 /// Read every `*.jsonl` directly under `dir` (sorted by name) and parse into events.
-/// First `model` (or supported nested field) found in any line is returned for the session.
+/// Session `model` is the last model id seen on any line that [`model_from_json::from_line`] returns.
 fn scan_jsonl_in_dir(dir: &Path, session_id: &str) -> Result<(Vec<Event>, Option<String>)> {
     // Transcript lines often omit `timestamp_ms`; align synthetic times with the session
     // dir mtime (same as `SessionRecord.started_at_ms`) so retro windows and queries match.
@@ -243,8 +287,8 @@ fn scan_jsonl_in_dir(dir: &Path, session_id: &str) -> Result<(Vec<Event>, Option
             if line.trim().is_empty() {
                 continue;
             }
-            if model.is_none() {
-                model = model_from_json::from_line(line);
+            if let Some(m) = model_from_json::from_line(line) {
+                model = Some(m);
             }
             if let Some(ev) = parse_cursor_line(session_id, seq, base_ts, line)? {
                 events.push(ev);
@@ -269,8 +313,8 @@ fn scan_jsonl_file(path: &Path, session_id: &str) -> Result<(Vec<Event>, Option<
         if line.trim().is_empty() {
             continue;
         }
-        if model.is_none() {
-            model = model_from_json::from_line(line);
+        if let Some(m) = model_from_json::from_line(line) {
+            model = Some(m);
         }
         if let Some(ev) = parse_cursor_line(session_id, seq, base_ts, line)? {
             events.push(ev);
@@ -463,16 +507,35 @@ mod tests {
     }
 
     #[test]
+    fn parse_tool_use_sets_cost_when_tokens_present() {
+        let p = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/cursor/01_tool_with_tokens.jsonl");
+        let line = std::fs::read_to_string(p).unwrap();
+        let ev = parse_cursor_line("s1", 0, 0, line.trim()).unwrap().unwrap();
+        assert_eq!(ev.tool.as_deref(), Some("Read"));
+        assert!(
+            ev.cost_usd_e6.is_some_and(|c| c > 0),
+            "expected estimated cost_usd_e6"
+        );
+        assert_eq!(ev.tokens_in, Some(100));
+        assert_eq!(ev.tokens_out, Some(50));
+    }
+
+    #[test]
     fn scan_fixture_dir() {
         let fixture_dir =
             std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/cursor");
         let (record, events) = scan_session_dir(&fixture_dir).unwrap();
         assert_eq!(record.agent, "cursor");
-        assert_eq!(record.model.as_deref(), Some("Test Fixture Model"));
+        assert_eq!(record.model.as_deref(), Some("cursor-model-with-usage"));
         assert_eq!(record.status, SessionStatus::Done);
         assert!(!events.is_empty(), "expected events from fixture files");
         assert!(events.iter().any(|e| e.kind == EventKind::ToolCall));
         assert!(events.iter().any(|e| e.kind == EventKind::ToolResult));
+        assert!(
+            events.iter().any(|e| e.cost_usd_e6.is_some_and(|c| c > 0)),
+            "expected at least one cost-bearing event from usage fixture"
+        );
     }
 
     #[test]

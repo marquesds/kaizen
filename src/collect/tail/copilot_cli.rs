@@ -3,6 +3,7 @@
 
 use crate::collect::model_from_json;
 use crate::collect::tail::dir_mtime_ms;
+use crate::core::cost::estimate_tail_event_cost_usd_e6;
 use crate::core::event::{Event, EventKind, EventSource, SessionRecord, SessionStatus};
 use anyhow::{Context, Result};
 use serde_json::Value;
@@ -83,6 +84,19 @@ pub fn parse_copilot_cli_line(
             .and_then(|n| n.as_str())
             .unwrap_or("")
             .to_string();
+        let tokens_in = obj
+            .get("usage")
+            .and_then(|u| u.get("prompt_tokens"))
+            .and_then(|x| x.as_u64())
+            .map(|x| x as u32);
+        let tokens_out = obj
+            .get("usage")
+            .and_then(|u| u.get("completion_tokens"))
+            .and_then(|x| x.as_u64())
+            .map(|x| x as u32);
+        let line_model = model_from_json::from_object(obj);
+        let cost_usd_e6 =
+            estimate_tail_event_cost_usd_e6(line_model.as_deref(), tokens_in, tokens_out, None);
         return Ok(Some(Event {
             session_id: session_id.to_string(),
             seq,
@@ -95,18 +109,10 @@ pub fn parse_copilot_cli_line(
                 .get("id")
                 .and_then(|x| x.as_str())
                 .map(ToOwned::to_owned),
-            tokens_in: obj
-                .get("usage")
-                .and_then(|u| u.get("prompt_tokens"))
-                .and_then(|x| x.as_u64())
-                .map(|x| x as u32),
-            tokens_out: obj
-                .get("usage")
-                .and_then(|u| u.get("completion_tokens"))
-                .and_then(|x| x.as_u64())
-                .map(|x| x as u32),
+            tokens_in,
+            tokens_out,
             reasoning_tokens: None,
-            cost_usd_e6: None,
+            cost_usd_e6,
             stop_reason: None,
             latency_ms: None,
             ttft_ms: None,
@@ -193,10 +199,10 @@ pub fn scan_copilot_cli_session_dir(
         if line.trim().is_empty() {
             continue;
         }
-        if model.is_none()
-            && let Ok(v) = serde_json::from_str::<Value>(line)
+        if let Ok(v) = serde_json::from_str::<Value>(line)
+            && let Some(m) = model_from_json::from_value(&v)
         {
-            model = model_from_json::from_value(&v);
+            model = Some(m);
         }
         if let Some(ev) = parse_copilot_cli_line(&session_id, seq, base_ts, line)? {
             events.push(ev);
