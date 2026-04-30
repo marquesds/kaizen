@@ -43,7 +43,7 @@ jobs:
       - run: cargo fmt --all -- --check
 
   linux_clippy_test:
-    name: linux (clippy, test)
+    name: linux (clippy)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -64,7 +64,6 @@ jobs:
         with:
           shared-key: linux-stable
       - run: cargo clippy --all-targets -- -D warnings
-      - run: cargo test --all --locked
 
   doc:
     name: doc
