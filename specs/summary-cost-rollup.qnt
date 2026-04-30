@@ -45,7 +45,6 @@ module summary_cost_rollup {
   }
 
   action step: bool = any {
-    init,
     load_no_sessions,
     load_sessions_with_cost,
     load_sessions_zero_cost,
