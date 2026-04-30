@@ -95,8 +95,7 @@ jobs:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
           - target: aarch64-unknown-linux-gnu
-            os: ubuntu-latest
-            cross: true
+            os: ubuntu-24.04-arm
           - target: x86_64-apple-darwin
             os: macos-latest
           - target: aarch64-apple-darwin
@@ -247,43 +246,9 @@ jobs:
           git commit -m "bump kaizen-cli to v${VERSION}" -m "Synced from ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}@${SHORT}"
           git push origin HEAD:main
 
-  publish:
-    name: cargo publish
-    needs: [verify, release]
-    runs-on: ubuntu-latest
-    if: ${{ !contains(needs.verify.outputs.release_version, '-') }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: release-publish
-      - name: Align version with tag and publish
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-          RELEASE_VERSION: ${{ needs.verify.outputs.release_version }}
-        run: |
-          set -euo pipefail
-          current=$(awk -F'"' '/^version = / {print $2; exit}' Cargo.toml)
-          if [ "$current" != "$RELEASE_VERSION" ]; then
-            sed -i "s/^version = \".*\"/version = \"$RELEASE_VERSION\"/" Cargo.toml
-            # Lock must match the package version in the manifest
-            cargo build
-          fi
-          log=$(mktemp)
-          set +e
-          cargo publish --locked --allow-dirty --token "${CARGO_REGISTRY_TOKEN}" 2>&1 | tee "$log"
-          pub=${PIPESTATUS[0]}
-          set -e
-          if [ "$pub" -ne 0 ] && grep -q 'already exists' "$log"; then
-            echo "Crate version already on crates.io; ok."
-            exit 0
-          fi
-          exit "$pub"
-
   sync-cargo-on-main:
     name: sync Cargo.toml on default branch
-    # After a successful GitHub release, not only after crates.io (publish can fail; tag is still the source of truth)
+    # Commit version bump on main after GitHub release so the tree matches the shipped tag.
     needs: [verify, release]
     if: ${{ !contains(needs.verify.outputs.release_version, '-') }}
     runs-on: ubuntu-latest
@@ -294,7 +259,7 @@ jobs:
           token: ${{ secrets.RELEASE_PUSH_TOKEN != '' && secrets.RELEASE_PUSH_TOKEN || github.token }}
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
-      - name: Commit version to match published crate (no CI re-run)
+      - name: Commit version to match release (no CI re-run)
         env:
           RELEASE_VERSION: ${{ needs.verify.outputs.release_version }}
         run: |
@@ -314,5 +279,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Cargo.toml Cargo.lock
-          git commit -m "chore: sync version to v${RELEASE_VERSION} from release [skip ci]" -m "Tag v${RELEASE_VERSION}; matches GitHub release and crate version line."
+          git commit -m "chore: sync version to v${RELEASE_VERSION} from release [skip ci]" -m "Tag v${RELEASE_VERSION}; matches GitHub release."
           git push origin "HEAD:refs/heads/${branch}"
