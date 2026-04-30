@@ -16,6 +16,7 @@ use std::time::{Duration, Instant};
 const SESSIONS: usize = 10_000;
 const EVENTS_PER_SESSION: usize = 100;
 const WARM_BUDGET: Duration = Duration::from_millis(500);
+type PerfCase<'a> = (&'a str, Box<dyn Fn() -> anyhow::Result<String> + 'a>);
 
 #[test]
 #[ignore = "perf harness seeds 10k sessions and 1M events"]
@@ -38,7 +39,7 @@ fn read_report_commands_warm_under_500ms() -> anyhow::Result<()> {
         &cfg,
     )?;
 
-    let cases: Vec<(&str, Box<dyn Fn() -> anyhow::Result<String>>)> = vec![
+    let cases: Vec<PerfCase<'_>> = vec![
         (
             "retro",
             Box::new(|| {
