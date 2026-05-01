@@ -6,7 +6,7 @@ use std::io::Read;
 use std::io::Write;
 use std::path::PathBuf;
 
-const LONG_ABOUT: &str = "Deploy and share kaizen: real-time-tailable agent sessions, retros, and experiments to improve your repo, across Cursor, Claude Code, and Codex. One SQLite store; redact before any sync. Docs: https://github.com/marquesds/kaizen/blob/main/docs/README.md";
+const LONG_ABOUT: &str = "Deploy and share kaizen: real-time-tailable agent sessions, retros, and experiments to improve your repo, across Cursor, Claude Code, Codex, and Mistral Vibe. One SQLite store; redact before any sync. Docs: https://github.com/marquesds/kaizen/blob/main/docs/README.md";
 
 #[derive(Parser)]
 #[command(
@@ -733,6 +733,7 @@ enum FeedbackCommand {
 enum Source {
     Cursor,
     Claude,
+    Vibe,
 }
 
 #[derive(Subcommand)]
@@ -1191,6 +1192,7 @@ fn ingest_hook(source: Source, workspace: Option<PathBuf>) -> anyhow::Result<()>
     let src = match source {
         Source::Cursor => kaizen::shell::ingest::IngestSource::Cursor,
         Source::Claude => kaizen::shell::ingest::IngestSource::Claude,
+        Source::Vibe => kaizen::shell::ingest::IngestSource::Vibe,
     };
     if kaizen::daemon::enabled() {
         let response = kaizen::daemon::request_blocking(kaizen::ipc::DaemonRequest::IngestHook {

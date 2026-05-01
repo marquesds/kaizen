@@ -1,0 +1,5 @@
+{"role":"system","subtype":"init","session_id":"vibe-test","model":"mistral-large","timestamp_ms":1714000000000}
+{"role":"user","message":{"content":[{"type":"text","text":"List all files"}]},"timestamp_ms":1714000000100}
+{"role":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_01","name":"bash","input":{"command":"ls"}}]},"usage":{"prompt_tokens":150,"completion_tokens":50},"timestamp_ms":1714000000500}
+{"role":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_01","content":[{"type":"text","text":"total 8"}]}]},"timestamp_ms":1714000000800}
+{"role":"assistant","message":{"content":[{"type":"text","text":"Here are the files."}]},"usage":{"prompt_tokens":200,"completion_tokens":100},"timestamp_ms":1714000001000}
