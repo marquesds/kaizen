@@ -18,7 +18,7 @@ module hook_ingest {
     agent' = "",
   }
 
-  val sources = Set("cursor", "claude", "codex", "copilot-cli", "openclaw")
+  val sources = Set("cursor", "claude", "codex", "copilot-cli", "openclaw", "vibe")
 
   // Any hook ingest records source via nondet so Rust traces can branch on the pick.
   action on_session_start: bool = {

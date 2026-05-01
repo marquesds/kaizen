@@ -11,6 +11,7 @@ pub const DONE: Color = Color::Gray;
 pub const AGENT_CURSOR: Color = Color::Blue;
 pub const AGENT_CLAUDE: Color = Color::Magenta;
 pub const AGENT_CODEX: Color = Color::Red;
+pub const AGENT_VIBE: Color = Color::LightGreen;
 pub const AGENT_OTHER: Color = Color::White;
 
 pub const BORDER_ACTIVE: Color = Color::White;
@@ -22,6 +23,7 @@ pub fn agent_color(agent: &str) -> Color {
         "cursor" => AGENT_CURSOR,
         "claude" => AGENT_CLAUDE,
         "codex" => AGENT_CODEX,
+        "vibe" => AGENT_VIBE,
         "goose" => Color::LightYellow,
         "opencode" => Color::LightCyan,
         "copilot-cli" | "copilot-vscode" => Color::Green,

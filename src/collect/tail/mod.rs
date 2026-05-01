@@ -7,6 +7,7 @@ pub mod cursor;
 pub mod goose;
 pub mod openclaw;
 pub mod opencode;
+pub mod vibe;
 
 use std::path::Path;
 

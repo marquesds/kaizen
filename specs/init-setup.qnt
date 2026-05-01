@@ -1,5 +1,5 @@
 // `kaizen init`: install config + skill, patch hook files once, rerun is noop.
-// Models five hook-oriented hosts (Cursor, Claude Code, Codex, Copilot CLI, OpenClaw).
+// Models six hook-oriented hosts (Cursor, Claude Code, Codex, Copilot CLI, OpenClaw, Mistral Vibe).
 module init_setup {
   var config_ready: bool
   var cursor_present: bool
@@ -17,6 +17,9 @@ module init_setup {
   var openclaw_present: bool
   var openclaw_patched: bool
   var openclaw_backup: bool
+  var vibe_present: bool
+  var vibe_patched: bool
+  var vibe_backup: bool
   var skill_ready: bool
 
   action init: bool = all {
@@ -36,6 +39,9 @@ module init_setup {
     openclaw_present' = false,
     openclaw_patched' = false,
     openclaw_backup' = false,
+    vibe_present' = false,
+    vibe_patched' = false,
+    vibe_backup' = false,
     skill_ready' = false
   }
 
@@ -58,6 +64,9 @@ module init_setup {
     openclaw_present' = true,
     openclaw_patched' = false,
     openclaw_backup' = false,
+    vibe_present' = true,
+    vibe_patched' = false,
+    vibe_backup' = false,
     skill_ready' = false
   }
 
@@ -78,6 +87,9 @@ module init_setup {
     openclaw_present' = true,
     openclaw_patched' = true,
     openclaw_backup' = true,
+    vibe_present' = true,
+    vibe_patched' = true,
+    vibe_backup' = true,
     skill_ready' = true
   }
 
@@ -100,6 +112,9 @@ module init_setup {
     openclaw_present' = true,
     openclaw_patched' = true,
     openclaw_backup' = (openclaw_backup or (openclaw_present and not(openclaw_patched))),
+    vibe_present' = true,
+    vibe_patched' = true,
+    vibe_backup' = (vibe_backup or (vibe_present and not(vibe_patched))),
     skill_ready' = true
   }
 
@@ -118,6 +133,7 @@ module init_setup {
       codex_present, codex_patched, codex_backup,
       copilot_cli_present, copilot_cli_patched, copilot_cli_backup,
       openclaw_present, openclaw_patched, openclaw_backup,
+      vibe_present, vibe_patched, vibe_backup,
       skill_ready
     }
 
@@ -136,6 +152,9 @@ module init_setup {
   val openclaw_backup_requires_patch: bool =
     openclaw_backup implies (openclaw_present and openclaw_patched)
 
+  val vibe_backup_requires_patch: bool =
+    vibe_backup implies (vibe_present and vibe_patched)
+
   run initCreatesMissingArtifacts = {
     seed_empty_workspace
       .then(run_init)
@@ -147,6 +166,7 @@ module init_setup {
         not(codex_backup),
         not(copilot_cli_backup),
         not(openclaw_backup),
+        not(vibe_backup),
       })
   }
 
@@ -159,6 +179,7 @@ module init_setup {
         codex_patched, codex_backup,
         copilot_cli_patched, copilot_cli_backup,
         openclaw_patched, openclaw_backup,
+        vibe_patched, vibe_backup,
       })
   }
 

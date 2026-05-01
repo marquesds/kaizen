@@ -71,3 +71,21 @@ id = "copilot-vscode"
 input_per_mtok = 2500000
 output_per_mtok = 10000000
 avg_tokens_per_turn = 5000
+
+# Mistral Vibe models (Mistral AI)
+[[models]]
+id = "mistral-large"
+input_per_mtok = 800000
+output_per_mtok = 2400000
+
+[[models]]
+id = "mistral-small"
+input_per_mtok = 200000
+output_per_mtok = 600000
+
+# Heuristic for Vibe when model id is unknown
+[[models]]
+id = "vibe"
+input_per_mtok = 800000
+output_per_mtok = 2400000
+avg_tokens_per_turn = 5000
