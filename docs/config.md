@@ -4,8 +4,10 @@ Config is TOML. **Paths:**
 
 | File | Role |
 |------|------|
-| `<workspace>/.kaizen/config.toml` | Per-repo (checked into VCS or local only) |
+| `~/.kaizen/projects/<slug>/config.toml` | Per-project (slug = canonical path with `/` replaced by `-`); never checked into VCS |
 | `~/.kaizen/config.toml` | Per-user; use for secrets and machine-wide defaults |
+
+`KAIZEN_HOME` overrides `~/.kaizen`. The old `<workspace>/.kaizen/` layout is auto-migrated to the project data dir on first use; a `MIGRATED.txt` marker is left behind.
 
 **Load order:** the workspace and user files are both read; `src/core/config.rs` merges them as follows.
 
@@ -34,10 +36,10 @@ LLM HTTP proxy: [llm-proxy.md](llm-proxy.md).
 
 Kaizen records known workspace roots in **`$KAIZEN_HOME/machine.db`** (default **`~/.kaizen/machine.db`**) — a small SQLite file with one row per canonical path (first seen, last seen, last `kaizen init`, optional `git` remote, and so on).
 
-- **Registration:** any command that resolves a workspace (default cwd or `--workspace`) **upserts** that path. **`kaizen init`** also records the workspace after hook setup (even before a local `.kaizen/kaizen.db` exists).
+- **Registration:** any command that resolves a workspace (default cwd or `--workspace`) **upserts** that path. **`kaizen init`** also records the workspace after hook setup (even before a project DB exists).
 - **Legacy file:** if **`~/.kaizen/workspaces.json`** is present from an older build, it is imported once and renamed to **`workspaces.json.migrated`**.
 
-When you pass **`--all-workspaces`** (or MCP `all_workspaces: true`), Kaizen loads that list, ensures the current workspace is included, **keeps a path** if it still exists on disk and it **either** has a local **`.kaizen/kaizen.db`** **or** appears in the machine registry (e.g. only ran `init`), then opens each per-workspace DB that exists and merges results. The seed workspace is always kept when in scope. See [usage.md](usage.md) for which commands support this.
+When you pass **`--all-workspaces`** (or MCP `all_workspaces: true`), Kaizen loads that list, ensures the current workspace is included, **keeps a path** if it still exists on disk and it **either** has a project DB at `~/.kaizen/projects/<slug>/kaizen.db` **or** appears in the machine registry (e.g. only ran `init`), then opens each DB that exists and merges results. The seed workspace is always kept when in scope. See [usage.md](usage.md) for which commands support this.
 
 ## `[scan]`
 
@@ -116,7 +118,7 @@ Remote read-back (provider pull) and cache policy. OTLP is **export only**; it i
 
 When `true`, the corresponding field may be emitted in **cleartext** on outbound / canonical telemetry for that key; when `false` (default), omit or hash. Keys: `team`, `workspace_label`, `runner_label`, `actor_kind`, `actor_label`, `agent`, `model`, `env`, `job`, `branch`.
 
-**Exporters** are `[[telemetry.exporters]]` tables with `type = "file" | "posthog" | "datadog" | "otlp" | "dev" | "none"`. For `file`, optional `path` (relative paths resolve against the workspace root) defaults to **`.kaizen/telemetry.ndjson`**. The `kaizen telemetry configure` command appends a template block to `~/.kaizen/config.toml`.
+**Exporters** are `[[telemetry.exporters]]` tables with `type = "file" | "posthog" | "datadog" | "otlp" | "dev" | "none"`. For `file`, optional `path` (relative paths resolve against the workspace root) defaults to **`~/.kaizen/projects/<slug>/telemetry.ndjson`**. The `kaizen telemetry configure` command appends a template block to `~/.kaizen/config.toml`.
 
 **Credential resolution (per exporter):** standard env vars are preferred, with `KAIZEN_`-prefixed fallbacks in some cases, for example:
 
@@ -142,7 +144,7 @@ Post-stop test (and optional lint) measurement. Ingest spawns a detached `kaizen
 
 ## `[collect.system_sampler]`
 
-Per-process CPU/RSS samples for the agent PID from `SessionStart`. Ingest spawns `kaizen __sampler-run` when `enabled` and `pid` is present in the hook JSON. Stops on `Stop` via `.kaizen/sampler-stop/<session_id>`. See [system-telemetry.md](system-telemetry.md). Windows: not supported in v1.
+Per-process CPU/RSS samples for the agent PID from `SessionStart`. Ingest spawns `kaizen __sampler-run` when `enabled` and `pid` is present in the hook JSON. Stops on `Stop` via `~/.kaizen/projects/<slug>/sampler-stop/<session_id>`. See [system-telemetry.md](system-telemetry.md). Windows: not supported in v1.
 
 | Key | Default | Purpose |
 |-----|---------|--------|

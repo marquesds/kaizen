@@ -8,8 +8,10 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 
-fn stop_path(workspace: &Path, session_id: &str) -> PathBuf {
-    workspace.join(".kaizen/sampler-stop").join(session_id)
+fn stop_path(workspace: &Path, session_id: &str) -> Result<PathBuf> {
+    Ok(crate::core::paths::project_data_dir(workspace)?
+        .join("sampler-stop")
+        .join(session_id))
 }
 
 /// Sample `pid` until stop file, cap, or process exit.
@@ -19,14 +21,13 @@ pub fn cmd_sampler_run(workspace: &Path, session_id: &str, pid: u32) -> Result<(
     if !s.enabled {
         return Ok(());
     }
-    let db = workspace.join(".kaizen/kaizen.db");
-    let store = Store::open(&db)?;
+    let store = Store::open(&crate::core::workspace::db_path(workspace)?)?;
     let target = Pid::from_u32(pid);
     let mut sys = System::new();
     let kind = ProcessRefreshKind::nothing().with_cpu().with_memory();
     let mut n: u32 = 0;
     while n < s.max_samples_per_session {
-        if stop_path(workspace, session_id).exists() {
+        if stop_path(workspace, session_id).is_ok_and(|p| p.exists()) {
             break;
         }
         std::thread::sleep(Duration::from_millis(s.sample_ms.max(100)));

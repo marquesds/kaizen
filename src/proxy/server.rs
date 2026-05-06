@@ -46,7 +46,7 @@ pub async fn run(
     workspace: PathBuf,
     config: crate::core::config::Config,
 ) -> Result<(), anyhow::Error> {
-    let store_path = workspace.join(".kaizen/kaizen.db");
+    let store_path = crate::core::workspace::db_path(&workspace)?;
     let client = build_client(&options)?;
     let st = Arc::new(ProxyState {
         options: options.clone(),

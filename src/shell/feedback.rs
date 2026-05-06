@@ -24,7 +24,7 @@ fn parse_since(since: &str) -> Option<u64> {
 
 fn open_store(workspace: Option<&Path>) -> Result<Store> {
     let ws = crate::core::workspace::resolve(workspace)?;
-    Store::open(&crate::core::workspace::db_path(&ws))
+    Store::open(&crate::core::workspace::db_path(&ws)?)
 }
 
 /// `kaizen sessions annotate <id>` — attach score/label/note to a session.

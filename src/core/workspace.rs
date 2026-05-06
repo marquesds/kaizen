@@ -4,7 +4,7 @@
 use anyhow::Result;
 use std::path::{Path, PathBuf};
 
-pub use crate::core::paths::{canonical, kaizen_dir};
+pub use crate::core::paths::{canonical, kaizen_dir, project_data_dir};
 
 pub fn resolve(path: Option<&Path>) -> Result<PathBuf> {
     let root = path
@@ -13,6 +13,11 @@ pub fn resolve(path: Option<&Path>) -> Result<PathBuf> {
         .unwrap_or_else(std::env::current_dir)?;
     let canonical = canonical(&root);
     let _ = crate::core::machine_registry::upsert_from_resolve(&canonical);
+    if let Ok(data_dir) = project_data_dir(&canonical)
+        && let Err(e) = crate::core::migrate_home::migrate_legacy_in_repo(&canonical, &data_dir)
+    {
+        tracing::warn!("legacy migration failed: {e}");
+    }
     Ok(canonical)
 }
 
@@ -26,7 +31,9 @@ pub fn machine_workspaces(seed: Option<&Path>) -> Result<Vec<PathBuf>> {
         if seed.as_ref() == Some(p) {
             return true;
         }
-        p.exists() && (db_path(p).exists() || crate::core::machine_registry::is_registered(p))
+        p.exists()
+            && (db_path(p).ok().is_some_and(|d| d.exists())
+                || crate::core::machine_registry::is_registered(p))
     });
     if roots.is_empty()
         && let Some(path) = seed
@@ -36,8 +43,8 @@ pub fn machine_workspaces(seed: Option<&Path>) -> Result<Vec<PathBuf>> {
     Ok(roots)
 }
 
-pub fn db_path(workspace: &Path) -> PathBuf {
-    workspace.join(".kaizen/kaizen.db")
+pub fn db_path(workspace: &Path) -> Result<PathBuf> {
+    Ok(project_data_dir(workspace)?.join("kaizen.db"))
 }
 
 fn registry_entries() -> Result<Vec<PathBuf>> {

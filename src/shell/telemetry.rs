@@ -226,7 +226,7 @@ pub fn cmd_telemetry_pull(workspace: Option<&Path>, days: u32) -> Result<()> {
     let cfg = config::load(&ws)?;
     let p = provider_from_config(&cfg.telemetry.query)
         .ok_or_else(|| anyhow::anyhow!("set [telemetry.query] provider and credentials"))?;
-    let store = Store::open(&ws.join(".kaizen/kaizen.db"))?;
+    let store = Store::open(&crate::core::workspace::db_path(&ws)?)?;
     let page = p.pull(PullWindow { days }, None)?;
     if !cfg.sync.team_id.trim().is_empty()
         && let Some(ctx) = crate::sync::ingest_ctx(&cfg, ws.to_path_buf())
@@ -297,7 +297,7 @@ pub fn cmd_telemetry_push(
     let mut total_batches: u64 = 0;
 
     for root in &roots {
-        let store = Store::open(&root.join(".kaizen/kaizen.db"))?;
+        let store = Store::open(&crate::core::workspace::db_path(root)?)?;
         let ws_key = root.to_string_lossy().to_string();
         let rows = store.retro_events_in_window(&ws_key, start_ms, end_ms)?;
         let wh = workspace_hash(&salt, root.as_path());

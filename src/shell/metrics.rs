@@ -84,7 +84,7 @@ pub fn cmd_metrics(
 pub fn metrics_index_text(workspace: Option<&Path>, force: bool) -> Result<String> {
     let ws = workspace_path(workspace)?;
     let cfg = config::load(&ws)?;
-    let db_path = ws.join(".kaizen/kaizen.db");
+    let db_path = crate::core::workspace::db_path(&ws)?;
     let store = Store::open(&db_path)?;
     let snapshot = index::ensure_indexed(&store, &ws, force)?;
     maybe_enqueue_snapshot(&store, &cfg, &ws, &snapshot)?;

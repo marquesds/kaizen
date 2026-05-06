@@ -5,7 +5,13 @@ use kaizen::shell::search::sessions_search_text;
 use kaizen::store::Store;
 use quint_connect::*;
 use serde_json::json;
+use std::sync::{Mutex, OnceLock};
 use tempfile::TempDir;
+
+fn env_lock() -> &'static Mutex<()> {
+    static L: OnceLock<Mutex<()>> = OnceLock::new();
+    L.get_or_init(|| Mutex::new(()))
+}
 
 struct SearchDriver;
 
@@ -24,19 +30,22 @@ fn search_run() -> impl Driver {
 
 #[test]
 fn reindex_and_query_round_trip() -> anyhow::Result<()> {
+    let _guard = env_lock().lock().unwrap();
+    let home = TempDir::new()?;
     let dir = TempDir::new()?;
     let ws = dir.path();
-    std::fs::create_dir_all(ws.join(".kaizen"))?;
-    let store = Store::open(&ws.join(".kaizen/kaizen.db"))?;
+    unsafe { std::env::set_var("KAIZEN_HOME", home.path()) };
+    let data_dir = kaizen::core::paths::project_data_dir(ws)?;
+    let store = Store::open(&data_dir.join("kaizen.db"))?;
     let session = session(ws);
     store.upsert_session(&session)?;
     let event = event("deadlock inside scheduler", 6_000);
     store.append_event(&event)?;
     drop(store);
-    let store = Store::open(&ws.join(".kaizen/kaizen.db"))?;
+    let store = Store::open(&data_dir.join("kaizen.db"))?;
     let cfg = kaizen::core::config::Config::default();
     let stats = reindex_workspace(
-        &ws.join(".kaizen"),
+        &data_dir,
         ws,
         std::slice::from_ref(&session),
         vec![(session.clone(), event)],
@@ -50,9 +59,8 @@ fn reindex_and_query_round_trip() -> anyhow::Result<()> {
         kind: Some("message".into()),
         limit: 10,
     };
-    let hits = search(&ws.join(".kaizen"), &opts, ws, &[0; 32], |s, q| {
-        store.get_event(s, q)
-    })?;
+    let hits = search(&data_dir, &opts, ws, &[0; 32], |s, q| store.get_event(s, q))?;
+    unsafe { std::env::remove_var("KAIZEN_HOME") };
     assert_eq!(hits.len(), 1);
     assert_eq!(hits[0].session_id, "s1");
     Ok(())
@@ -60,17 +68,21 @@ fn reindex_and_query_round_trip() -> anyhow::Result<()> {
 
 #[test]
 fn missing_index_errors_with_reindex_hint() -> anyhow::Result<()> {
+    let _guard = env_lock().lock().unwrap();
+    let home = TempDir::new()?;
     let dir = TempDir::new()?;
     let ws = dir.path();
-    let store = Store::open(&ws.join(".kaizen/kaizen.db"))?;
+    unsafe { std::env::set_var("KAIZEN_HOME", home.path()) };
+    let data_dir = kaizen::core::paths::project_data_dir(ws)?;
+    let store = Store::open(&data_dir.join("kaizen.db"))?;
     let session = session(ws);
     store.upsert_session(&session)?;
     store.append_event(&event("deadlock inside scheduler", 6_000))?;
     drop(store);
-    let _ = std::fs::remove_dir_all(ws.join(".kaizen/search"));
-
+    let _ = std::fs::remove_dir_all(data_dir.join("search"));
     let err = sessions_search_text(Some(ws), "deadlock", None, None, None, 10)
         .expect_err("missing index should not fall back to DB scan");
+    unsafe { std::env::remove_var("KAIZEN_HOME") };
     assert!(err.to_string().contains("kaizen search reindex"));
     Ok(())
 }

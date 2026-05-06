@@ -66,7 +66,7 @@ pub fn ingest_hook_text(
     let ws = workspace.unwrap_or_else(|| std::env::current_dir().expect("cwd"));
     let cfg = config::load(&ws)?;
     let sync_ctx = crate::sync::ingest_ctx(&cfg, ws.clone());
-    let db_path = ws.join(".kaizen/kaizen.db");
+    let db_path = crate::core::workspace::db_path(&ws)?;
     let store = Store::open(&db_path)?;
     let now_ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -208,7 +208,13 @@ fn spawn_sampler_run(ws: &std::path::Path, session_id: &str, pid: u32) {
 }
 
 fn touch_sampler_stop_file(ws: &std::path::Path, session_id: &str) {
-    let dir = ws.join(".kaizen/sampler-stop");
+    let dir = match crate::core::paths::project_data_dir(ws) {
+        Ok(d) => d.join("sampler-stop"),
+        Err(e) => {
+            tracing::warn!(?e, "sampler-stop: no data dir");
+            return;
+        }
+    };
     if let Err(e) = std::fs::create_dir_all(&dir) {
         tracing::warn!(?e, "sampler-stop mkdir");
         return;
@@ -299,70 +305,58 @@ fn maybe_emit_prompt_changed(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::paths::test_lock;
     use tempfile::TempDir;
 
-    fn ws_with_kaizen_dir() -> TempDir {
-        let dir = TempDir::new().unwrap();
-        std::fs::create_dir_all(dir.path().join(".kaizen")).unwrap();
-        dir
+    fn setup_ws() -> (TempDir, TempDir) {
+        let home = TempDir::new().unwrap();
+        let ws = TempDir::new().unwrap();
+        unsafe { std::env::set_var("KAIZEN_HOME", home.path()) };
+        (home, ws)
     }
 
     #[test]
     fn session_start_records_source_as_agent_not_unknown() {
-        let dir = ws_with_kaizen_dir();
+        let _guard = test_lock::global().lock().unwrap();
+        let (_home, ws) = setup_ws();
         let payload =
             r#"{"hook_event_name":"SessionStart","session_id":"s-agent-1","source":"startup"}"#;
-        ingest_hook_text(
-            IngestSource::Claude,
-            payload,
-            Some(dir.path().to_path_buf()),
-        )
-        .unwrap();
-
-        let db = Store::open(&dir.path().join(".kaizen/kaizen.db")).unwrap();
+        ingest_hook_text(IngestSource::Claude, payload, Some(ws.path().to_path_buf())).unwrap();
+        let db = Store::open(&crate::core::workspace::db_path(ws.path()).unwrap()).unwrap();
         let sessions = db
-            .list_sessions(dir.path().to_string_lossy().as_ref())
+            .list_sessions(ws.path().to_string_lossy().as_ref())
             .unwrap();
+        unsafe { std::env::remove_var("KAIZEN_HOME") };
         assert_eq!(sessions.len(), 1);
         assert_eq!(sessions[0].agent, "claude");
     }
 
     #[test]
     fn missing_timestamp_falls_back_to_now() {
-        let dir = ws_with_kaizen_dir();
-        // No timestamp_ms field — Claude Code never sends one.
+        let _guard = test_lock::global().lock().unwrap();
+        let (_home, ws) = setup_ws();
         let payload =
             r#"{"hook_event_name":"SessionStart","session_id":"s-ts","source":"startup"}"#;
-        ingest_hook_text(
-            IngestSource::Claude,
-            payload,
-            Some(dir.path().to_path_buf()),
-        )
-        .unwrap();
-
-        let db = Store::open(&dir.path().join(".kaizen/kaizen.db")).unwrap();
+        ingest_hook_text(IngestSource::Claude, payload, Some(ws.path().to_path_buf())).unwrap();
+        let db = Store::open(&crate::core::workspace::db_path(ws.path()).unwrap()).unwrap();
         let sessions = db
-            .list_sessions(dir.path().to_string_lossy().as_ref())
+            .list_sessions(ws.path().to_string_lossy().as_ref())
             .unwrap();
+        unsafe { std::env::remove_var("KAIZEN_HOME") };
         assert!(sessions[0].started_at_ms > 0, "started_at_ms must not be 0");
     }
 
     #[test]
     fn post_tool_use_without_session_start_auto_provisions_stub() {
-        let dir = ws_with_kaizen_dir();
-        // Hooks installed mid-session: first event is PostToolUse, no SessionStart.
+        let _guard = test_lock::global().lock().unwrap();
+        let (_home, ws) = setup_ws();
         let payload = r#"{"event":"PostToolUse","session_id":"s-stub","tool_name":"Read","tool_input":{"file_path":"/tmp/x"},"tool_response":{"content":"hi"}}"#;
-        ingest_hook_text(
-            IngestSource::Cursor,
-            payload,
-            Some(dir.path().to_path_buf()),
-        )
-        .unwrap();
-
-        let db = Store::open(&dir.path().join(".kaizen/kaizen.db")).unwrap();
+        ingest_hook_text(IngestSource::Cursor, payload, Some(ws.path().to_path_buf())).unwrap();
+        let db = Store::open(&crate::core::workspace::db_path(ws.path()).unwrap()).unwrap();
         let sessions = db
-            .list_sessions(dir.path().to_string_lossy().as_ref())
+            .list_sessions(ws.path().to_string_lossy().as_ref())
             .unwrap();
+        unsafe { std::env::remove_var("KAIZEN_HOME") };
         assert_eq!(sessions.len(), 1);
         assert_eq!(sessions[0].agent, "cursor");
         assert_eq!(sessions[0].id, "s-stub");

@@ -20,7 +20,7 @@ fn compute_retro(
     source: DataSource,
 ) -> Result<(PathBuf, Report)> {
     let cfg = config::load(workspace)?;
-    let db_path = workspace.join(".kaizen/kaizen.db");
+    let db_path = crate::core::workspace::db_path(workspace)?;
     let store = open_workspace_read_store(workspace, refresh || source != DataSource::Local)?;
     let ws_str = workspace.to_string_lossy().to_string();
     maybe_telemetry_pull(workspace, &store, &cfg, source, refresh)?;
@@ -64,7 +64,7 @@ fn compute_retro(
         team_id,
         workspace_hash.as_deref(),
     )?;
-    let reports_dir = workspace.join(".kaizen/reports");
+    let reports_dir = crate::core::paths::project_data_dir(workspace)?.join("reports");
     let week_label = iso_week_label_utc();
     let prior = inputs::prior_bet_fingerprints(&reports_dir)?;
     let mut report = engine::run(&inputs, &prior);

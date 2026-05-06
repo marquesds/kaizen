@@ -163,11 +163,11 @@ fn workspace_names(roots: &[PathBuf]) -> Vec<String> {
 }
 
 fn open_workspace_store(workspace: &Path) -> Result<Store> {
-    Store::open(&crate::core::workspace::db_path(workspace))
+    Store::open(&crate::core::workspace::db_path(workspace)?)
 }
 
 pub(crate) fn open_workspace_read_store(workspace: &Path, refresh: bool) -> Result<Store> {
-    let db_path = crate::core::workspace::db_path(workspace);
+    let db_path = crate::core::workspace::db_path(workspace)?;
     if refresh || !db_path.exists() {
         Store::open(&db_path)
     } else {
@@ -475,7 +475,9 @@ pub fn summary_text(
         maybe_refresh_store(workspace, &store, refresh)?;
         let ws_str = workspace.to_string_lossy().to_string();
         let read_store = open_workspace_read_store(workspace, false)?;
-        let query = crate::store::query::QueryStore::open(&workspace.join(".kaizen"))?;
+        let query = crate::store::query::QueryStore::open(&crate::core::paths::project_data_dir(
+            workspace,
+        )?)?;
         let mut stats = query.summary_stats(&read_store, &ws_str)?;
         if source != crate::core::data_source::DataSource::Local
             && let Ok(Some(agg)) =
@@ -787,10 +789,9 @@ pub(crate) fn workspace_path(workspace: Option<&Path>) -> Result<PathBuf> {
     crate::core::workspace::resolve(workspace)
 }
 
-/// Convert workspace path to cursor project slug.
-/// `/Users/lucas/Projects/kaizen` → `Users-lucas-Projects-kaizen`
+/// Convert workspace path string to cursor project slug.
 pub(crate) fn workspace_slug(ws: &str) -> String {
-    ws.trim_start_matches('/').replace('/', "-")
+    crate::core::paths::workspace_slug(std::path::Path::new(ws))
 }
 
 pub(crate) fn expand_home(path: &str) -> String {

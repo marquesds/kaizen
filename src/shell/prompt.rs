@@ -113,7 +113,7 @@ fn to_json_list(snaps: &[prompt::PromptSnapshot]) -> Vec<SnapshotJson> {
 }
 
 fn open_store(ws: &Path) -> Result<Store> {
-    let db = ws.join(".kaizen/kaizen.db");
+    let db = crate::core::workspace::db_path(ws)?;
     Store::open(&db).with_context(|| format!("open store: {}", db.display()))
 }
 

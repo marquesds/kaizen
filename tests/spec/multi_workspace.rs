@@ -17,7 +17,7 @@ fn env_lock() -> &'static Mutex<()> {
 
 fn seed_session(workspace: &Path, id: &str, tool: &str) -> anyhow::Result<()> {
     let workspace = std::fs::canonicalize(workspace)?;
-    let store = Store::open(&workspace.join(".kaizen/kaizen.db"))?;
+    let store = Store::open(&kaizen::core::workspace::db_path(&workspace)?)?;
     let ws = workspace.to_string_lossy().to_string();
     store.upsert_session(&SessionRecord {
         id: id.into(),
@@ -119,8 +119,8 @@ fn all_workspaces_includes_init_only_root_without_local_kaizen_db() -> anyhow::R
     kaizen::core::workspace::resolve(Some(&ws1))?;
     kaizen::core::machine_registry::record_init(&ws2)?;
     assert!(
-        !kaizen::core::workspace::db_path(&ws2).exists(),
-        "test assumes second repo has no .kaizen/kaizen.db yet"
+        !kaizen::core::workspace::db_path(&ws2).is_ok_and(|p| p.exists()),
+        "test assumes second repo has no kaizen.db yet"
     );
     let roots = scope::resolve(Some(&ws1), true)?;
     assert_eq!(roots.len(), 2);
@@ -183,7 +183,7 @@ fn default_reads_skip_global_scan_until_refresh() -> anyhow::Result<()> {
     let cold = sessions_list_text(Some(&ws), true, false, false, None)?;
     let cold_json: serde_json::Value = serde_json::from_str(&cold)?;
     assert_eq!(cold_json["count"], 0);
-    let store = Store::open(&ws.join(".kaizen/kaizen.db"))?;
+    let store = Store::open(&kaizen::core::workspace::db_path(&ws)?)?;
     assert_eq!(
         store.sync_state_get_u64(SYNC_STATE_LAST_AGENT_SCAN_MS)?,
         None
@@ -193,7 +193,7 @@ fn default_reads_skip_global_scan_until_refresh() -> anyhow::Result<()> {
     let refreshed_json: serde_json::Value = serde_json::from_str(&refreshed)?;
     assert_eq!(refreshed_json["count"], 1);
     assert!(
-        Store::open(&ws.join(".kaizen/kaizen.db"))?
+        Store::open(&kaizen::core::workspace::db_path(&ws)?)?
             .sync_state_get_u64(SYNC_STATE_LAST_AGENT_SCAN_MS)?
             .is_some()
     );

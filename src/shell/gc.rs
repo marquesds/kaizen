@@ -18,7 +18,7 @@ pub fn cmd_gc(workspace: Option<&Path>, days: Option<u32>, vacuum: bool) -> Resu
              Set [retention].hot_days > 0 or pass --days <N>"
         );
     }
-    let store = Store::open(&ws.join(".kaizen/kaizen.db"))?;
+    let store = Store::open(&crate::core::workspace::db_path(&ws)?)?;
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()

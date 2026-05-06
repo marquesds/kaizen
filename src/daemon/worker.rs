@@ -59,7 +59,9 @@ fn handle_request(request: DaemonRequest) -> Result<DaemonResponse> {
             limit,
             filter,
         } => {
-            let store = Store::open(&crate::core::workspace::db_path(&PathBuf::from(&workspace)))?;
+            let store = Store::open(&crate::core::workspace::db_path(&PathBuf::from(
+                &workspace,
+            ))?)?;
             let page = store.list_sessions_page(&workspace, offset, limit, filter)?;
             Ok(DaemonResponse::Sessions(page))
         }
@@ -72,7 +74,7 @@ fn handle_request(request: DaemonRequest) -> Result<DaemonResponse> {
             let workspace = workspace.map(|p| crate::core::paths::canonical(&PathBuf::from(p)));
             crate::shell::ingest::ingest_hook_text(source, &payload, workspace.clone())?;
             if let Some(ws) = workspace {
-                let store = Store::open(&crate::core::workspace::db_path(&ws))?;
+                let store = Store::open(&crate::core::workspace::db_path(&ws)?)?;
                 store.flush_search().ok();
             }
             Ok(DaemonResponse::Ack {
@@ -89,7 +91,7 @@ fn load_detail(id: String, workspace: Option<String>) -> Result<DaemonResponse> 
         .map(|p| vec![p])
         .unwrap_or_else(|| crate::core::machine_registry::list_paths().unwrap_or_default());
     for ws in roots {
-        let store = Store::open(&crate::core::workspace::db_path(&ws))?;
+        let store = Store::open(&crate::core::workspace::db_path(&ws)?)?;
         if let Some(session) = store.get_session(&id)? {
             return Ok(DaemonResponse::Detail(Box::new(SessionDetail {
                 session: Some(session),

@@ -8,6 +8,7 @@ pub use data_source::DataSource;
 pub use identity::ActorIdentity;
 pub mod event;
 pub mod machine_registry;
+pub mod migrate_home;
 pub mod paths;
 pub mod repo;
 pub mod session;

@@ -13,7 +13,7 @@ Collects, stores, and analyzes agent session data.
 | Async runtime | tokio |
 | Observability | tracing |
 | Local store | SQLite WAL |
-| Code graph sidecar | SQLite + GraphQLite (`.kaizen/codegraph.db`) |
+| Code graph sidecar | SQLite + GraphQLite (`~/.kaizen/projects/<slug>/codegraph.db`) |
 | Code parsers | tree-sitter + language grammars |
 | Tests | #[test] / #[tokio::test] |
 

@@ -50,7 +50,9 @@ pub fn ensure_indexed(store: &Store, workspace: &Path, force: bool) -> Result<Re
     edges.extend(deps.clone());
     let fan = fan_counts(&deps);
     let mut symbols = vec![];
-    let graph_path = workspace.join(".kaizen/codegraph.db");
+    let graph_path = crate::core::paths::project_data_dir(workspace)
+        .map(|d| d.join("codegraph.db"))
+        .unwrap_or_else(|_| workspace.join("codegraph.db"));
     let snapshot = RepoSnapshotRecord {
         id: snapshot_id,
         workspace: workspace_str.clone(),

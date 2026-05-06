@@ -15,8 +15,7 @@ pub fn cmd_outcomes_measure(workspace: &Path, session_id: &str) -> Result<()> {
     if !out.enabled {
         return Ok(());
     }
-    let db = workspace.join(".kaizen/kaizen.db");
-    let store = Store::open(&db)?;
+    let store = Store::open(&crate::core::workspace::db_path(workspace)?)?;
     let Some(session) = store.get_session(session_id).context("session not found")? else {
         anyhow::bail!("session not in store");
     };
@@ -49,7 +48,7 @@ pub fn cmd_outcomes_show(id: &str, workspace: Option<&Path>) -> Result<()> {
     let ws = workspace
         .map(std::path::PathBuf::from)
         .unwrap_or(std::env::current_dir()?);
-    let store = Store::open(&ws.join(".kaizen/kaizen.db"))?;
+    let store = Store::open(&crate::core::workspace::db_path(&ws)?)?;
     let r = store
         .get_session_outcome(id)?
         .context("no outcome for session")?;

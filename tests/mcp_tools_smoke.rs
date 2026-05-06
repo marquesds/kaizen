@@ -34,9 +34,11 @@ fn parse_exp_id(created_line: &str) -> &str {
 }
 
 /// Git repo (metrics), init, session + one event.
-fn prepare_workspace() -> anyhow::Result<tempfile::TempDir> {
+fn prepare_workspace() -> anyhow::Result<(tempfile::TempDir, tempfile::TempDir)> {
+    let home = tempdir()?;
     let tmp = tempdir()?;
     let ws = tmp.path();
+    unsafe { std::env::set_var("KAIZEN_HOME", home.path()) };
     let g = std::process::Command::new("git")
         .arg("-C")
         .arg(ws)
@@ -66,8 +68,7 @@ fn prepare_workspace() -> anyhow::Result<tempfile::TempDir> {
     anyhow::ensure!(g.success(), "git commit");
 
     init_text(Some(ws))?;
-    let db = ws.join(".kaizen/kaizen.db");
-    let store = Store::open(&db)?;
+    let store = Store::open(&kaizen::core::workspace::db_path(ws)?)?;
     let sid = "sess-mcp-1";
     let wstr = ws.to_string_lossy();
     let session = SessionRecord {
@@ -119,7 +120,7 @@ fn prepare_workspace() -> anyhow::Result<tempfile::TempDir> {
         payload: json!({}),
     };
     store.append_event(&ev)?;
-    Ok(tmp)
+    Ok((home, tmp))
 }
 
 async fn tcall(
@@ -138,7 +139,7 @@ async fn tcall(
 
 #[tokio::test]
 async fn every_mcp_tool_runs() -> anyhow::Result<()> {
-    let tmp = prepare_workspace()?;
+    let (_home, tmp) = prepare_workspace()?;
     let w = tmp.path();
     let ws = w.to_str().ok_or_else(|| anyhow::anyhow!("utf8 path"))?;
     let old_cwd = env::current_dir()?;

@@ -22,7 +22,7 @@ pub fn sync_run_text(workspace: Option<&Path>, once: bool) -> Result<String> {
     }
     let salt = try_team_salt(&cfg.sync)
         .context("sync requires team_salt_hex (64 hex chars), usually in ~/.kaizen/config.toml")?;
-    let db_path = ws.join(".kaizen/kaizen.db");
+    let db_path = crate::core::workspace::db_path(&ws)?;
     let store = Store::open(&db_path)?;
     let interval = cfg.sync.flush_interval_ms.max(100);
     let registry = telemetry::load_exporters(&cfg.telemetry, &ws);
@@ -65,7 +65,7 @@ pub fn cmd_sync_run(workspace: Option<&Path>, once: bool) -> Result<()> {
 /// Same stdout as `kaizen sync status`.
 pub fn sync_status_text(workspace: Option<&Path>) -> Result<String> {
     let ws = workspace_path(workspace)?;
-    let db_path = ws.join(".kaizen/kaizen.db");
+    let db_path = crate::core::workspace::db_path(&ws)?;
     use std::fmt::Write;
     let mut s = String::new();
     if !db_path.exists() {

@@ -81,7 +81,7 @@ impl App {
         report_dirty: Arc<AtomicBool>,
         report_notify: Arc<Notify>,
     ) -> Result<Self> {
-        let db = workspace.join(".kaizen/kaizen.db");
+        let db = crate::core::workspace::db_path(workspace)?;
         Store::open(&db)?;
         let (store_tx, store_rx) = spawn_store_worker(db);
         let ws = workspace.to_string_lossy().to_string();
@@ -888,7 +888,7 @@ async fn wait_for_deadline(deadline: Option<Instant>) {
 pub async fn run(workspace: &Path) -> Result<()> {
     let workspace_buf = resolved_workspace_path(workspace);
     let workspace = workspace_buf.as_path();
-    let db_path = workspace.join(".kaizen/kaizen.db");
+    let db_path = crate::core::workspace::db_path(workspace)?;
     let metrics_cache = Arc::new(ArcSwapOption::from(None));
     let report_dirty = Arc::new(AtomicBool::new(true));
     let report_notify = Arc::new(Notify::new());
