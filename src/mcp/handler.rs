@@ -53,11 +53,22 @@ fn opt_path(ws: &Option<String>) -> Option<std::path::PathBuf> {
     ws.as_ref().map(std::path::PathBuf::from)
 }
 
+fn resolve_ws(ws: &WorkspaceArg) -> Result<Option<std::path::PathBuf>, ErrorData> {
+    match (ws.workspace.as_deref(), ws.project.as_deref()) {
+        (None, None) => Ok(None),
+        (w, p) => cli::resolve_target(w.map(std::path::Path::new), p)
+            .map(|(path, _)| Some(path))
+            .map_err(|e| ErrorData::internal_error(e.to_string(), None)),
+    }
+}
+
 /// Shared workspace argument for tools.
 #[derive(Debug, Default, Deserialize, schemars::JsonSchema)]
 struct WorkspaceArg {
     /// Workspace root (repository path). If omitted, uses the process current directory.
     workspace: Option<String>,
+    /// Project name shorthand (mutually exclusive with workspace).
+    project: Option<String>,
 }
 
 /// Workspace + optional machine-readable JSON (matches CLI `--json` on list/summary).
@@ -299,7 +310,7 @@ impl KaizenMcp {
     ) -> Result<CallToolResult, ErrorData> {
         let src = IngestSource::parse(&source)
             .ok_or_else(|| ErrorData::invalid_params("source must be cursor or claude", None))?;
-        let w = opt_path(&ws.workspace);
+        let w = resolve_ws(&ws)?;
         run_blocking(move || ingest_hook_string(src, &payload, w)).await?;
         ok_str(String::new())
     }
@@ -335,7 +346,7 @@ impl KaizenMcp {
         &self,
         Parameters(SessionIdArg { ws, id }): Parameters<SessionIdArg>,
     ) -> Result<CallToolResult, ErrorData> {
-        let w = opt_path(&ws.workspace);
+        let w = resolve_ws(&ws)?;
         let t = run_blocking(move || cli::session_show_text(&id, w.as_deref())).await?;
         ok_str(t)
     }
@@ -355,7 +366,7 @@ impl KaizenMcp {
             limit,
         }): Parameters<SearchSessionsArg>,
     ) -> Result<CallToolResult, ErrorData> {
-        let w = opt_path(&ws.workspace);
+        let w = resolve_ws(&ws)?;
         let (hits, fallback) = run_blocking(move || {
             crate::shell::search::sessions_search_hits(
                 w.as_deref(),
@@ -423,9 +434,9 @@ impl KaizenMcp {
     )]
     async fn kaizen_init(
         &self,
-        Parameters(WorkspaceArg { workspace }): Parameters<WorkspaceArg>,
+        Parameters(ws): Parameters<WorkspaceArg>,
     ) -> Result<CallToolResult, ErrorData> {
-        let w = opt_path(&workspace);
+        let w = resolve_ws(&ws)?;
         let t = run_blocking(move || init::init_text(w.as_deref())).await?;
         ok_str(t)
     }
@@ -442,7 +453,7 @@ impl KaizenMcp {
             refresh,
         }): Parameters<InsightsArg>,
     ) -> Result<CallToolResult, ErrorData> {
-        let w = opt_path(&ws.workspace);
+        let w = resolve_ws(&ws)?;
         let t = run_blocking(move || {
             insights::insights_text(w.as_deref(), all_workspaces, refresh, DataSource::Local)
         })
@@ -465,7 +476,7 @@ impl KaizenMcp {
             refresh,
         }): Parameters<MetricsArg>,
     ) -> Result<CallToolResult, ErrorData> {
-        let w = opt_path(&ws.workspace);
+        let w = resolve_ws(&ws)?;
         let t = run_blocking(move || {
             metrics::metrics_text(
                 w.as_deref(),
@@ -489,7 +500,7 @@ impl KaizenMcp {
         &self,
         Parameters(MetricsIndexArg { ws, force }): Parameters<MetricsIndexArg>,
     ) -> Result<CallToolResult, ErrorData> {
-        let w = opt_path(&ws.workspace);
+        let w = resolve_ws(&ws)?;
         let t = run_blocking(move || metrics::metrics_index_text(w.as_deref(), force)).await?;
         ok_str(t)
     }
@@ -507,7 +518,7 @@ impl KaizenMcp {
                 "once=false (continuous sync daemon) is not supported over MCP. Run `kaizen sync run` in a shell, or pass once=true (default).".into(),
             );
         }
-        let w = opt_path(&ws.workspace);
+        let w = resolve_ws(&ws)?;
         let t = run_blocking(move || sync::sync_run_text(w.as_deref(), true)).await?;
         ok_str(t)
     }
@@ -518,9 +529,9 @@ impl KaizenMcp {
     )]
     async fn kaizen_sync_status(
         &self,
-        Parameters(WorkspaceArg { workspace }): Parameters<WorkspaceArg>,
+        Parameters(ws): Parameters<WorkspaceArg>,
     ) -> Result<CallToolResult, ErrorData> {
-        let w = opt_path(&workspace);
+        let w = resolve_ws(&ws)?;
         let t = run_blocking(move || sync::sync_status_text(w.as_deref())).await?;
         ok_str(t)
     }
@@ -546,7 +557,7 @@ impl KaizenMcp {
             treatment_branch,
         }): Parameters<ExpNewArg>,
     ) -> Result<CallToolResult, ErrorData> {
-        let w = opt_path(&ws.workspace);
+        let w = resolve_ws(&ws)?;
         let args = NewArgs {
             name,
             hypothesis,
@@ -570,9 +581,9 @@ impl KaizenMcp {
     )]
     async fn kaizen_exp_list(
         &self,
-        Parameters(WorkspaceArg { workspace }): Parameters<WorkspaceArg>,
+        Parameters(ws): Parameters<WorkspaceArg>,
     ) -> Result<CallToolResult, ErrorData> {
-        let w = opt_path(&workspace);
+        let w = resolve_ws(&ws)?;
         let t = run_blocking(move || exp::exp_list_text(w.as_deref())).await?;
         ok_str(t)
     }
@@ -585,7 +596,7 @@ impl KaizenMcp {
         &self,
         Parameters(ExpIdArg { ws, id }): Parameters<ExpIdArg>,
     ) -> Result<CallToolResult, ErrorData> {
-        let w = opt_path(&ws.workspace);
+        let w = resolve_ws(&ws)?;
         let t = run_blocking(move || exp::exp_status_text(w.as_deref(), &id)).await?;
         ok_str(t)
     }
@@ -603,7 +614,7 @@ impl KaizenMcp {
             variant,
         }): Parameters<ExpTagArg>,
     ) -> Result<CallToolResult, ErrorData> {
-        let w = opt_path(&ws.workspace);
+        let w = resolve_ws(&ws)?;
         let t =
             run_blocking(move || exp::exp_tag_text(w.as_deref(), &id, &session, &variant)).await?;
         ok_str(t)
@@ -622,7 +633,7 @@ impl KaizenMcp {
             refresh,
         }): Parameters<ExpReportArg>,
     ) -> Result<CallToolResult, ErrorData> {
-        let w = opt_path(&ws.workspace);
+        let w = resolve_ws(&ws)?;
         let t =
             run_blocking(move || exp::exp_report_text(w.as_deref(), &id, json, refresh)).await?;
         ok_str(t)
@@ -636,7 +647,7 @@ impl KaizenMcp {
         &self,
         Parameters(ExpIdArg { ws, id }): Parameters<ExpIdArg>,
     ) -> Result<CallToolResult, ErrorData> {
-        let w = opt_path(&ws.workspace);
+        let w = resolve_ws(&ws)?;
         let t = run_blocking(move || exp::exp_conclude_text(w.as_deref(), &id)).await?;
         ok_str(t)
     }
@@ -649,7 +660,7 @@ impl KaizenMcp {
         &self,
         Parameters(ExpIdArg { ws, id }): Parameters<ExpIdArg>,
     ) -> Result<CallToolResult, ErrorData> {
-        let w = opt_path(&ws.workspace);
+        let w = resolve_ws(&ws)?;
         let t = run_blocking(move || exp::exp_start_text(w.as_deref(), &id)).await?;
         ok_str(t)
     }
@@ -662,7 +673,7 @@ impl KaizenMcp {
         &self,
         Parameters(ExpIdArg { ws, id }): Parameters<ExpIdArg>,
     ) -> Result<CallToolResult, ErrorData> {
-        let w = opt_path(&ws.workspace);
+        let w = resolve_ws(&ws)?;
         let t = run_blocking(move || exp::exp_archive_text(w.as_deref(), &id)).await?;
         ok_str(t)
     }
@@ -682,7 +693,7 @@ impl KaizenMcp {
             refresh,
         }): Parameters<RetroArg>,
     ) -> Result<CallToolResult, ErrorData> {
-        let w = opt_path(&ws.workspace);
+        let w = resolve_ws(&ws)?;
         let t = run_blocking(move || {
             retro::retro_stdout(
                 w.as_deref(),
@@ -726,7 +737,7 @@ impl KaizenMcp {
             }
             None => None,
         };
-        let w = opt_path(&ws.workspace);
+        let w = resolve_ws(&ws)?;
         run_blocking(move || {
             crate::shell::feedback::cmd_sessions_annotate(
                 &session_id,
@@ -748,7 +759,7 @@ impl KaizenMcp {
         &self,
         Parameters(GetSpanTreeArg { ws, id, json }): Parameters<GetSpanTreeArg>,
     ) -> Result<CallToolResult, ErrorData> {
-        let w = opt_path(&ws.workspace);
+        let w = resolve_ws(&ws)?;
         let t = run_blocking(move || {
             crate::shell::cli::cmd_sessions_tree_text(&id, 999, json, w.as_deref())
         })

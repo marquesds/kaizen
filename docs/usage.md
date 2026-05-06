@@ -1,6 +1,6 @@
 # Usage
 
-CLI reference. All commands accept `--workspace <path>` (default: cwd).
+CLI reference. All commands accept `--workspace <path>` or `--project <name>` to select a workspace (default: cwd). The two flags are mutually exclusive.
 
 Run `kaizen --help` for grouped subcommands (Trust & observe, Operate, Improve, Integrations, Shell).
 
@@ -9,6 +9,18 @@ Use `kaizen daemon status`, `kaizen daemon stop`, or `--no-daemon` /
 `KAIZEN_DAEMON=0` for direct SQLite mode. See [daemon.md](daemon.md).
 
 **Cache-first reads:** `sessions list`, `summary`, `insights`, `guidance`, `metrics`, `retro`, **`exp report`**, and **`exp power`** read the local workspace database first and avoid transcript scans. Pass **`--refresh`** (`-r`) only when you want Kaizen to rescan external agent transcripts before rendering. That can take a while on large workspaces; with `--source provider|mixed`, it can also refresh remote provider cache. See [config.md](config.md).
+
+## Selecting a project
+
+Every command resolves a workspace through one of three mechanisms, applied in order:
+
+| Flag | Behavior |
+|------|----------|
+| _(none)_ | Uses the current working directory. |
+| `--project <NAME>` | Resolves a registered workspace by short name or slug (e.g. `kaizen`, `my-app`). Run `kaizen projects list` to see names and their paths. |
+| `--workspace <PATH>` | Explicit absolute path; always takes precedence when given. |
+
+`--project` and `--workspace` are mutually exclusive; passing both is an error.
 
 **Machine-wide aggregation:** `sessions list`, `summary`, `insights`, and `metrics` accept **`--all-workspaces`**. Kaizen records each workspace path you use (canonicalized) in a machine-local JSON list, then opens each repo’s `.kaizen/kaizen.db` and merges results in memory. Details: [config.md#machine-local-registry](config.md#machine-local-registry).
 
@@ -25,13 +37,24 @@ Idempotent workspace setup. Typical effects:
 | Artifact | Action |
 |----------|--------|
 | `~/.kaizen/projects/<slug>/config.toml` | Created if missing (stub with commented `[sync]`). |
-| `.cursor/hooks.json` | Created or patched so `SessionStart`, `PreToolUse`, `PostToolUse`, `Stop` run `kaizen ingest hook --source cursor`. |
-| `.claude/settings.json` | Created or patched with the same events for `kaizen ingest hook --source claude`. |
-| `.cursor/skills/kaizen-retro/SKILL.md` | Written (or skipped if you already replaced the placeholder skill). |
-| `.cursor/skills/kaizen-eval/SKILL.md` | Written (or skipped if you already replaced the placeholder skill). |
+| `~/.cursor/hooks.json` | Created or patched so `SessionStart`, `PreToolUse`, `PostToolUse`, `Stop` run `kaizen ingest hook --source cursor`. |
+| `~/.claude/settings.json` | Created or patched with the same events for `kaizen ingest hook --source claude`. |
+| `~/.cursor/skills/kaizen-retro/SKILL.md` | Written (or skipped if you already replaced the placeholder skill). |
+| `~/.cursor/skills/kaizen-eval/SKILL.md` | Written (or skipped if you already replaced the placeholder skill). |
 | `~/.kaizen/projects/<slug>/backup/*.bak` | Timestamped copy before patching an existing hooks/settings file. |
 
 Re-running is safe. Codex, Goose, OpenCode, Copilot, and OpenClaw sessions are ingested via **transcript tail** and hooks; `init` patches **Cursor**, **Claude Code**, and **OpenClaw** hook files (writes `~/.openclaw/hooks/kaizen-events/handler.ts`).
+
+## `kaizen projects`
+
+Manage the registry of workspaces known to Kaizen.
+
+```bash
+kaizen projects list          # all registered workspaces: name, slug, path
+kaizen projects list --json   # machine-readable
+```
+
+`kaizen projects list` shows each workspace's short name (usable with `--project`), its slug, and the canonical path. A workspace is registered automatically the first time `kaizen init` or any workspace-scoped command runs against it.
 
 ## `kaizen outcomes`
 

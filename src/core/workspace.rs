@@ -57,6 +57,56 @@ fn push_unique(roots: &mut Vec<PathBuf>, path: PathBuf) {
     }
 }
 
+fn slug_match(paths: &[PathBuf], name: &str) -> Vec<PathBuf> {
+    paths
+        .iter()
+        .filter(|p| crate::core::paths::workspace_slug(p) == name)
+        .cloned()
+        .collect()
+}
+
+fn seg_match(paths: &[PathBuf], name: &str) -> Vec<PathBuf> {
+    paths
+        .iter()
+        .filter(|p| p.file_name().and_then(|n| n.to_str()) == Some(name))
+        .cloned()
+        .collect()
+}
+
+fn ambiguous_error(name: &str, matches: &[PathBuf]) -> anyhow::Error {
+    let list = matches
+        .iter()
+        .map(|p| format!("  {}", p.display()))
+        .collect::<Vec<_>>()
+        .join("\n");
+    anyhow::anyhow!(
+        "ambiguous project '{name}'. matches:\n{list}\nuse --workspace <path> or the slug."
+    )
+}
+
+/// Resolve a short project name to its registered workspace path.
+///
+/// Resolution order:
+/// 1. Exact slug match (`workspace_slug(path) == name`)
+/// 2. Last path segment match (`path.file_name() == name`)
+///
+/// Returns `Err` on zero matches (unknown) or multiple matches (ambiguous).
+pub fn resolve_project_name(name: &str) -> Result<PathBuf> {
+    let paths = crate::core::machine_registry::list_paths()?;
+    let slugs = slug_match(&paths, name);
+    if slugs.len() == 1 {
+        return Ok(slugs.into_iter().next().unwrap());
+    }
+    let segs = seg_match(&paths, name);
+    match segs.len() {
+        1 => Ok(segs.into_iter().next().unwrap()),
+        0 => anyhow::bail!(
+            "unknown project '{name}'. run 'kaizen projects list' to see registered projects."
+        ),
+        _ => Err(ambiguous_error(name, &segs)),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -73,6 +123,16 @@ mod tests {
         let first = resolve(Some(&ws)).unwrap();
         let rows = machine_workspaces(Some(&first)).unwrap();
         assert_eq!(rows, vec![first]);
+        unsafe { std::env::remove_var("KAIZEN_HOME") };
+    }
+
+    #[test]
+    fn resolve_project_name_no_match() {
+        let _guard = test_lock::global().lock().unwrap();
+        let home = TempDir::new().unwrap();
+        unsafe { std::env::set_var("KAIZEN_HOME", home.path().join(".kaizen")) };
+        let err = resolve_project_name("nonexistent").unwrap_err();
+        assert!(err.to_string().contains("unknown project"));
         unsafe { std::env::remove_var("KAIZEN_HOME") };
     }
 }

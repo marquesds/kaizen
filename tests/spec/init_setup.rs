@@ -8,9 +8,11 @@ struct InitState {
     cursor_present: bool,
     cursor_patched: bool,
     cursor_backup: bool,
+    legacy_cursor_local: bool,
     claude_present: bool,
     claude_patched: bool,
     claude_backup: bool,
+    legacy_claude_local: bool,
     codex_present: bool,
     codex_patched: bool,
     codex_backup: bool,
@@ -29,9 +31,11 @@ struct InitDriver {
     cursor_present: bool,
     cursor_patched: bool,
     cursor_backup: bool,
+    legacy_cursor_local: bool,
     claude_present: bool,
     claude_patched: bool,
     claude_backup: bool,
+    legacy_claude_local: bool,
     codex_present: bool,
     codex_patched: bool,
     codex_backup: bool,
@@ -74,6 +78,12 @@ impl InitDriver {
         self.skill_ready = true;
     }
 
+    fn seed_legacy_local_wiring(&mut self) {
+        self.seed_ready();
+        self.legacy_cursor_local = true;
+        self.legacy_claude_local = true;
+    }
+
     fn run_init(&mut self) {
         self.config_ready = true;
         self.skill_ready = true;
@@ -102,6 +112,7 @@ impl InitDriver {
         self.copilot_cli_patched = true;
         self.openclaw_present = true;
         self.openclaw_patched = true;
+        // legacy_cursor_local and legacy_claude_local are preserved (not cleared by init)
     }
 }
 
@@ -112,9 +123,11 @@ impl State<InitDriver> for InitState {
             cursor_present: d.cursor_present,
             cursor_patched: d.cursor_patched,
             cursor_backup: d.cursor_backup,
+            legacy_cursor_local: d.legacy_cursor_local,
             claude_present: d.claude_present,
             claude_patched: d.claude_patched,
             claude_backup: d.claude_backup,
+            legacy_claude_local: d.legacy_claude_local,
             codex_present: d.codex_present,
             codex_patched: d.codex_patched,
             codex_backup: d.codex_backup,
@@ -137,6 +150,7 @@ impl Driver for InitDriver {
             "init" | "step" | "seed_empty_workspace" => self.seed_empty(),
             "seed_existing_hook_files" => self.seed_hook_files(),
             "seed_ready_workspace" => self.seed_ready(),
+            "seed_legacy_local_wiring" => self.seed_legacy_local_wiring(),
             "run_init" => self.run_init(),
             other => anyhow::bail!("unexpected action: {other}"),
         }

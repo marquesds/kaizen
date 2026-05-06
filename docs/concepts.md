@@ -36,7 +36,9 @@ Two tiers:
   `sources.tail` in [config.md](config.md#sources), resolved from
   `~/.kaizen/config.toml`).
 - **Tier 2 — hooks.** `kaizen init` patches Cursor, Claude Code, and OpenClaw hooks
-  to pipe JSON events into `kaizen ingest hook`.
+  to pipe JSON events into `kaizen ingest hook`. A single global wiring in
+  `~/.cursor/hooks.json` and `~/.claude/settings.json` covers every workspace — no
+  per-repo files required.
 
 **Session outcomes (opt-in):** after `Stop`, a detached child can run your test/lint command and store a row in `session_outcomes`. See [outcomes.md](outcomes.md).
 

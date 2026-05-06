@@ -56,6 +56,9 @@ enum Command {
         /// workspace root (default: cwd)
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
         /// Read from every registered workspace on this machine.
         #[arg(long)]
         all_workspaces: bool,
@@ -75,6 +78,9 @@ enum Command {
         /// workspace root (default: cwd)
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
     },
     /// Idempotent workspace setup (writes config, patches hooks, installs skill).
     #[command(next_help_heading = "Trust & observe")]
@@ -82,6 +88,9 @@ enum Command {
         /// workspace root (default: cwd)
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
     },
     /// Verify config, store, and hook wiring for this workspace.
     #[command(next_help_heading = "Trust & observe")]
@@ -89,6 +98,9 @@ enum Command {
         /// workspace root (default: cwd)
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
     },
     /// Prune local sessions older than retention window (see `[retention].hot_days` or `--days`).
     #[command(next_help_heading = "Operate")]
@@ -96,6 +108,9 @@ enum Command {
         /// workspace root (default: cwd)
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
         /// Keep sessions started within the last N days (overrides config when set).
         #[arg(long)]
         days: Option<u32>,
@@ -115,6 +130,9 @@ enum Command {
         /// workspace root (default: cwd)
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
         /// Read from every registered workspace on this machine.
         #[arg(long)]
         all_workspaces: bool,
@@ -137,6 +155,9 @@ enum Command {
         /// workspace root (default: cwd)
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
         /// Force a full agent transcript rescan before reading. This can take a while on large workspaces.
         #[arg(short, long)]
         refresh: bool,
@@ -161,6 +182,9 @@ enum Command {
         /// workspace root (default: cwd)
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
         /// Read from every registered workspace on this machine.
         #[arg(long)]
         all_workspaces: bool,
@@ -207,11 +231,20 @@ enum Command {
         /// workspace root (default: cwd)
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
         /// Force a full agent transcript rescan before reading. This can take a while on large workspaces.
         #[arg(short, long)]
         refresh: bool,
         #[arg(long, value_enum, default_value_t = DataSource::Local)]
         source: DataSource,
+    },
+    /// List registered workspaces on this machine.
+    #[command(next_help_heading = "Trust & observe")]
+    Projects {
+        #[command(subcommand)]
+        subcmd: ProjectsCommand,
     },
     /// Model Context Protocol server (stdio) — see docs/mcp.md.
     #[command(next_help_heading = "Integrations")]
@@ -274,6 +307,9 @@ enum EvalCommand {
         /// workspace root (default: cwd)
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
         /// Only evaluate sessions started in the last N days.
         #[arg(long, default_value_t = 7)]
         since_days: u64,
@@ -286,6 +322,9 @@ enum EvalCommand {
         /// workspace root (default: cwd)
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
         /// Only show sessions with score >= this value (0.0 = show all).
         #[arg(long, default_value_t = 0.0)]
         min_score: f64,
@@ -298,6 +337,9 @@ enum EvalCommand {
         /// workspace root (default: cwd)
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
         /// Session ID to render the prompt for.
         session_id: String,
         /// Rubric to use.
@@ -307,12 +349,21 @@ enum EvalCommand {
 }
 
 #[derive(Subcommand)]
+enum ProjectsCommand {
+    /// List registered workspaces.
+    List,
+}
+
+#[derive(Subcommand)]
 enum PromptCommand {
     /// List all recorded prompt snapshots.
     List {
         /// workspace root (default: cwd)
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
         /// Emit JSON array.
         #[arg(long)]
         json: bool,
@@ -323,6 +374,9 @@ enum PromptCommand {
         /// workspace root (default: cwd)
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
         /// Emit JSON.
         #[arg(long)]
         json: bool,
@@ -334,6 +388,9 @@ enum PromptCommand {
         /// workspace root (default: cwd)
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
     },
 }
 
@@ -360,6 +417,9 @@ enum ProxyCommand {
         /// workspace root (default: cwd)
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
     },
 }
 
@@ -369,6 +429,9 @@ enum TelemetrySubcommand {
     Init {
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
         /// Exporter template to append without prompting.
         #[arg(long = "type", value_enum)]
         exporter_type: Option<TelemetryExporterKind>,
@@ -380,6 +443,9 @@ enum TelemetrySubcommand {
     Doctor {
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
     },
     /// Run one provider `pull` into local `remote_*` cache (stub until APIs are fully wired).
     Pull {
@@ -388,6 +454,9 @@ enum TelemetrySubcommand {
         days: u32,
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
     },
     /// Replay events from local SQLite through telemetry exporters (PostHog, Datadog, OTLP, dev).
     ///
@@ -400,6 +469,9 @@ enum TelemetrySubcommand {
         days: u32,
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
         /// Every workspace registered for this machine (see `kaizen summary --all-workspaces`).
         #[arg(long)]
         all_workspaces: bool,
@@ -413,6 +485,9 @@ enum TelemetrySubcommand {
     Configure {
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
         /// Exporter template to append without prompting.
         #[arg(long = "type", value_enum)]
         exporter_type: Option<TelemetryExporterKind>,
@@ -424,12 +499,18 @@ enum TelemetrySubcommand {
     PrintEffectiveConfig {
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
     },
     /// Read local NDJSON from the `file` exporter (default: `<workspace>/.kaizen/telemetry.ndjson`).
     Tail {
         /// workspace root (default: cwd)
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
         /// File path (absolute or relative to workspace).
         #[arg(long, short = 'f')]
         file: Option<PathBuf>,
@@ -494,23 +575,35 @@ enum ExpCommand {
         treatment_branch: Option<String>,
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
     },
     /// Transition experiment from Draft to Running.
     Start {
         id: String,
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
     },
     /// List all experiments.
     List {
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
     },
     /// Show one experiment's metadata.
     Status {
         id: String,
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
     },
     /// Manual variant tag for a session.
     Tag {
@@ -522,6 +615,9 @@ enum ExpCommand {
         variant: String,
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
     },
     /// Render markdown (or JSON) report with bootstrap CI.
     Report {
@@ -533,18 +629,27 @@ enum ExpCommand {
         refresh: bool,
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
     },
     /// Mark experiment Concluded.
     Conclude {
         id: String,
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
     },
     /// Mark experiment Archived (must be Concluded first).
     Archive {
         id: String,
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
     },
     /// Print MDE at 80% power / 95% CI for a metric given expected sample size.
     Power {
@@ -559,6 +664,9 @@ enum ExpCommand {
         refresh: bool,
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
     },
 }
 
@@ -569,6 +677,9 @@ enum SyncCommand {
         /// workspace root (default: cwd)
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
         /// Single flush then exit (for tests / scripts).
         #[arg(long)]
         once: bool,
@@ -578,6 +689,9 @@ enum SyncCommand {
         /// workspace root (default: cwd)
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
     },
 }
 
@@ -602,6 +716,9 @@ enum MetricsCommand {
         /// workspace root (default: cwd)
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
         /// Rebuild even when fingerprint unchanged.
         #[arg(long)]
         force: bool,
@@ -618,6 +735,9 @@ enum IngestCommand {
         /// workspace root (default: cwd)
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
     },
 }
 
@@ -628,6 +748,9 @@ enum SessionsCommand {
         /// workspace root (default: cwd)
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
         /// Read from every registered workspace on this machine.
         #[arg(long)]
         all_workspaces: bool,
@@ -647,6 +770,9 @@ enum SessionsCommand {
         /// workspace root (default: cwd)
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
     },
     /// Attach human feedback (score/label/note) to a session.
     Annotate {
@@ -659,6 +785,9 @@ enum SessionsCommand {
         note: Option<String>,
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
     },
     /// Render nested tool-span tree for a session.
     Tree {
@@ -669,6 +798,9 @@ enum SessionsCommand {
         json: bool,
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
     },
     /// Full-text search session events.
     Search {
@@ -683,6 +815,9 @@ enum SessionsCommand {
         limit: usize,
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
     },
 }
 
@@ -693,6 +828,9 @@ enum SearchCommand {
         /// workspace root (default: cwd)
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
     },
 }
 
@@ -704,6 +842,9 @@ enum OutcomesCommand {
         /// workspace root (default: cwd)
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
     },
     /// Internal: run tests/lint and upsert `session_outcomes` (ingest spawns this).
     #[command(hide = true)]
@@ -723,6 +864,9 @@ enum FeedbackCommand {
     List {
         #[arg(long)]
         workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
         #[arg(long, value_enum)]
         label: Option<FeedbackLabel>,
         #[arg(long)]
@@ -758,6 +902,16 @@ enum MigrateCommand {
     },
 }
 
+fn resolve_ws(
+    workspace: Option<&std::path::Path>,
+    project: Option<&str>,
+) -> anyhow::Result<Option<PathBuf>> {
+    match (workspace, project) {
+        (None, None) => Ok(None),
+        (w, p) => kaizen::shell::cli::resolve_target(w, p).map(|(path, _)| Some(path)),
+    }
+}
+
 fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
     let cli = Cli::parse();
@@ -767,27 +921,47 @@ fn main() -> anyhow::Result<()> {
     match cli.cmd {
         Command::Daemon { subcmd } => dispatch_daemon(subcmd),
         Command::Ingest {
-            subcmd: IngestCommand::Hook { source, workspace },
-        } => ingest_hook(source, workspace),
+            subcmd:
+                IngestCommand::Hook {
+                    source,
+                    workspace,
+                    project,
+                },
+        } => {
+            let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+            ingest_hook(source, ws)
+        }
         Command::Sessions {
             subcmd:
                 SessionsCommand::List {
                     workspace,
+                    project,
                     all_workspaces,
                     json,
                     limit,
                     refresh,
                 },
-        } => kaizen::shell::cli::cmd_sessions_list(
-            workspace.as_deref(),
-            json,
-            refresh,
-            all_workspaces,
-            limit,
-        ),
+        } => {
+            let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+            kaizen::shell::cli::cmd_sessions_list(
+                ws.as_deref(),
+                json,
+                refresh,
+                all_workspaces,
+                limit,
+            )
+        }
         Command::Sessions {
-            subcmd: SessionsCommand::Show { id, workspace },
-        } => kaizen::shell::cli::cmd_session_show(&id, workspace.as_deref()),
+            subcmd:
+                SessionsCommand::Show {
+                    id,
+                    workspace,
+                    project,
+                },
+        } => {
+            let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+            kaizen::shell::cli::cmd_session_show(&id, ws.as_deref())
+        }
         Command::Sessions {
             subcmd:
                 SessionsCommand::Annotate {
@@ -796,14 +970,12 @@ fn main() -> anyhow::Result<()> {
                     label,
                     note,
                     workspace,
+                    project,
                 },
-        } => kaizen::shell::feedback::cmd_sessions_annotate(
-            &id,
-            score,
-            label,
-            note,
-            workspace.as_deref(),
-        ),
+        } => {
+            let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+            kaizen::shell::feedback::cmd_sessions_annotate(&id, score, label, note, ws.as_deref())
+        }
         Command::Sessions {
             subcmd:
                 SessionsCommand::Tree {
@@ -811,8 +983,12 @@ fn main() -> anyhow::Result<()> {
                     depth,
                     json,
                     workspace,
+                    project,
                 },
-        } => kaizen::shell::cli::cmd_sessions_tree(&id, depth, json, workspace.as_deref()),
+        } => {
+            let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+            kaizen::shell::cli::cmd_sessions_tree(&id, depth, json, ws.as_deref())
+        }
         Command::Sessions {
             subcmd:
                 SessionsCommand::Search {
@@ -822,47 +998,62 @@ fn main() -> anyhow::Result<()> {
                     kind,
                     limit,
                     workspace,
+                    project,
                 },
-        } => kaizen::shell::search::cmd_sessions_search(
-            workspace.as_deref(),
-            &query,
-            since.as_deref(),
-            agent.as_deref(),
-            kind.as_deref(),
-            limit,
-        ),
+        } => {
+            let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+            kaizen::shell::search::cmd_sessions_search(
+                ws.as_deref(),
+                &query,
+                since.as_deref(),
+                agent.as_deref(),
+                kind.as_deref(),
+                limit,
+            )
+        }
         Command::Search {
-            subcmd: SearchCommand::Reindex { workspace },
-        } => kaizen::shell::search::cmd_search_reindex(workspace.as_deref()),
+            subcmd: SearchCommand::Reindex { workspace, project },
+        } => {
+            let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+            kaizen::shell::search::cmd_search_reindex(ws.as_deref())
+        }
         Command::Feedback {
             subcmd:
                 FeedbackCommand::List {
                     workspace,
+                    project,
                     label,
                     since,
                     json,
                 },
-        } => kaizen::shell::feedback::cmd_feedback_list(workspace.as_deref(), label, since, json),
+        } => {
+            let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+            kaizen::shell::feedback::cmd_feedback_list(ws.as_deref(), label, since, json)
+        }
         Command::Summary {
             workspace,
+            project,
             all_workspaces,
             json,
             refresh,
             source,
-        } => kaizen::shell::cli::cmd_summary(
-            workspace.as_deref(),
-            json,
-            refresh,
-            all_workspaces,
-            source,
-        ),
-        Command::Tui { workspace } => {
-            let ws = kaizen::core::workspace::resolve(workspace.as_deref())?;
+        } => {
+            let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+            kaizen::shell::cli::cmd_summary(ws.as_deref(), json, refresh, all_workspaces, source)
+        }
+        Command::Tui { workspace, project } => {
+            let ws = resolve_ws(workspace.as_deref(), project.as_deref())?
+                .map(Ok)
+                .unwrap_or_else(|| kaizen::core::workspace::resolve(None))?;
             tokio::runtime::Runtime::new()?.block_on(kaizen::ui::tui::run(&ws))
         }
-        Command::Init { workspace } => kaizen::shell::cli::cmd_init(workspace.as_deref()),
-        Command::Doctor { workspace } => {
-            let code = kaizen::shell::doctor::cmd_doctor(workspace.as_deref())?;
+        Command::Init { workspace, project } => {
+            let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+            kaizen::shell::cli::cmd_init(ws.as_deref())
+        }
+        Command::Doctor { workspace, project } => {
+            let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+            let code = kaizen::shell::doctor::cmd_doctor(ws.as_deref())?;
             // Non-zero: store/IO failure; hooks missing stay 0
             if code != 0 {
                 std::process::exit(code);
@@ -871,9 +1062,13 @@ fn main() -> anyhow::Result<()> {
         }
         Command::Gc {
             workspace,
+            project,
             days,
             vacuum,
-        } => kaizen::shell::gc::cmd_gc(workspace.as_deref(), days, vacuum),
+        } => {
+            let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+            kaizen::shell::gc::cmd_gc(ws.as_deref(), days, vacuum)
+        }
         Command::Migrate { subcmd } => match subcmd {
             MigrateCommand::V2 {
                 workspace,
@@ -898,23 +1093,24 @@ fn main() -> anyhow::Result<()> {
         }
         Command::Insights {
             workspace,
+            project,
             all_workspaces,
             refresh,
             source,
-        } => kaizen::shell::insights::cmd_insights(
-            workspace.as_deref(),
-            all_workspaces,
-            refresh,
-            source,
-        ),
+        } => {
+            let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+            kaizen::shell::insights::cmd_insights(ws.as_deref(), all_workspaces, refresh, source)
+        }
         Command::Guidance {
             days,
             json,
             workspace,
+            project,
             refresh,
             source,
         } => {
-            kaizen::shell::guidance::cmd_guidance(workspace.as_deref(), days, json, refresh, source)
+            let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+            kaizen::shell::guidance::cmd_guidance(ws.as_deref(), days, json, refresh, source)
         }
         Command::Metrics {
             subcmd,
@@ -922,86 +1118,129 @@ fn main() -> anyhow::Result<()> {
             json,
             force,
             workspace,
+            project,
             all_workspaces,
             refresh,
             source,
         } => match subcmd {
-            Some(MetricsCommand::Index { workspace, force }) => {
-                kaizen::shell::metrics::cmd_metrics_index(workspace.as_deref(), force)
-            }
-            None => kaizen::shell::metrics::cmd_metrics(
-                workspace.as_deref(),
-                days,
-                json,
+            Some(MetricsCommand::Index {
+                workspace,
+                project,
                 force,
-                all_workspaces,
-                refresh,
-                source,
-            ),
+            }) => {
+                let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+                kaizen::shell::metrics::cmd_metrics_index(ws.as_deref(), force)
+            }
+            None => {
+                let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+                kaizen::shell::metrics::cmd_metrics(
+                    ws.as_deref(),
+                    days,
+                    json,
+                    force,
+                    all_workspaces,
+                    refresh,
+                    source,
+                )
+            }
         },
         Command::Sync {
-            subcmd: SyncCommand::Run { workspace, once },
-        } => kaizen::shell::sync::cmd_sync_run(workspace.as_deref(), once),
+            subcmd:
+                SyncCommand::Run {
+                    workspace,
+                    project,
+                    once,
+                },
+        } => {
+            let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+            kaizen::shell::sync::cmd_sync_run(ws.as_deref(), once)
+        }
         Command::Sync {
-            subcmd: SyncCommand::Status { workspace },
-        } => kaizen::shell::sync::cmd_sync_status(workspace.as_deref()),
+            subcmd: SyncCommand::Status { workspace, project },
+        } => {
+            let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+            kaizen::shell::sync::cmd_sync_status(ws.as_deref())
+        }
         Command::Telemetry { subcmd } => match subcmd {
             TelemetrySubcommand::Init {
                 workspace,
+                project,
                 exporter_type,
                 path,
-            } => kaizen::shell::telemetry::cmd_telemetry_init(
-                workspace.as_deref(),
-                kaizen::shell::telemetry::ConfigureOptions {
-                    exporter_type: exporter_type.map(|t| t.as_str().to_string()),
-                    path,
-                },
-            ),
-            TelemetrySubcommand::Doctor { workspace } => {
-                kaizen::shell::telemetry::cmd_telemetry_doctor(workspace.as_deref())
+            } => {
+                let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+                kaizen::shell::telemetry::cmd_telemetry_init(
+                    ws.as_deref(),
+                    kaizen::shell::telemetry::ConfigureOptions {
+                        exporter_type: exporter_type.map(|t| t.as_str().to_string()),
+                        path,
+                    },
+                )
             }
-            TelemetrySubcommand::Pull { days, workspace } => {
-                kaizen::shell::telemetry::cmd_telemetry_pull(workspace.as_deref(), days)
+            TelemetrySubcommand::Doctor { workspace, project } => {
+                let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+                kaizen::shell::telemetry::cmd_telemetry_doctor(ws.as_deref())
+            }
+            TelemetrySubcommand::Pull {
+                days,
+                workspace,
+                project,
+            } => {
+                let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+                kaizen::shell::telemetry::cmd_telemetry_pull(ws.as_deref(), days)
             }
             TelemetrySubcommand::Push {
                 days,
                 workspace,
+                project,
                 all_workspaces,
                 dry_run,
-            } => kaizen::shell::telemetry::cmd_telemetry_push(
-                workspace.as_deref(),
-                all_workspaces,
-                days,
-                dry_run,
-            ),
+            } => {
+                let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+                kaizen::shell::telemetry::cmd_telemetry_push(
+                    ws.as_deref(),
+                    all_workspaces,
+                    days,
+                    dry_run,
+                )
+            }
             TelemetrySubcommand::PrintSchema => {
                 kaizen::shell::telemetry::cmd_telemetry_print_schema()
             }
             TelemetrySubcommand::Configure {
                 workspace,
+                project,
                 exporter_type,
                 path,
-            } => kaizen::shell::telemetry::cmd_telemetry_configure(
-                workspace.as_deref(),
-                kaizen::shell::telemetry::ConfigureOptions {
-                    exporter_type: exporter_type.map(|t| t.as_str().to_string()),
-                    path,
-                },
-            ),
-            TelemetrySubcommand::PrintEffectiveConfig { workspace } => {
-                kaizen::shell::telemetry::cmd_telemetry_print_effective(workspace.as_deref())
+            } => {
+                let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+                kaizen::shell::telemetry::cmd_telemetry_configure(
+                    ws.as_deref(),
+                    kaizen::shell::telemetry::ConfigureOptions {
+                        exporter_type: exporter_type.map(|t| t.as_str().to_string()),
+                        path,
+                    },
+                )
+            }
+            TelemetrySubcommand::PrintEffectiveConfig { workspace, project } => {
+                let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+                kaizen::shell::telemetry::cmd_telemetry_print_effective(ws.as_deref())
             }
             TelemetrySubcommand::Tail {
                 workspace,
+                project,
                 file,
                 no_follow,
                 json,
-            } => kaizen::shell::telemetry_tail::cmd_telemetry_tail(
-                workspace.as_deref(),
-                file,
-                no_follow,
-                json,
-            ),
+            } => {
+                let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+                kaizen::shell::telemetry_tail::cmd_telemetry_tail(
+                    ws.as_deref(),
+                    file,
+                    no_follow,
+                    json,
+                )
+            }
         },
         Command::Retro {
             days,
@@ -1009,17 +1248,24 @@ fn main() -> anyhow::Result<()> {
             json,
             force,
             workspace,
+            project,
             refresh,
             source,
-        } => kaizen::shell::retro::cmd_retro(
-            workspace.as_deref(),
-            days,
-            dry_run,
-            json,
-            force,
-            refresh,
-            source,
-        ),
+        } => {
+            let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+            kaizen::shell::retro::cmd_retro(
+                ws.as_deref(),
+                days,
+                dry_run,
+                json,
+                force,
+                refresh,
+                source,
+            )
+        }
+        Command::Projects { subcmd } => match subcmd {
+            ProjectsCommand::List => kaizen::shell::projects::cmd_projects_list(),
+        },
         Command::Exp { subcmd } => dispatch_exp(subcmd),
         Command::Upgrade => kaizen::shell::upgrade::cmd_upgrade(),
         Command::Mcp => {
@@ -1035,47 +1281,81 @@ fn main() -> anyhow::Result<()> {
                     listen,
                     upstream,
                     workspace,
+                    project,
                 },
-        } => kaizen::shell::proxy::cmd_proxy_run(workspace.as_deref(), listen, upstream),
+        } => {
+            let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+            kaizen::shell::proxy::cmd_proxy_run(ws.as_deref(), listen, upstream)
+        }
         Command::Eval { subcmd } => match subcmd {
             EvalCommand::Run {
                 workspace,
+                project,
                 since_days,
                 dry_run,
-            } => kaizen::shell::eval::cmd_eval_run(workspace.as_deref(), since_days, dry_run),
+            } => {
+                let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+                kaizen::shell::eval::cmd_eval_run(ws.as_deref(), since_days, dry_run)
+            }
             EvalCommand::List {
                 workspace,
+                project,
                 min_score,
                 json,
-            } => kaizen::shell::eval::cmd_eval_list(workspace.as_deref(), min_score, json),
+            } => {
+                let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+                kaizen::shell::eval::cmd_eval_list(ws.as_deref(), min_score, json)
+            }
             EvalCommand::Prompt {
                 workspace,
+                project,
                 session_id,
                 rubric,
-            } => kaizen::shell::eval::cmd_eval_prompt(workspace.as_deref(), &session_id, &rubric),
+            } => {
+                let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+                kaizen::shell::eval::cmd_eval_prompt(ws.as_deref(), &session_id, &rubric)
+            }
         },
         Command::Prompt { subcmd } => match subcmd {
-            PromptCommand::List { workspace, json } => {
-                kaizen::shell::prompt::cmd_prompt_list(workspace.as_deref(), json)
+            PromptCommand::List {
+                workspace,
+                project,
+                json,
+            } => {
+                let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+                kaizen::shell::prompt::cmd_prompt_list(ws.as_deref(), json)
             }
             PromptCommand::Show {
                 fingerprint,
                 workspace,
+                project,
                 json,
-            } => kaizen::shell::prompt::cmd_prompt_show(&fingerprint, workspace.as_deref(), json),
+            } => {
+                let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+                kaizen::shell::prompt::cmd_prompt_show(&fingerprint, ws.as_deref(), json)
+            }
             PromptCommand::Diff {
                 fingerprint_a,
                 fingerprint_b,
                 workspace,
-            } => kaizen::shell::prompt::cmd_prompt_diff(
-                &fingerprint_a,
-                &fingerprint_b,
-                workspace.as_deref(),
-            ),
+                project,
+            } => {
+                let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+                kaizen::shell::prompt::cmd_prompt_diff(
+                    &fingerprint_a,
+                    &fingerprint_b,
+                    ws.as_deref(),
+                )
+            }
         },
         Command::Outcomes { subcmd } => match subcmd {
-            OutcomesCommand::Show { id, workspace } => {
-                kaizen::shell::outcomes_cmd::cmd_outcomes_show(&id, workspace.as_deref())
+            OutcomesCommand::Show {
+                id,
+                workspace,
+                project,
+            } => {
+                let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+                kaizen::shell::outcomes_cmd::cmd_outcomes_show(&id, ws.as_deref())
             }
             OutcomesCommand::Measure { workspace, session } => {
                 kaizen::shell::outcomes_cmd::cmd_outcomes_measure(&workspace, &session)
@@ -1148,45 +1428,92 @@ fn dispatch_exp(cmd: ExpCommand) -> anyhow::Result<()> {
             control_branch,
             treatment_branch,
             workspace,
-        } => exp::cmd_new(
-            workspace.as_deref(),
-            exp::NewArgs {
-                name,
-                hypothesis,
-                change,
-                metric,
-                bind,
-                duration_days,
-                target_pct,
-                control_commit,
-                treatment_commit,
-                control_branch,
-                treatment_branch,
-            },
-        ),
-        ExpCommand::Start { id, workspace } => exp::cmd_start(workspace.as_deref(), &id),
-        ExpCommand::List { workspace } => exp::cmd_list(workspace.as_deref()),
-        ExpCommand::Status { id, workspace } => exp::cmd_status(workspace.as_deref(), &id),
+            project,
+        } => {
+            let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+            exp::cmd_new(
+                ws.as_deref(),
+                exp::NewArgs {
+                    name,
+                    hypothesis,
+                    change,
+                    metric,
+                    bind,
+                    duration_days,
+                    target_pct,
+                    control_commit,
+                    treatment_commit,
+                    control_branch,
+                    treatment_branch,
+                },
+            )
+        }
+        ExpCommand::Start {
+            id,
+            workspace,
+            project,
+        } => {
+            let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+            exp::cmd_start(ws.as_deref(), &id)
+        }
+        ExpCommand::List { workspace, project } => {
+            let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+            exp::cmd_list(ws.as_deref())
+        }
+        ExpCommand::Status {
+            id,
+            workspace,
+            project,
+        } => {
+            let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+            exp::cmd_status(ws.as_deref(), &id)
+        }
         ExpCommand::Tag {
             id,
             session,
             variant,
             workspace,
-        } => exp::cmd_tag(workspace.as_deref(), &id, &session, &variant),
+            project,
+        } => {
+            let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+            exp::cmd_tag(ws.as_deref(), &id, &session, &variant)
+        }
         ExpCommand::Report {
             id,
             json,
             refresh,
             workspace,
-        } => exp::cmd_report(workspace.as_deref(), &id, json, refresh),
-        ExpCommand::Conclude { id, workspace } => exp::cmd_conclude(workspace.as_deref(), &id),
-        ExpCommand::Archive { id, workspace } => exp::cmd_archive(workspace.as_deref(), &id),
+            project,
+        } => {
+            let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+            exp::cmd_report(ws.as_deref(), &id, json, refresh)
+        }
+        ExpCommand::Conclude {
+            id,
+            workspace,
+            project,
+        } => {
+            let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+            exp::cmd_conclude(ws.as_deref(), &id)
+        }
+        ExpCommand::Archive {
+            id,
+            workspace,
+            project,
+        } => {
+            let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+            exp::cmd_archive(ws.as_deref(), &id)
+        }
         ExpCommand::Power {
             metric,
             baseline_n,
             refresh,
             workspace,
-        } => exp::cmd_power(workspace.as_deref(), &metric, baseline_n, refresh),
+            project,
+        } => {
+            let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+            exp::cmd_power(ws.as_deref(), &metric, baseline_n, refresh)
+        }
     }
 }
 

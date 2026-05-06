@@ -138,7 +138,7 @@ Set any value to `false` to skip that agent’s local scan (useful if a VS Code 
 
 ## Behavior notes
 
-- **Workspace**: most tools accept optional `workspace` (string path). If omitted, the server uses the process current directory, matching CLI defaults.
+- **Workspace**: most tools accept optional `workspace` (string path) or `project` (short project name — resolved via `kaizen projects list`; mutually exclusive with `workspace`). If neither is given, the server uses the process current directory, matching CLI defaults.
 - **Data source**: `kaizen_summary`, `kaizen_insights`, `kaizen_metrics`, and `kaizen_retro` use the local DB only (`DataSource::Local`), matching CLI default `--source local`. The MCP server does not expose CLI `--source` switches; use the CLI if you need another source.
 - **Rescan**: list/summary/insights/metrics/retro stay on the cached local DB unless you pass `refresh: true` (same as CLI `--refresh`). `kaizen_exp_report` defaults to cache-first as well; set `refresh: true` to force a full transcript rescan before computing the report.
 - **Aggregation**: `kaizen_sessions_list`, `kaizen_summary`, `kaizen_insights`, and `kaizen_metrics` accept `all_workspaces: true`. Kaizen opens each registered workspace DB separately and merges the results in memory.
