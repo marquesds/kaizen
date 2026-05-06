@@ -27,7 +27,6 @@ module project_lookup {
   }
 
   action step: bool = any {
-    init,
     resolve,
   }
 
