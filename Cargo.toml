@@ -261,7 +261,7 @@ path = "tests/perf/read_report.rs"
 
 [features]
 default = ["analytics-duckdb"]
-analytics-duckdb = ["dep:duckdb"]
+analytics-duckdb = ["dep:duckdb", "duckdb/bundled", "duckdb/parquet"]
 # Optional fan-out targets (lean default build)
 telemetry-dev = []
 telemetry-posthog = []
