@@ -109,20 +109,12 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: release-${{ matrix.target }}
-      - name: Install cross (for linux cross builds)
-        if: matrix.cross == true
-        run: cargo install --locked cross
       - name: Build
         env:
           DUCKDB_DOWNLOAD_LIB: "0"
         run: |
-          if [ "${{ matrix.cross }}" = "true" ]; then
-            cross build --release --locked --target ${{ matrix.target }} --bin kaizen \
-              --features duckdb/bundled,duckdb/parquet
-          else
-            cargo build --release --locked --target ${{ matrix.target }} --bin kaizen \
-              --features duckdb/bundled,duckdb/parquet
-          fi
+          cargo build --release --locked --target ${{ matrix.target }} --bin kaizen \
+            --features duckdb/bundled,duckdb/parquet
       - name: Package
         id: pkg
         run: |
@@ -239,13 +231,13 @@ jobs:
           git clone --depth=1 "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/marquesds/homebrew-tap.git" /tmp/homebrew-tap
           install -m0644 "$RENDERED" /tmp/homebrew-tap/Formula/kaizen-cli.rb
           cd /tmp/homebrew-tap
-          if git diff --exit-code; then
-            echo "No formula changes; skip push."
-            exit 0
-          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Formula/kaizen-cli.rb
+          if git diff --cached --exit-code; then
+            echo "No formula changes; skip push."
+            exit 0
+          fi
           SHORT="${GITHUB_SHA:0:7}"
           git commit -m "bump kaizen-cli to v${VERSION}" -m "Synced from ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}@${SHORT}"
           git push origin HEAD:main
@@ -272,9 +264,7 @@ jobs:
           current=$(awk -F'"' '/^version = / {print $2; exit}' Cargo.toml)
           if [ "$current" != "$RELEASE_VERSION" ]; then
             sed -i "s/^version = \".*\"/version = \"$RELEASE_VERSION\"/" Cargo.toml
-          fi
-          if ! cargo metadata --locked --format-version 1 >/dev/null 2>&1; then
-            cargo build
+            cargo generate-lockfile
           fi
           if git diff --quiet; then
             echo "No changes; nothing to commit."
