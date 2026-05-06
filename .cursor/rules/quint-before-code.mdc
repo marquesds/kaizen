@@ -20,6 +20,26 @@ Order: `specs/<topic>.qnt` (new or updated) → `tests/spec/` with **quint-conne
 
 **quint-connect:** Replay the spec from Rust under `tests/spec/` with `use quint_connect::*;` and `#[quint_run]` (or extend an existing spec test in that directory). `cargo test` for that test must pass; CI runs `scripts/check-quint-specs.sh` and the spec suite. For which spec maps to which test, see `docs/quint-coverage.md`—update that map when you add a new spec file or a new `tests/spec/*` entry.
 
+## Verification (always run before commit)
+
+```sh
+scripts/check-quint-specs.sh   # typecheck + repo invariants; CI runs this
+cargo test --test <spec_name>  # spec connect test must pass
+```
+
+## Spec Authoring Rules
+
+- **No `init,` in `action step`**: `init` must not be an arm of `step`. Use `any { resolve, ... }` so Quint reports the leaf action name in ITF traces (compare `specs/session-lifecycle.qnt`).
+- **One action per arm**: prefer named sub-actions over inline `all { ... }` inside `step`; named arms surface correctly as `action_taken` in quint-connect.
+
+## quint-connect Deserialization Patterns
+
+| Quint type | Rust state field |
+|---|---|
+| `int` / `bool` | `#[serde(with = "itf::de::As::<itf::de::Integer>")]` for int fields |
+| sum type `\| A \| B` | `#[derive(Deserialize)] #[serde(tag = "tag")] enum T { A, B }` |
+| nondet pick (int) | match both `Value::Number(n) => Ok(*n)` and `Value::BigInt(n) => i64::try_from(n.clone().into_inner())` — Quint ITF always emits BigInt for integers |
+
 ## Skip Quint
 
 Typos, formatting, mechanical rename, single-line obvious fix, copy-only UI, dependency bump with no behavior change.
