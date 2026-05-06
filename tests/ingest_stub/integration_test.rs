@@ -73,7 +73,7 @@ async fn sync_flush_sends_redacted_gzip_batch() {
     let kz_home = ws.join(".kzhome");
     let salt_hex = "00".repeat(32);
     let endpoint = format!("http://{}", addr);
-    let (data_dir, db, cfg) = {
+    let (_data_dir, db, cfg) = {
         let _guard = env_lock().lock().unwrap();
         unsafe { std::env::set_var("KAIZEN_HOME", &kz_home) };
         let d = kaizen::core::paths::project_data_dir(&ws).unwrap();
@@ -229,7 +229,7 @@ async fn sync_flush_workspace_facts_hits_route() {
     let kz_home = ws.join(".kzhome");
     let salt_hex = "00".repeat(32);
     let endpoint = format!("http://{}", addr);
-    let (data_dir, db, cfg) = {
+    let (_data_dir, db, cfg) = {
         let _guard = env_lock().lock().unwrap();
         unsafe { std::env::set_var("KAIZEN_HOME", &kz_home) };
         let d = kaizen::core::paths::project_data_dir(&ws).unwrap();
