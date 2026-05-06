@@ -152,6 +152,10 @@ name = "auto_update"
 path = "tests/spec/auto_update.rs"
 
 [[test]]
+name = "upgrade"
+path = "tests/spec/upgrade.rs"
+
+[[test]]
 name = "multi_workspace"
 path = "tests/spec/multi_workspace.rs"
 

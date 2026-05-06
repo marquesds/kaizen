@@ -90,6 +90,21 @@ With `--json`, the object includes `workspace`, `stats` (counts and rollups), `c
 
 If **`kaizen summary`** shows **$0.00** but session count is above zero, events in the store have no **`cost_usd_e6`**. That is normal when **Cursor** `agent-transcripts` JSONL lines omit **`tokens`** / **`usage`**. You can still get accurate spend from **Claude** or **Codex** transcripts that include usage, from **hooks** that send **`total_cost_usd`**, or from the **Kaizen LLM proxy** (authoritative **`Cost`** events). After wiring or changing ingest, run **`kaizen summary --refresh`** so the store rescans.
 
+## `kaizen upgrade`
+
+Upgrade kaizen to the latest release. Detects the install method from the running binary path and delegates to the right tool — no flags required.
+
+| Install method | Command run |
+|---|---|
+| Homebrew (`/Cellar/kaizen-cli`, `/opt/homebrew/`, `/usr/local/Cellar/`) | `brew upgrade kaizen-cli` |
+| Cargo (default) | `cargo install kaizen-cli --locked --force` |
+
+```bash
+kaizen upgrade
+```
+
+Subprocess output streams directly to the terminal. Exits non-zero if the underlying tool fails.
+
 ## `kaizen gc`
 
 Drop sessions (and dependent rows) older than `[retention].hot_days`, or override the window with `--days`. **`hot_days = 0`** disables automatic pruning; `kaizen gc` still needs an explicit positive `--days`.
