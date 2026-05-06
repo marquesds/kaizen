@@ -9,7 +9,7 @@ use std::path::Path;
 
 pub fn cmd_migrate_v2(workspace: Option<&Path>, allow_skew: bool) -> Result<()> {
     let ws = workspace_path(workspace)?;
-    let root = ws.join(".kaizen");
+    let root = crate::core::paths::project_data_dir(&ws)?;
     let db_path = root.join("kaizen.db");
     let backup = root.join("kaizen.db.v1.bak");
     if db_path.exists() && !backup.exists() {
@@ -36,7 +36,7 @@ pub fn cmd_migrate_v2(workspace: Option<&Path>, allow_skew: bool) -> Result<()> 
 
 pub fn cmd_migrate_v1(workspace: Option<&Path>) -> Result<()> {
     let ws = workspace_path(workspace)?;
-    let root = ws.join(".kaizen");
+    let root = crate::core::paths::project_data_dir(&ws)?;
     let store = Store::open(&root.join("kaizen.db"))?;
     let mut rows = BTreeMap::new();
     for (_, event) in HotLog::replay(&root).unwrap_or_default() {

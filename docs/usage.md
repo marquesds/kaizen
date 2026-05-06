@@ -16,7 +16,7 @@ Use `kaizen daemon status`, `kaizen daemon stop`, or `--no-daemon` /
 
 ## `kaizen doctor`
 
-Health check: version, config paths, store open, optional Cursor/Claude hook wiring. Exit `1` if the local store cannot be opened or `.kaizen/` is not writable (useful in CI). Does not write files.
+Health check: version, config paths, store open, optional Cursor/Claude hook wiring. Exit `1` if the project data dir is not writable (useful in CI). Does not write files.
 
 ## `kaizen init`
 
@@ -24,12 +24,12 @@ Idempotent workspace setup. Typical effects:
 
 | Artifact | Action |
 |----------|--------|
-| `.kaizen/config.toml` | Created if missing (stub with commented `[sync]`). |
+| `~/.kaizen/projects/<slug>/config.toml` | Created if missing (stub with commented `[sync]`). |
 | `.cursor/hooks.json` | Created or patched so `SessionStart`, `PreToolUse`, `PostToolUse`, `Stop` run `kaizen ingest hook --source cursor`. |
 | `.claude/settings.json` | Created or patched with the same events for `kaizen ingest hook --source claude`. |
 | `.cursor/skills/kaizen-retro/SKILL.md` | Written (or skipped if you already replaced the placeholder skill). |
 | `.cursor/skills/kaizen-eval/SKILL.md` | Written (or skipped if you already replaced the placeholder skill). |
-| `.kaizen/backup/*.bak` | Timestamped copy before patching an existing hooks/settings file. |
+| `~/.kaizen/projects/<slug>/backup/*.bak` | Timestamped copy before patching an existing hooks/settings file. |
 
 Re-running is safe. Codex, Goose, OpenCode, Copilot, and OpenClaw sessions are ingested via **transcript tail** and hooks; `init` patches **Cursor**, **Claude Code**, and **OpenClaw** hook files (writes `~/.openclaw/hooks/kaizen-events/handler.ts`).
 
@@ -63,7 +63,7 @@ kaizen sessions search 'skill:caveman AND tokens_total:>5000'
 
 `sessions tree` renders the nested tool-span tree built from `assign_parents()` during ingest. Each node shows tool name, status, and subtree cost; spans consuming >40% of session cost are flagged. When a session exists but has no tool spans yet, text output prints a `(no tool spans for session <id>)` placeholder while `--json` returns `[]`. The TUI shows the same tree as a depth-indented strip below the event list.
 
-`sessions search` uses the workspace-local Tantivy index at `.kaizen/search/`. It indexes redacted event text for messages, tool calls, and tool results. Payload bodies are not stored in the index; result snippets are rebuilt from persisted events. If the index is missing or corrupt, Kaizen returns a fast error instead of scanning the full event table. Rebuild with:
+`sessions search` uses the project Tantivy index at `~/.kaizen/projects/<slug>/search/`. It indexes redacted event text for messages, tool calls, and tool results. Payload bodies are not stored in the index; result snippets are rebuilt from persisted events. If the index is missing or corrupt, Kaizen returns a fast error instead of scanning the full event table. Rebuild with:
 
 ```bash
 kaizen search reindex
@@ -102,7 +102,7 @@ kaizen gc --vacuum            # VACUUM after delete (slow; shrinks the DB file)
 
 ## `kaizen migrate`
 
-Bootstrap or roll back tiered storage for a workspace. `v2` exports existing SQLite events into `.kaizen/hot/log.bin` plus daily Parquet files under `.kaizen/cold/events/`, and keeps a `.kaizen/kaizen.db.v1.bak` backup. `v1` restores raw SQLite events from the hot log and cold partitions.
+Bootstrap or roll back tiered storage for a workspace. `v2` exports existing SQLite events into `hot/log.bin` plus daily Parquet files under `cold/events/` inside the project data dir (`~/.kaizen/projects/<slug>/`), and keeps a `kaizen.db.v1.bak` backup. `v1` restores raw SQLite events from the hot log and cold partitions.
 
 ```bash
 kaizen migrate v2
@@ -163,7 +163,7 @@ Ratatui-based live session browser. List + detail view, live-tail.
 
 ## `kaizen retro`
 
-Weekly heuristic retro. Writes `.kaizen/reports/<iso-week>.md`.
+Weekly heuristic retro. Writes `~/.kaizen/projects/<slug>/reports/<iso-week>.md`.
 
 ```bash
 kaizen retro --days 7
@@ -178,7 +178,7 @@ Heuristics: see [retro.md](retro.md). Tuning: see
 ## `kaizen proxy run`
 
 Local HTTP forwarder for Anthropic-style APIs. Records [`EventSource::Proxy` events](concepts.md)
-in `.kaizen/kaizen.db` and honors `[proxy]` in config (see [config](config.md), [llm-proxy](llm-proxy.md)).
+in `~/.kaizen/projects/<slug>/kaizen.db` and honors `[proxy]` in config (see [config](config.md), [llm-proxy](llm-proxy.md)).
 
 ```bash
 kaizen proxy run
@@ -210,7 +210,7 @@ Contract: [ingest-contract.md](ingest-contract.md).
 
 ## `kaizen telemetry`
 
-Pluggable sinks receive the same redacted batches as Kaizen sync. Use **`type = "file"`** to append one summary JSON line per batch to **`<workspace>/.kaizen/telemetry.ndjson`** (optional `path`); PostHog, Datadog, OTLP, and `dev` are optional and may need Cargo build features. Configure `[[telemetry.exporters]]` in `~/.kaizen/config.toml` and/or the workspace; see [config.md](config.md#telemetry).
+Pluggable sinks receive the same redacted batches as Kaizen sync. Use **`type = "file"`** to append one summary JSON line per batch to **`~/.kaizen/projects/<slug>/telemetry.ndjson`** (optional `path` override); PostHog, Datadog, OTLP, and `dev` are optional and may need Cargo build features. Configure `[[telemetry.exporters]]` in `~/.kaizen/config.toml`; see [config.md](config.md#telemetry).
 
 ```bash
 kaizen telemetry configure                # append an exporter template (interactive)

@@ -9,9 +9,11 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-/// Default: `<workspace>/.kaizen/telemetry.ndjson`.
+/// Default: `~/.kaizen/projects/<slug>/telemetry.ndjson`.
 pub fn default_ndjson_path(workspace: &Path) -> PathBuf {
-    workspace.join(".kaizen/telemetry.ndjson")
+    crate::core::paths::project_data_dir(workspace)
+        .map(|d| d.join("telemetry.ndjson"))
+        .unwrap_or_else(|_| workspace.join("telemetry.ndjson"))
 }
 
 pub fn resolve_file_exporter_path(path_opt: Option<&str>, workspace: &Path) -> PathBuf {

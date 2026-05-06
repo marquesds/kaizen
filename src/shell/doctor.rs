@@ -20,24 +20,32 @@ pub fn doctor_text(workspace: Option<&Path>) -> Result<(i32, String)> {
     writeln!(&mut out, "workspace: {}", ws.display()).unwrap();
     writeln!(&mut out).unwrap();
 
-    let wcfg = ws.join(".kaizen/config.toml");
-    let wcfg_ex = wcfg.exists();
+    let data_dir = crate::core::paths::project_data_dir(&ws).ok();
+    let wcfg_ex = data_dir
+        .as_ref()
+        .is_some_and(|d| d.join("config.toml").exists());
     writeln!(
         &mut out,
-        ".kaizen/config.toml: {}",
+        "project config.toml: {}",
         if wcfg_ex { "present" } else { "absent" }
     )
     .unwrap();
-    if let Ok(home) = std::env::var("HOME") {
-        let p = Path::new(&home).join(".kaizen/config.toml");
-        writeln!(
+    match crate::core::paths::kaizen_dir() {
+        Some(kd) => writeln!(
             &mut out,
             "~/.kaizen/config.toml: {}",
-            if p.exists() { "present" } else { "absent" }
+            if kd.join("config.toml").exists() {
+                "present"
+            } else {
+                "absent"
+            }
         )
-        .unwrap();
-    } else {
-        writeln!(&mut out, "~/.kaizen/config.toml: (HOME unset, skipped)").unwrap();
+        .unwrap(),
+        None => writeln!(
+            &mut out,
+            "~/.kaizen/config.toml: (KAIZEN_HOME / HOME unset, skipped)"
+        )
+        .unwrap(),
     }
     match crate::core::machine_registry::status() {
         Ok(None) => writeln!(
@@ -94,10 +102,10 @@ pub fn doctor_text(workspace: Option<&Path>) -> Result<(i32, String)> {
     writeln!(&mut out, "  sync: endpoint configured: {}", sync_on).unwrap();
     writeln!(&mut out).unwrap();
 
-    let db = ws.join(".kaizen/kaizen.db");
+    let db_result = crate::core::workspace::db_path(&ws);
     let ws_key = ws.to_string_lossy().to_string();
-    match Store::open(&db) {
-        Ok(store) => {
+    match db_result.and_then(|db| Store::open(&db).map(|s| (db, s))) {
+        Ok((db, store)) => {
             writeln!(&mut out, "store: OK ({})", db.display()).unwrap();
             if let Ok(sessions) = store.list_sessions(&ws_key) {
                 writeln!(
@@ -107,7 +115,8 @@ pub fn doctor_text(workspace: Option<&Path>) -> Result<(i32, String)> {
                 )
                 .unwrap();
             }
-            if let Ok(query) = crate::store::query::QueryStore::open(&ws.join(".kaizen"))
+            if let Ok(data_dir) = crate::core::paths::project_data_dir(&ws)
+                && let Ok(query) = crate::store::query::QueryStore::open(&data_dir)
                 && let Ok(stats) = query.summary_stats(&store, &ws_key)
                 && crate::shell::cli::summary_needs_cost_rollup_note(
                     stats.session_count,
@@ -121,34 +130,26 @@ pub fn doctor_text(workspace: Option<&Path>) -> Result<(i32, String)> {
                 )
                 .unwrap();
             }
+            let probe = db.parent().map(|p| p.join(".kaizen_write_probe"));
+            if let Some(probe) = probe {
+                let ok = std::fs::File::create(&probe).is_ok();
+                if ok {
+                    let _ = std::fs::remove_file(&probe);
+                }
+                writeln!(
+                    &mut out,
+                    "project data dir writable: {}",
+                    if ok { "yes" } else { "no" }
+                )
+                .unwrap();
+                if !ok {
+                    hard_fail = true;
+                }
+            }
         }
         Err(e) => {
             hard_fail = true;
             writeln!(&mut out, "store: ERROR: {e}").unwrap();
-        }
-    }
-    if let Some(parent) = db.parent() {
-        if !parent.exists() {
-            writeln!(
-                &mut out,
-                ".kaizen/ directory: missing (will be created on first open)"
-            )
-            .unwrap();
-        } else {
-            let probe = parent.join(".kaizen_write_probe");
-            let ok = std::fs::File::create(&probe).is_ok();
-            if ok {
-                let _ = std::fs::remove_file(&probe);
-            }
-            writeln!(
-                &mut out,
-                ".kaizen/ writable: {}",
-                if ok { "yes" } else { "no" }
-            )
-            .unwrap();
-            if !ok {
-                hard_fail = true;
-            }
         }
     }
     writeln!(&mut out).unwrap();

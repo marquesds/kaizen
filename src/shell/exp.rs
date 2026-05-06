@@ -30,8 +30,7 @@ pub struct NewArgs {
 
 pub fn exp_new_text(workspace: Option<&Path>, args: NewArgs) -> Result<String> {
     let ws = workspace_path(workspace)?;
-    let db_path = ws.join(".kaizen/kaizen.db");
-    let store = Store::open(&db_path)?;
+    let store = Store::open(&crate::core::workspace::db_path(&ws)?)?;
     let metric =
         Metric::parse(&args.metric).ok_or_else(|| anyhow!("unknown metric: {}", args.metric))?;
     let binding = build_binding(&ws, &args)?;
@@ -128,7 +127,7 @@ fn parent_of(ws: &Path, commit: &str) -> Result<String> {
 pub fn exp_list_text(workspace: Option<&Path>) -> Result<String> {
     use std::fmt::Write;
     let ws = workspace_path(workspace)?;
-    let store = Store::open(&ws.join(".kaizen/kaizen.db"))?;
+    let store = Store::open(&crate::core::workspace::db_path(&ws)?)?;
     let all = exp_store::list_experiments(&store)?;
     let mut out = String::new();
     if all.is_empty() {
@@ -164,7 +163,7 @@ pub fn cmd_list(workspace: Option<&Path>) -> Result<()> {
 pub fn exp_status_text(workspace: Option<&Path>, id: &str) -> Result<String> {
     use std::fmt::Write;
     let ws = workspace_path(workspace)?;
-    let store = Store::open(&ws.join(".kaizen/kaizen.db"))?;
+    let store = Store::open(&crate::core::workspace::db_path(&ws)?)?;
     let e = exp_store::load_experiment(&store, id)?
         .ok_or_else(|| anyhow!("experiment not found: {id}"))?;
     let mut out = String::new();
@@ -219,7 +218,7 @@ pub fn exp_tag_text(
     variant: &str,
 ) -> Result<String> {
     let ws = workspace_path(workspace)?;
-    let store = Store::open(&ws.join(".kaizen/kaizen.db"))?;
+    let store = Store::open(&crate::core::workspace::db_path(&ws)?)?;
     let v = match variant {
         "control" => Classification::Control,
         "treatment" => Classification::Treatment,
@@ -287,7 +286,7 @@ pub fn cmd_report(workspace: Option<&Path>, id: &str, json_out: bool, refresh: b
 
 pub fn exp_conclude_text(workspace: Option<&Path>, id: &str) -> Result<String> {
     let ws = workspace_path(workspace)?;
-    let store = Store::open(&ws.join(".kaizen/kaizen.db"))?;
+    let store = Store::open(&crate::core::workspace::db_path(&ws)?)?;
     let exp_rec = exp_store::load_experiment(&store, id)?
         .ok_or_else(|| anyhow!("experiment not found: {id}"))?;
     let next = transition(exp_rec.state, "conclude")
@@ -303,7 +302,7 @@ pub fn cmd_conclude(workspace: Option<&Path>, id: &str) -> Result<()> {
 
 pub fn exp_start_text(workspace: Option<&Path>, id: &str) -> Result<String> {
     let ws = workspace_path(workspace)?;
-    let store = Store::open(&ws.join(".kaizen/kaizen.db"))?;
+    let store = Store::open(&crate::core::workspace::db_path(&ws)?)?;
     let exp_rec = exp_store::load_experiment(&store, id)?
         .ok_or_else(|| anyhow!("experiment not found: {id}"))?;
     let next = transition(exp_rec.state, "start")
@@ -319,7 +318,7 @@ pub fn cmd_start(workspace: Option<&Path>, id: &str) -> Result<()> {
 
 pub fn exp_archive_text(workspace: Option<&Path>, id: &str) -> Result<String> {
     let ws = workspace_path(workspace)?;
-    let store = Store::open(&ws.join(".kaizen/kaizen.db"))?;
+    let store = Store::open(&crate::core::workspace::db_path(&ws)?)?;
     let exp_rec = exp_store::load_experiment(&store, id)?
         .ok_or_else(|| anyhow!("experiment not found: {id}"))?;
     let next = transition(exp_rec.state, "archive")

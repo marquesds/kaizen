@@ -61,10 +61,10 @@ Sources (native paths; tail agents add more):
 
 ## Store
 
-SQLite WAL at `.kaizen/kaizen.db`. Single-writer tokio task. Append-only
+SQLite WAL at `~/.kaizen/projects/<slug>/kaizen.db`. Single-writer tokio task. Append-only
 `events` + derived indexes (`tool_spans`, `file_facts`,
-`repo_edges`). Graph sidecar at `.kaizen/codegraph.db` (SQLite + GraphQLite Cypher extension) for graph
-queries.
+`repo_edges`). Graph sidecar at `~/.kaizen/projects/<slug>/codegraph.db` (SQLite + GraphQLite Cypher extension) for graph
+queries. Slug = canonical workspace path with `/` replaced by `-`.
 
 **Machine-local registry:** paths to repos you have opened or inited with Kaizen are stored in `~/.kaizen/machine.db` (or under `KAIZEN_HOME`) for `--all-workspaces` aggregation. See [config.md#machine-local-registry](config.md#machine-local-registry).
 

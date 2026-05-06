@@ -3,12 +3,18 @@
 mod stub;
 
 use axum::{body::Body, http::Request};
+use std::sync::{Mutex, OnceLock};
 use tower::ServiceExt;
 
 use kaizen::core::config::TelemetryConfig;
 use kaizen::core::event::{Event, EventKind, EventSource, SessionRecord, SessionStatus};
 use kaizen::store::Store;
 use kaizen::sync::FlushExporters;
+
+fn env_lock() -> &'static Mutex<()> {
+    static L: OnceLock<Mutex<()>> = OnceLock::new();
+    L.get_or_init(|| Mutex::new(()))
+}
 
 #[tokio::test]
 async fn health_returns_200() {
@@ -63,29 +69,36 @@ async fn sync_flush_sends_redacted_gzip_batch() {
     tokio::time::sleep(std::time::Duration::from_millis(80)).await;
 
     let tmp = tempfile::TempDir::new().unwrap();
-    let ws = tmp.path();
-    std::fs::create_dir_all(ws.join(".kaizen")).unwrap();
+    let ws = tmp.path().to_path_buf();
+    let kz_home = ws.join(".kzhome");
     let salt_hex = "00".repeat(32);
     let endpoint = format!("http://{}", addr);
-    std::fs::write(
-        ws.join(".kaizen/config.toml"),
-        format!(
-            r#"[sync]
+    let (data_dir, db, cfg) = {
+        let _guard = env_lock().lock().unwrap();
+        unsafe { std::env::set_var("KAIZEN_HOME", &kz_home) };
+        let d = kaizen::core::paths::project_data_dir(&ws).unwrap();
+        std::fs::write(
+            d.join("config.toml"),
+            format!(
+                r#"[sync]
 endpoint = "{endpoint}"
 team_token = "test-token"
 team_id = "team-1"
 team_salt_hex = "{salt_hex}"
 "#
-        ),
-    )
-    .unwrap();
-
-    let cfg = kaizen::core::config::load(ws).unwrap();
+            ),
+        )
+        .unwrap();
+        let c = kaizen::core::config::load(&ws).unwrap();
+        unsafe { std::env::remove_var("KAIZEN_HOME") };
+        let db = d.join("kaizen.db");
+        (d, db, c)
+    };
     let salt = kaizen::core::config::try_team_salt(&cfg.sync).unwrap();
-    let ctx = kaizen::sync::ingest_ctx(&cfg, ws.to_path_buf()).unwrap();
+    let ctx = kaizen::sync::ingest_ctx(&cfg, ws.clone()).unwrap();
 
-    let db = ws.join(".kaizen/kaizen.db");
     let store = Store::open(&db).unwrap();
+    let ws = ws.as_path();
     let session = SessionRecord {
         id: "sess-1".into(),
         agent: "cursor".into(),
@@ -212,26 +225,32 @@ async fn sync_flush_workspace_facts_hits_route() {
     tokio::time::sleep(std::time::Duration::from_millis(80)).await;
 
     let tmp = tempfile::TempDir::new().unwrap();
-    let ws = tmp.path();
-    std::fs::create_dir_all(ws.join(".kaizen")).unwrap();
+    let ws = tmp.path().to_path_buf();
+    let kz_home = ws.join(".kzhome");
     let salt_hex = "00".repeat(32);
     let endpoint = format!("http://{}", addr);
-    std::fs::write(
-        ws.join(".kaizen/config.toml"),
-        format!(
-            r#"[sync]
+    let (data_dir, db, cfg) = {
+        let _guard = env_lock().lock().unwrap();
+        unsafe { std::env::set_var("KAIZEN_HOME", &kz_home) };
+        let d = kaizen::core::paths::project_data_dir(&ws).unwrap();
+        std::fs::write(
+            d.join("config.toml"),
+            format!(
+                r#"[sync]
 endpoint = "{endpoint}"
 team_token = "test-token"
 team_id = "team-1"
 team_salt_hex = "{salt_hex}"
 "#
-        ),
-    )
-    .unwrap();
-
-    let cfg = kaizen::core::config::load(ws).unwrap();
+            ),
+        )
+        .unwrap();
+        let c = kaizen::core::config::load(&ws).unwrap();
+        unsafe { std::env::remove_var("KAIZEN_HOME") };
+        let db = d.join("kaizen.db");
+        (d, db, c)
+    };
     let salt = kaizen::core::config::try_team_salt(&cfg.sync).unwrap();
-    let db = ws.join(".kaizen/kaizen.db");
     let store = Store::open(&db).unwrap();
     let fact = serde_json::json!({
         "skill_slugs": ["a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"],

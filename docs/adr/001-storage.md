@@ -20,3 +20,8 @@ SQLite WAL for M0–M1. Single file per workspace at `.kaizen/kaizen.db`.
 - Simple deploy: zero infra.
 - WAL mode: concurrent reads + single writer safe.
 - Re-evaluate DuckDB at 100k sessions or when analytics queries needed.
+
+## Amendment (2026-05-06) — Project data moved out of repo
+
+See ADR 007. The DB path moved from `<workspace>/.kaizen/kaizen.db` to
+`~/.kaizen/projects/<slug>/kaizen.db`. Existing in-repo `.kaizen/` dirs auto-migrate on first use.

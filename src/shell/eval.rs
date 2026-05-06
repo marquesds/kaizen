@@ -65,7 +65,7 @@ fn resolve_ws(workspace: Option<&Path>) -> Result<PathBuf> {
 }
 
 fn open_store(ws: &Path) -> Result<Store> {
-    Store::open(&crate::core::workspace::db_path(ws))
+    Store::open(&crate::core::workspace::db_path(ws)?)
 }
 
 fn since_ms_from_days(days: u64) -> u64 {

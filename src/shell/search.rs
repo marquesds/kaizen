@@ -55,9 +55,8 @@ pub fn sessions_search_hits(
         kind: kind.map(str::to_string),
         limit,
     };
-    match crate::search::search(&ws.join(".kaizen"), &opts, &ws, &salt, |s, q| {
-        store.get_event(s, q)
-    }) {
+    let data_dir = crate::core::paths::project_data_dir(&ws)?;
+    match crate::search::search(&data_dir, &opts, &ws, &salt, |s, q| store.get_event(s, q)) {
         Ok(hits) => Ok((hits, false)),
         Err(e) => anyhow::bail!("search index unavailable: {e}; run `kaizen search reindex`"),
     }
@@ -65,12 +64,13 @@ pub fn sessions_search_hits(
 
 pub fn cmd_search_reindex(workspace: Option<&Path>) -> Result<()> {
     let ws = workspace_path(workspace)?;
-    let store = Store::open(&crate::core::workspace::db_path(&ws))?;
+    let store = Store::open(&crate::core::workspace::db_path(&ws)?)?;
     let cfg = config::load(&ws)?;
     let ws_str = ws.to_string_lossy().to_string();
     let sessions = store.list_sessions(&ws_str)?;
     let events = store.workspace_events(&ws_str)?;
-    let stats = crate::search::reindex_workspace(&ws.join(".kaizen"), &ws, &sessions, events, &cfg)
+    let data_dir = crate::core::paths::project_data_dir(&ws)?;
+    let stats = crate::search::reindex_workspace(&data_dir, &ws, &sessions, events, &cfg)
         .context("reindex search")?;
     println!(
         "search reindex: {} events seen, {} docs indexed",

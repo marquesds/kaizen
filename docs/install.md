@@ -113,7 +113,7 @@ cd your-repo
 kaizen init
 ```
 
-`kaizen init` is idempotent. Writes `.kaizen/config.toml`, patches
+`kaizen init` is idempotent. Creates `~/.kaizen/projects/<slug>/config.toml`, patches
 agent hooks for Cursor / Claude Code, and installs the retro skill.
 Safe to rerun.
 
@@ -121,12 +121,12 @@ Safe to rerun.
 
 ```bash
 cargo uninstall kaizen-cli
-rm -rf ~/.kaizen .kaizen
+rm -rf ~/.kaizen
 ```
 
 Remove hook edits from `.cursor/hooks.json` and
 `.claude/settings.json` if you want a full revert. `kaizen init`
-backs up originals under `.kaizen/backup/`.
+backs up originals under `~/.kaizen/projects/<slug>/backup/`.
 
 ## Verify
 

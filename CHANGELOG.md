@@ -10,6 +10,10 @@ here explicitly.
 
 ## [Unreleased]
 
+### Changed
+
+- **Project data moved out of repo** — all per-workspace artifacts (SQLite DB, config, search index, reports, telemetry NDJSON, backups, sampler stop files) now live under `~/.kaizen/projects/<slug>/` instead of `<workspace>/.kaizen/`. Slug = canonical path with `/` → `-`. `KAIZEN_HOME` overrides `~/.kaizen`. Existing in-repo `.kaizen/` directories auto-migrate on first use; a `MIGRATED.txt` marker is left behind and the old directory is safe to delete. Identity (workspace key) is unchanged. See [ADR 007](docs/adr/007-project-data-in-home.md).
+
 ### Added
 
 - **OpenClaw integration** — full tail + hook support for [OpenClaw](https://openclaw.ai) (local

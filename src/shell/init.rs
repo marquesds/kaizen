@@ -31,19 +31,21 @@ fn ts_ms() -> u64 {
         .as_millis() as u64
 }
 
-fn backup_path(ws: &Path, filename: &str) -> PathBuf {
-    ws.join(format!(".kaizen/backup/{}.{}.bak", filename, ts_ms()))
+fn backup_path(ws: &Path, filename: &str) -> Result<PathBuf> {
+    let dir = crate::core::paths::project_data_dir(ws)?.join("backup");
+    std::fs::create_dir_all(&dir)?;
+    Ok(dir.join(format!("{}.{}.bak", filename, ts_ms())))
 }
 
 fn ensure_config(out: &mut String, ws: &Path) -> Result<()> {
-    let path = ws.join(".kaizen/config.toml");
+    let data_dir = crate::core::paths::project_data_dir(ws)?;
+    let path = data_dir.join("config.toml");
     if path.exists() {
-        writeln!(out, "  skipped  .kaizen/config.toml").unwrap();
+        writeln!(out, "  skipped  config.toml (project data dir)").unwrap();
         return Ok(());
     }
-    std::fs::create_dir_all(ws.join(".kaizen"))?;
     std::fs::write(&path, CONFIG_TOML)?;
-    writeln!(out, "  created  .kaizen/config.toml").unwrap();
+    writeln!(out, "  created  {}", path.display()).unwrap();
     Ok(())
 }
 
@@ -107,8 +109,7 @@ fn patch_cursor_hooks(out: &mut String, ws: &Path) -> Result<()> {
         writeln!(out, "  skipped  .cursor/hooks.json").unwrap();
         return Ok(());
     }
-    let bak = backup_path(ws, "cursor_hooks");
-    std::fs::create_dir_all(bak.parent().unwrap())?;
+    let bak = backup_path(ws, "cursor_hooks")?;
     std::fs::copy(&path, &bak)?;
     if let Some(obj) = root.pointer_mut("/hooks").and_then(|v| v.as_object_mut()) {
         for event in CURSOR_HOOK_EVENTS {
@@ -216,8 +217,7 @@ fn patch_claude_settings(out: &mut String, ws: &Path) -> Result<()> {
         .unwrap();
         return Ok(());
     }
-    let bak = backup_path(ws, "claude_settings");
-    std::fs::create_dir_all(bak.parent().unwrap())?;
+    let bak = backup_path(ws, "claude_settings")?;
     std::fs::copy(&path, &bak)?;
     std::fs::write(&path, serde_json::to_string_pretty(&obj)?)?;
     writeln!(
@@ -347,8 +347,7 @@ pub fn patch_openclaw_handlers(out: &mut String, ws: &Path) -> Result<()> {
             writeln!(out, "  skipped  ~/.openclaw/hooks/kaizen-events/handler.ts").unwrap();
             return Ok(());
         }
-        let bak = backup_path(ws, "openclaw_hook");
-        std::fs::create_dir_all(bak.parent().unwrap())?;
+        let bak = backup_path(ws, "openclaw_hook")?;
         std::fs::copy(&handler_path, &bak)?;
     }
     std::fs::create_dir_all(&hook_dir)?;
@@ -390,6 +389,22 @@ pub fn init_text(workspace: Option<&std::path::Path>) -> Result<String> {
         None => std::env::current_dir()?,
     };
     let mut out = String::new();
+    if let Ok(data_dir) = crate::core::paths::project_data_dir(&ws) {
+        match crate::core::migrate_home::migrate_legacy_in_repo(&ws, &data_dir) {
+            Ok(crate::core::migrate_home::MigrationOutcome::Migrated) => {
+                writeln!(out, "  migrated  .kaizen/ → {}", data_dir.display()).unwrap();
+            }
+            Ok(crate::core::migrate_home::MigrationOutcome::Conflict) => {
+                writeln!(
+                    out,
+                    "  warning  .kaizen/ and {} both non-empty — skipping auto-migration",
+                    data_dir.display()
+                )
+                .unwrap();
+            }
+            _ => {}
+        }
+    }
     ensure_config(&mut out, &ws)?;
     patch_cursor_hooks(&mut out, &ws)?;
     patch_claude_settings(&mut out, &ws)?;
@@ -426,6 +441,10 @@ pub fn init_text(workspace: Option<&std::path::Path>) -> Result<String> {
         "Agents: `kaizen mcp` exposes every command as MCP tools — see docs/mcp.md."
     )
     .unwrap();
+    if let Ok(data_dir) = crate::core::paths::project_data_dir(&ws) {
+        writeln!(out).unwrap();
+        writeln!(out, "Project data: {}", data_dir.display()).unwrap();
+    }
     Ok(out)
 }
 

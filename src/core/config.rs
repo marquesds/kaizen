@@ -548,21 +548,22 @@ pub struct Config {
     pub collect: CollectConfig,
 }
 
-/// Load config: workspace `.kaizen/config.toml` then `~/.kaizen/config.toml`.
+/// Load config: `~/.kaizen/projects/<slug>/config.toml` then `~/.kaizen/config.toml`.
 /// User config wins on overlap. Missing files → defaults, not error.
 pub fn load(workspace: &Path) -> Result<Config> {
-    let workspace_path = workspace.join(".kaizen/config.toml");
-    let user_path = home_dir()?.join(".kaizen/config.toml");
+    let project_cfg = crate::core::paths::project_data_dir(workspace)
+        .ok()
+        .map(|d| d.join("config.toml"));
+    let user_path = crate::core::paths::kaizen_dir()
+        .ok_or_else(|| anyhow::anyhow!("KAIZEN_HOME / HOME unset"))?
+        .join("config.toml");
 
-    let base = load_file(&workspace_path).unwrap_or_default();
+    let base = project_cfg
+        .as_deref()
+        .and_then(load_file)
+        .unwrap_or_default();
     let user = load_file(&user_path).unwrap_or_default();
     Ok(merge(base, user))
-}
-
-fn home_dir() -> Result<std::path::PathBuf> {
-    std::env::var("HOME")
-        .map(std::path::PathBuf::from)
-        .map_err(|e| anyhow::anyhow!("HOME not set: {e}"))
 }
 
 fn load_file(path: &Path) -> Option<Config> {
@@ -1027,22 +1028,28 @@ mod tests {
 
     #[test]
     fn workspace_config_loaded() {
-        let dir = TempDir::new().unwrap();
-        std::fs::create_dir_all(dir.path().join(".kaizen")).unwrap();
-        let mut f = std::fs::File::create(dir.path().join(".kaizen/config.toml")).unwrap();
+        let _guard = crate::core::paths::test_lock::global().lock().unwrap();
+        let home = TempDir::new().unwrap();
+        let ws = TempDir::new().unwrap();
+        unsafe { std::env::set_var("KAIZEN_HOME", home.path()) };
+        let data_dir = crate::core::paths::project_data_dir(ws.path()).unwrap();
+        let mut f = std::fs::File::create(data_dir.join("config.toml")).unwrap();
         writeln!(f, "[scan]\nroots = [\"/custom/root\"]").unwrap();
-
-        let cfg = load(dir.path()).unwrap();
+        let cfg = load(ws.path()).unwrap();
+        unsafe { std::env::remove_var("KAIZEN_HOME") };
         assert_eq!(cfg.scan.roots, vec!["/custom/root"]);
     }
 
     #[test]
     fn invalid_toml_ignored() {
-        let dir = TempDir::new().unwrap();
-        std::fs::create_dir_all(dir.path().join(".kaizen")).unwrap();
-        std::fs::write(dir.path().join(".kaizen/config.toml"), "not valid toml :::").unwrap();
-
-        let cfg = load(dir.path()).unwrap();
+        let _guard = crate::core::paths::test_lock::global().lock().unwrap();
+        let home = TempDir::new().unwrap();
+        let ws = TempDir::new().unwrap();
+        unsafe { std::env::set_var("KAIZEN_HOME", home.path()) };
+        let data_dir = crate::core::paths::project_data_dir(ws.path()).unwrap();
+        std::fs::write(data_dir.join("config.toml"), "not valid toml :::").unwrap();
+        let cfg = load(ws.path()).unwrap();
+        unsafe { std::env::remove_var("KAIZEN_HOME") };
         assert_eq!(cfg.scan.roots, ScanConfig::default().roots);
     }
 
@@ -1231,8 +1238,11 @@ mod tests {
 
     #[test]
     fn toml_telemetry_query_roundtrip() {
-        let dir = TempDir::new().unwrap();
-        std::fs::create_dir_all(dir.path().join(".kaizen")).unwrap();
+        let _guard = crate::core::paths::test_lock::global().lock().unwrap();
+        let home = TempDir::new().unwrap();
+        let ws = TempDir::new().unwrap();
+        unsafe { std::env::set_var("KAIZEN_HOME", home.path()) };
+        let data_dir = crate::core::paths::project_data_dir(ws.path()).unwrap();
         let toml = r#"
 [telemetry.query]
 provider = "datadog"
@@ -1242,8 +1252,9 @@ cache_ttl_seconds = 1800
 team = true
 branch = true
 "#;
-        std::fs::write(dir.path().join(".kaizen/config.toml"), toml).unwrap();
-        let cfg = load(dir.path()).unwrap();
+        std::fs::write(data_dir.join("config.toml"), toml).unwrap();
+        let cfg = load(ws.path()).unwrap();
+        unsafe { std::env::remove_var("KAIZEN_HOME") };
         assert_eq!(cfg.telemetry.query.provider, QueryAuthority::Datadog);
         assert_eq!(cfg.telemetry.query.cache_ttl_seconds, 1800);
         assert!(cfg.telemetry.query.identity_allowlist.team);
