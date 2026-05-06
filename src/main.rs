@@ -216,6 +216,9 @@ enum Command {
     /// Model Context Protocol server (stdio) — see docs/mcp.md.
     #[command(next_help_heading = "Integrations")]
     Mcp,
+    /// Upgrade kaizen to the latest release.
+    #[command(next_help_heading = "Operate")]
+    Upgrade,
     /// Print shell completion script to stdout; redirect or eval to install.
     #[command(next_help_heading = "Shell")]
     Completions {
@@ -1018,6 +1021,7 @@ fn main() -> anyhow::Result<()> {
             source,
         ),
         Command::Exp { subcmd } => dispatch_exp(subcmd),
+        Command::Upgrade => kaizen::shell::upgrade::cmd_upgrade(),
         Command::Mcp => {
             // Requires multi-threaded runtime (rmcp + spawn_blocking in tools)
             let rt = tokio::runtime::Builder::new_multi_thread()

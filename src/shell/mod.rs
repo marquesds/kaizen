@@ -25,3 +25,4 @@ pub mod search;
 pub mod sync;
 pub mod telemetry;
 pub mod telemetry_tail;
+pub mod upgrade;
