@@ -172,7 +172,7 @@ jobs:
           fi
       - name: Update Cargo.lock
         if: steps.bump.outputs.bumped == 'true'
-        run: cargo metadata --locked --format-version 1 >/dev/null 2>&1 && cargo build || true
+        run: cargo generate-lockfile
       - name: Commit version bump
         if: steps.bump.outputs.bumped == 'true'
         run: |
