@@ -116,6 +116,10 @@ name = "init_setup"
 path = "tests/spec/init_setup.rs"
 
 [[test]]
+name = "project_lookup"
+path = "tests/spec/project_lookup.rs"
+
+[[test]]
 name = "experiment_lifecycle"
 path = "tests/spec/experiment_lifecycle.rs"
 
@@ -282,6 +286,7 @@ clap_complete = "4"
 indicatif = "0.18"
 arboard = "3"
 anyhow = "1"
+tempfile = "3"
 rusqlite = { version = "0.39", features = ["bundled"] }
 rand = { version = "0.10", features = ["std_rng"] }
 tokio = { version = "1", features = ["full"] }
@@ -328,7 +333,6 @@ quint-connect = "0.1"
 itf = "0.4"
 proptest = "1"
 rmcp = { version = "1", features = ["server", "client", "transport-io", "schemars", "macros"] }
-tempfile = "3"
 tower = { version = "0.5", features = ["util"] }
 
 [patch.crates-io]

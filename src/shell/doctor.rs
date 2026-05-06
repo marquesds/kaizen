@@ -158,39 +158,49 @@ pub fn doctor_text(workspace: Option<&Path>) -> Result<(i32, String)> {
     match &cursor {
         Ok(None) => writeln!(
             &mut out,
-            "hooks: .cursor/hooks.json — absent (run `kaizen init` to wire Cursor)"
+            "hooks: ~/.cursor/hooks.json — absent (run `kaizen init` to wire Cursor)"
         )
         .unwrap(),
         Ok(Some(true)) => writeln!(
             &mut out,
-            "hooks: .cursor/hooks.json — kaizen command on all events"
+            "hooks: ~/.cursor/hooks.json — kaizen command on all events"
         )
         .unwrap(),
         Ok(Some(false)) => {
-            writeln!(&mut out, "hooks: .cursor/hooks.json — present but not fully wired to kaizen (run: kaizen init)").unwrap();
+            writeln!(&mut out, "hooks: ~/.cursor/hooks.json — present but not fully wired to kaizen (run: kaizen init)").unwrap();
         }
-        Err(e) => writeln!(&mut out, "hooks: .cursor/hooks.json — read error: {e}").unwrap(),
+        Err(e) => writeln!(&mut out, "hooks: ~/.cursor/hooks.json — read error: {e}").unwrap(),
     }
     let claude = init::claude_kaizen_hook_wiring(&ws);
     match &claude {
         Ok(None) => writeln!(
             &mut out,
-            "hooks: .claude/settings.json — absent (run `kaizen init` to wire Claude Code)"
+            "hooks: ~/.claude/settings.json — absent (run `kaizen init` to wire Claude Code)"
         )
         .unwrap(),
         Ok(Some(true)) => writeln!(
             &mut out,
-            "hooks: .claude/settings.json — kaizen hooks on all events"
+            "hooks: ~/.claude/settings.json — kaizen hooks on all events"
         )
         .unwrap(),
         Ok(Some(false)) => {
             writeln!(
                 &mut out,
-                "hooks: .claude/settings.json — present but not fully wired (run: kaizen init)"
+                "hooks: ~/.claude/settings.json — present but not fully wired (run: kaizen init)"
             )
             .unwrap();
         }
-        Err(e) => writeln!(&mut out, "hooks: .claude/settings.json — read error: {e}").unwrap(),
+        Err(e) => {
+            writeln!(&mut out, "hooks: ~/.claude/settings.json — read error: {e}").unwrap();
+        }
+    }
+    for path in init::detect_legacy_wiring(&ws) {
+        writeln!(
+            &mut out,
+            "hooks: legacy local wiring at {} — safe to remove (kaizen now wires globally)",
+            path.display()
+        )
+        .unwrap();
     }
     let openclaw = init::openclaw_kaizen_hook_wiring(&ws);
     match &openclaw {

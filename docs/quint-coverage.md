@@ -11,7 +11,8 @@ When to add or extend a spec: see [`.cursor/rules/quint-before-code.mdc`](../.cu
 | [`specs/ingest-idempotency.qnt`](../specs/ingest-idempotency.qnt) | `tests/spec/ingest_idempotency.rs` | ingest |
 | [`specs/hook-ingest.qnt`](../specs/hook-ingest.qnt) | `tests/spec/hook_ingest.rs` | ingest hook |
 | [`specs/session-lifecycle.qnt`](../specs/session-lifecycle.qnt) | `tests/spec/session_lifecycle.rs` | session states (abstract) |
-| [`specs/init-setup.qnt`](../specs/init-setup.qnt) | `tests/spec/init_setup.rs` | `init` |
+| [`specs/init-setup.qnt`](../specs/init-setup.qnt) | `tests/spec/init_setup.rs` | `init` (global wiring, legacy-local detection) |
+| [`specs/project-lookup.qnt`](../specs/project-lookup.qnt) | `tests/spec/project_lookup.rs` | `--project` / `kaizen projects list` resolution |
 | [`specs/retention.qnt`](../specs/retention.qnt) | `tests/spec/retention.rs` | tier aging |
 | [`specs/event-log-hot.qnt`](../specs/event-log-hot.qnt) | unit tests in `src/store/hot_log.rs` | hot log append, replay, index |
 | [`specs/sync-backpressure.qnt`](../specs/sync-backpressure.qnt) | `tests/spec/sync_backpressure.rs` | sync |
@@ -52,7 +53,7 @@ When to add or extend a spec: see [`.cursor/rules/quint-before-code.mdc`](../.cu
 | [`specs/search.qnt`](../specs/search.qnt) | `tests/spec/search.rs` | Phase 5 — search lifecycle: append/commit/reindex/delete/fallback parity |
 | [`specs/upgrade.qnt`](../specs/upgrade.qnt) | `tests/spec/upgrade.rs` | `upgrade` — install-method detection → single subprocess dispatch; no-spawn-without-method invariant |
 
-**Hook / init models:** [`hook-ingest.qnt`](../specs/hook-ingest.qnt) treats `codex`, `copilot-cli`, and `openclaw` as known hook sources alongside `cursor` and `claude`. [`init-setup.qnt`](../specs/init-setup.qnt) includes five hook-host slots (added `openclaw`); runtime `kaizen init` patches Cursor, Claude Code, and OpenClaw.
+**Hook / init models:** [`hook-ingest.qnt`](../specs/hook-ingest.qnt) treats `codex`, `copilot-cli`, and `openclaw` as known hook sources alongside `cursor` and `claude`. [`init-setup.qnt`](../specs/init-setup.qnt) includes five hook-host slots (added `openclaw`); models user-global wiring and `legacy_cursor_local`/`legacy_claude_local` detection invariants; runtime `kaizen init` patches Cursor, Claude Code, and OpenClaw. [`project-lookup.qnt`](../specs/project-lookup.qnt) models `resolve_project_name` — three outcome states (Found, NotFound, Ambiguous) with bijective invariants.
 
 ## Integration tests without `quint-connect`
 

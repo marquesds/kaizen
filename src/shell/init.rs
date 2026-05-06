@@ -81,7 +81,11 @@ fn cursor_hook_exists(root: &serde_json::Value, event: &str) -> bool {
 }
 
 fn patch_cursor_hooks(out: &mut String, ws: &Path) -> Result<()> {
-    let path = ws.join(".cursor/hooks.json");
+    let Some(cursor_dir) = cursor_user_dir() else {
+        writeln!(out, "  skipped  ~/.cursor/hooks.json (HOME unset)").unwrap();
+        return Ok(());
+    };
+    let path = cursor_dir.join("hooks.json");
     if !path.exists() {
         std::fs::create_dir_all(path.parent().unwrap())?;
         let mut obj = serde_json::Map::new();
@@ -93,20 +97,20 @@ fn patch_cursor_hooks(out: &mut String, ws: &Path) -> Result<()> {
             );
         }
         obj.insert("hooks".to_string(), serde_json::Value::Object(hooks));
-        std::fs::write(&path, serde_json::to_string_pretty(&obj)?)?;
-        writeln!(out, "  created  .cursor/hooks.json").unwrap();
+        write_atomic(&path, &serde_json::to_string_pretty(&obj)?)?;
+        writeln!(out, "  created  ~/.cursor/hooks.json").unwrap();
         return Ok(());
     }
     let raw = std::fs::read_to_string(&path)?;
     let mut root: serde_json::Value = match serde_json::from_str(&raw) {
         Ok(v) => v,
         Err(e) => {
-            writeln!(out, "  error  .cursor/hooks.json: {e}").unwrap();
-            anyhow::bail!("malformed .cursor/hooks.json: {e}");
+            writeln!(out, "  error  ~/.cursor/hooks.json: {e}").unwrap();
+            anyhow::bail!("malformed ~/.cursor/hooks.json: {e}");
         }
     };
     if cursor_hooks_done(&root) {
-        writeln!(out, "  skipped  .cursor/hooks.json").unwrap();
+        writeln!(out, "  skipped  ~/.cursor/hooks.json").unwrap();
         return Ok(());
     }
     let bak = backup_path(ws, "cursor_hooks")?;
@@ -131,8 +135,12 @@ fn patch_cursor_hooks(out: &mut String, ws: &Path) -> Result<()> {
             }
         }
     }
-    std::fs::write(&path, serde_json::to_string_pretty(&root)?)?;
-    writeln!(out, "  patched  .cursor/hooks.json  (+session/tool hooks)").unwrap();
+    write_atomic(&path, &serde_json::to_string_pretty(&root)?)?;
+    writeln!(
+        out,
+        "  patched  ~/.cursor/hooks.json  (+session/tool hooks)"
+    )
+    .unwrap();
     Ok(())
 }
 
@@ -151,7 +159,11 @@ fn entry_has_kaizen_cmd(entry: &serde_json::Value) -> bool {
 }
 
 fn patch_claude_settings(out: &mut String, ws: &Path) -> Result<()> {
-    let path = ws.join(".claude/settings.json");
+    let Some(claude_dir) = claude_user_dir() else {
+        writeln!(out, "  skipped  ~/.claude/settings.json (HOME unset)").unwrap();
+        return Ok(());
+    };
+    let path = claude_dir.join("settings.json");
     if !path.exists() {
         std::fs::create_dir_all(path.parent().unwrap())?;
         let mut obj = serde_json::Map::new();
@@ -165,16 +177,16 @@ fn patch_claude_settings(out: &mut String, ws: &Path) -> Result<()> {
             );
         }
         obj.insert("hooks".to_string(), serde_json::Value::Object(hooks));
-        std::fs::write(&path, serde_json::to_string_pretty(&obj)?)?;
-        writeln!(out, "  created  .claude/settings.json").unwrap();
+        write_atomic(&path, &serde_json::to_string_pretty(&obj)?)?;
+        writeln!(out, "  created  ~/.claude/settings.json").unwrap();
         return Ok(());
     }
     let raw = std::fs::read_to_string(&path)?;
     let mut obj: serde_json::Map<String, serde_json::Value> = match serde_json::from_str(&raw) {
         Ok(v) => v,
         Err(e) => {
-            writeln!(out, "  error  .claude/settings.json: {e}").unwrap();
-            anyhow::bail!("malformed .claude/settings.json: {e}");
+            writeln!(out, "  error  ~/.claude/settings.json: {e}").unwrap();
+            anyhow::bail!("malformed ~/.claude/settings.json: {e}");
         }
     };
     let hooks = obj.entry("hooks").or_insert_with(|| serde_json::json!({}));
@@ -212,25 +224,29 @@ fn patch_claude_settings(out: &mut String, ws: &Path) -> Result<()> {
     if !changed {
         writeln!(
             out,
-            "  skipped  .claude/settings.json  (already configured)"
+            "  skipped  ~/.claude/settings.json  (already configured)"
         )
         .unwrap();
         return Ok(());
     }
     let bak = backup_path(ws, "claude_settings")?;
     std::fs::copy(&path, &bak)?;
-    std::fs::write(&path, serde_json::to_string_pretty(&obj)?)?;
+    write_atomic(&path, &serde_json::to_string_pretty(&obj)?)?;
     writeln!(
         out,
-        "  patched  .claude/settings.json  (+session/tool hooks)"
+        "  patched  ~/.claude/settings.json  (+session/tool hooks)"
     )
     .unwrap();
     Ok(())
 }
 
-/// Read-only: `.cursor/hooks.json` missing, valid JSON with full kaizen wiring, or not.
+/// Read-only: `~/.cursor/hooks.json` missing, valid JSON with full kaizen wiring, or not.
 pub fn cursor_kaizen_hook_wiring(ws: &Path) -> Result<Option<bool>, String> {
-    let path = ws.join(".cursor/hooks.json");
+    let _ = ws;
+    let Some(cursor_dir) = cursor_user_dir() else {
+        return Ok(None);
+    };
+    let path = cursor_dir.join("hooks.json");
     if !path.exists() {
         return Ok(None);
     }
@@ -239,9 +255,13 @@ pub fn cursor_kaizen_hook_wiring(ws: &Path) -> Result<Option<bool>, String> {
     Ok(Some(cursor_hooks_done(&root)))
 }
 
-/// Read-only: `.claude/settings.json` hooks all reference kaizen (same as post-patch `entry_has_kaizen_cmd`).
+/// Read-only: `~/.claude/settings.json` hooks all reference kaizen (same as post-patch `entry_has_kaizen_cmd`).
 pub fn claude_kaizen_hook_wiring(ws: &Path) -> Result<Option<bool>, String> {
-    let path = ws.join(".claude/settings.json");
+    let _ = ws;
+    let Some(claude_dir) = claude_user_dir() else {
+        return Ok(None);
+    };
+    let path = claude_dir.join("settings.json");
     if !path.exists() {
         return Ok(None);
     }
@@ -262,33 +282,71 @@ pub fn claude_kaizen_hook_wiring(ws: &Path) -> Result<Option<bool>, String> {
     Ok(Some(true))
 }
 
+/// Returns any workspace-local files that still contain kaizen wiring (legacy from pre-global init).
+pub fn detect_legacy_wiring(ws: &Path) -> Vec<PathBuf> {
+    let mut found = Vec::new();
+    let cursor_local = ws.join(".cursor/hooks.json");
+    if cursor_local.exists()
+        && let Ok(raw) = std::fs::read_to_string(&cursor_local)
+        && raw.contains(KAIZEN_CURSOR_HOOK_CMD)
+    {
+        found.push(cursor_local);
+    }
+    let claude_local = ws.join(".claude/settings.json");
+    if claude_local.exists()
+        && let Ok(raw) = std::fs::read_to_string(&claude_local)
+        && raw.contains(KAIZEN_CLAUDE_HOOK_CMD)
+    {
+        found.push(claude_local);
+    }
+    found
+}
+
 fn write_eval_skill(out: &mut String, ws: &Path) -> Result<()> {
-    let path = ws.join(".cursor/skills/kaizen-eval/SKILL.md");
+    let Some(cursor_dir) = cursor_user_dir() else {
+        writeln!(
+            out,
+            "  skipped  ~/.cursor/skills/kaizen-eval/SKILL.md (HOME unset)"
+        )
+        .unwrap();
+        return Ok(());
+    };
+    let path = cursor_dir.join("skills/kaizen-eval/SKILL.md");
+    let _ = ws;
     std::fs::create_dir_all(path.parent().unwrap())?;
     if path.exists() {
         let existing = std::fs::read_to_string(&path)?;
         if !existing.contains("placeholder") && !existing.trim().is_empty() {
-            writeln!(out, "  skipped  .cursor/skills/kaizen-eval/SKILL.md").unwrap();
+            writeln!(out, "  skipped  ~/.cursor/skills/kaizen-eval/SKILL.md").unwrap();
             return Ok(());
         }
     }
     std::fs::write(&path, KAIZEN_EVAL_SKILL)?;
-    writeln!(out, "  wrote  .cursor/skills/kaizen-eval/SKILL.md").unwrap();
+    writeln!(out, "  wrote  ~/.cursor/skills/kaizen-eval/SKILL.md").unwrap();
     Ok(())
 }
 
 fn write_skill(out: &mut String, ws: &Path) -> Result<()> {
-    let path = ws.join(".cursor/skills/kaizen-retro/SKILL.md");
+    let Some(cursor_dir) = cursor_user_dir() else {
+        writeln!(
+            out,
+            "  skipped  ~/.cursor/skills/kaizen-retro/SKILL.md (HOME unset)"
+        )
+        .unwrap();
+        return Ok(());
+    };
+    let path = cursor_dir.join("skills/kaizen-retro/SKILL.md");
+    let _ = ws;
     std::fs::create_dir_all(path.parent().unwrap())?;
     if path.exists() {
         let existing = std::fs::read_to_string(&path)?;
         if !existing.contains("placeholder") && !existing.trim().is_empty() {
-            writeln!(out, "  skipped  .cursor/skills/kaizen-retro/SKILL.md").unwrap();
+            writeln!(out, "  skipped  ~/.cursor/skills/kaizen-retro/SKILL.md").unwrap();
             return Ok(());
         }
     }
     std::fs::write(&path, KAIZEN_RETRO_SKILL)?;
-    writeln!(out, "  wrote  .cursor/skills/kaizen-retro/SKILL.md").unwrap();
+    writeln!(out, "  wrote  ~/.cursor/skills/kaizen-retro/SKILL.md").unwrap();
     Ok(())
 }
 
@@ -321,6 +379,25 @@ export async function handler(event: Record<string, unknown>) {
 "#;
 
 const OPENCLAW_HOOK_MD: &str = "# kaizen-events\n\nCaptures OpenClaw sessions for kaizen.\n";
+
+fn cursor_user_dir() -> Option<PathBuf> {
+    std::env::var("HOME")
+        .ok()
+        .map(|h| PathBuf::from(h).join(".cursor"))
+}
+
+fn claude_user_dir() -> Option<PathBuf> {
+    std::env::var("HOME")
+        .ok()
+        .map(|h| PathBuf::from(h).join(".claude"))
+}
+
+fn write_atomic(path: &Path, content: &str) -> Result<()> {
+    let mut tmp = tempfile::NamedTempFile::new_in(path.parent().unwrap())?;
+    std::io::Write::write_all(&mut tmp, content.as_bytes())?;
+    tmp.persist(path)?;
+    Ok(())
+}
 
 fn openclaw_hooks_dir() -> Option<PathBuf> {
     std::env::var("HOME")

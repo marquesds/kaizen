@@ -789,6 +789,27 @@ pub(crate) fn workspace_path(workspace: Option<&Path>) -> Result<PathBuf> {
     crate::core::workspace::resolve(workspace)
 }
 
+/// Resolve workspace from `--workspace` or `--project` (mutually exclusive at clap level).
+///
+/// Returns `(canonical_path, how_it_was_selected)`.
+pub fn resolve_target(
+    workspace: Option<&Path>,
+    project: Option<&str>,
+) -> Result<(PathBuf, crate::shell::scope::ScopeOrigin)> {
+    use crate::shell::scope::ScopeOrigin;
+    if let Some(name) = project {
+        let path = crate::core::workspace::resolve_project_name(name)?;
+        return Ok((path, ScopeOrigin::ExplicitProject(name.to_owned())));
+    }
+    let path = crate::core::workspace::resolve(workspace)?;
+    let origin = if workspace.is_some() {
+        ScopeOrigin::ExplicitWorkspace
+    } else {
+        ScopeOrigin::Cwd
+    };
+    Ok((path, origin))
+}
+
 /// Convert workspace path string to cursor project slug.
 pub(crate) fn workspace_slug(ws: &str) -> String {
     crate::core::paths::workspace_slug(std::path::Path::new(ws))

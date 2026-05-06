@@ -14,6 +14,7 @@ pub mod kaizen_child;
 pub mod metrics;
 pub mod migrate;
 pub mod outcomes_cmd;
+pub mod projects;
 pub mod prompt;
 pub mod proxy;
 pub mod remote_observe;

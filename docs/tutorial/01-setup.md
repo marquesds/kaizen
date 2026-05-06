@@ -6,18 +6,17 @@ You need the `kaizen` binary on your `PATH` and a **project directory** where yo
 
 ## Why init first
 
-Kaizen does not replace your agent. It **observes** it: transcript files on disk, optional **hooks** for lower-latency events, and (later) an optional HTTP proxy. `kaizen init` is the one command that prepares your repo so those paths exist and Cursor + Claude Code hooks point at `kaizen ingest hook`.
+Kaizen does not replace your agent. It **observes** it: transcript files on disk, optional **hooks** for lower-latency events, and (later) an optional HTTP proxy. `kaizen init` is the one command that wires Cursor and Claude Code globally — it writes to `~/.cursor/hooks.json` and `~/.claude/settings.json` so every workspace is covered from a single run.
 
 ## Run init
 
-From **your** project root (not necessarily the Kaizen source tree):
+You can run `kaizen init` from any directory — once is enough for all workspaces:
 
 ```bash
-cd /path/to/your-project
 kaizen init
 ```
 
-You should see paths like `.kaizen/config.toml`, `.cursor/hooks.json`, `.claude/settings.json`, and `.cursor/skills/kaizen-retro/SKILL.md` described in the output. If files already existed, Kaizen may **skip** or **patch** idempotently; backups land under `.kaizen/backup/`.
+You should see paths like `~/.kaizen/projects/<slug>/config.toml`, `~/.cursor/hooks.json`, `~/.claude/settings.json`, and `~/.cursor/skills/kaizen-retro/SKILL.md` described in the output. If files already existed, Kaizen may **skip** or **patch** idempotently; backups land under `~/.kaizen/projects/<slug>/backup/`.
 
 **Insight:** Other agents (Codex, Goose, OpenCode, Copilot) are picked up via **transcript tail** configured under `~/.kaizen/config.toml` `[sources]` — not by extra files `init` writes today.
 
@@ -31,8 +30,23 @@ Use this after init or in CI. Exit code **1** means a hard problem (for example 
 
 ## Exercise
 
-1. Run `kaizen init` in a repo; list `.kaizen/` and confirm `config.toml` exists.
+1. Run `kaizen init` once; confirm `~/.cursor/hooks.json` and `~/.claude/settings.json` were written or patched.
 2. Run `kaizen doctor` and read the hook section.
-3. Optional: run a short agent session in that repo, then continue to [Part 2](02-observe.md).
+3. Run `kaizen projects list` to see your registered workspaces with their short names:
+
+   ```bash
+   kaizen projects list
+   # NAME        SLUG                                PATH
+   # my-app      Users-alice-Projects-my-app         /Users/alice/Projects/my-app
+   # kaizen      Users-alice-Projects-kaizen         /Users/alice/Projects/kaizen
+   ```
+
+   You can now use `--project <NAME>` from any directory:
+
+   ```bash
+   kaizen summary --project my-app
+   ```
+
+4. Optional: run a short agent session, then continue to [Part 2](02-observe.md).
 
 **Next:** [Part 2 — Observe](02-observe.md)
