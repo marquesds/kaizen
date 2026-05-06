@@ -63,10 +63,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: linux-stable
-      - uses: actions/cache@v4
-        with:
-          path: target/duckdb-download
-          key: duckdb-prebuilt-${{ runner.os }}-${{ runner.arch }}
       - run: cargo clippy --all-targets -- -D warnings
 
   doc:
@@ -112,11 +108,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.os }}-${{ matrix.rust }}
-      - uses: actions/cache@v4
-        with:
-          path: target/duckdb-download
-          key: duckdb-prebuilt-${{ runner.os }}-${{ runner.arch }}
-      - run: cargo test --all --locked
+      - run: cargo test --all --locked --features duckdb/bundled,duckdb/parquet
 
   audit:
     name: audit + deny
