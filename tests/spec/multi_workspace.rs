@@ -165,14 +165,11 @@ fn default_reads_skip_global_scan_until_refresh() -> anyhow::Result<()> {
     let ws = std::fs::canonicalize(ws)?;
     set_env("HOME", home.path());
     set_env("KAIZEN_HOME", home.path().join(".kaizen"));
-    let slug = ws
-        .to_string_lossy()
-        .trim_start_matches('/')
-        .replace('/', "-");
+    let cursor_slug = kaizen::core::paths::cursor_slug(&ws);
     let session = home
         .path()
         .join(".cursor/projects")
-        .join(slug)
+        .join(cursor_slug)
         .join("agent-transcripts/session-1");
     std::fs::create_dir_all(&session)?;
     std::fs::write(
