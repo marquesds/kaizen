@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Datadog Logs API exporter ([docs](https://docs.datadoghq.com/api/latest/logs/)).
 //!
-//! Architecture: pure JSON build + chunking in [`build`], HTTP POST in [`transport`]. The
-//! exporter is the seam: it expands a redacted batch, builds DD-shaped log objects with
+//! Architecture: pure JSON build + chunking in `build`, HTTP POST in `transport`. The
+//! exporter is the boundary: it expands a redacted batch, builds DD-shaped log objects with
 //! `timestamp` and `hostname`, chunks under DD's 1000-entry / 5 MB request caps, then fans
 //! the chunks to the intake.
 
