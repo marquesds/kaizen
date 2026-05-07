@@ -248,22 +248,46 @@ Contract: [ingest-contract.md](ingest-contract.md).
 
 ## `kaizen telemetry`
 
-Pluggable sinks receive the same redacted batches as Kaizen sync. Use **`type = "file"`** to append one summary JSON line per batch to **`~/.kaizen/projects/<slug>/telemetry.ndjson`** (optional `path` override); PostHog, Datadog, OTLP, and `dev` are optional and may need Cargo build features. Configure `[[telemetry.exporters]]` in `~/.kaizen/config.toml`; see [config.md](config.md#telemetry).
+Pluggable sinks receive the same redacted batches as Kaizen sync. The default Cargo build ships PostHog, Datadog, and OTLP exporters; `dev` tracing stays opt-in (`--features telemetry-dev`). The **`file`** sink appends one summary JSON line per batch to **`~/.kaizen/projects/<slug>/telemetry.ndjson`** (optional `path` override). `[[telemetry.exporters]]` in `~/.kaizen/config.toml` is the configuration surface; see [config.md](config.md#telemetry).
+
+`kaizen telemetry configure` is a **validating wizard**: it resolves credentials from the matching env vars or `--api-key` / `--site` / `--host` / `--endpoint` flags, runs a live `health` check against the provider, and only writes the TOML row when the check succeeds. For Datadog the wizard also rejects `ddapp_*` Application Keys before the network call (only the 32-hex-char API Key works for `DD-API-KEY`). When the resolved provider is `datadog` or `posthog`, the wizard idempotently sets `[telemetry.query].provider` so `pull` works without further config; an existing `[telemetry.query]` table is left alone. Re-running for the same exporter type is a no-op (no duplicate row). With `--non-interactive` it never prompts and fails on any missing value.
+
+`kaizen telemetry test` sends one synthetic redacted event to every configured sink and reports per-exporter ok/fail. Telemetry-only flows (`push`, `test`) auto-generate `~/.kaizen/local_salt.hex` (`chmod 0o600`) when `[sync].team_salt_hex` is empty, so you do not need a Kaizen account to fan out to third-party providers.
+
+`kaizen telemetry pull` is implemented for Datadog (Logs Search v2). It reads `DD_API_KEY` from the matching `[[telemetry.exporters]]` row first (no need to also export it as env if `configure` already wrote it) and falls back to `DD_API_KEY` / `DD_SITE` env. `DD_APP_KEY` is env-only (DD Application Keys are user-scoped; we deliberately do not persist them in TOML). PostHog pull is still a stub; OTLP is export-only by design.
 
 ```bash
-kaizen telemetry configure                # append an exporter template (interactive)
-kaizen telemetry configure --type file --path telemetry.ndjson  # noninteractive file sink
-kaizen telemetry print-effective-config  # redacted: which fields resolve from env vs TOML
-kaizen telemetry push                     # replay SQLite events through exporters (no Kaizen POST)
-kaizen telemetry tail                    # read NDJSON from the file exporter (default path above)
-kaizen telemetry tail --no-follow        # print the file once and exit; missing default file is empty
-kaizen telemetry tail --file /tmp/t.ndjson  # path (absolute or relative to workspace)
-kaizen telemetry tail --json            # pretty-print each JSON line
+# Validating wizard. Reads DD_API_KEY/DD_SITE (or prompts), runs /api/v1/validate, then writes.
+kaizen telemetry configure --type datadog --site us5.datadoghq.com --non-interactive
+
+# Same for PostHog; reads POSTHOG_API_KEY/POSTHOG_HOST (or prompts) and pings the host.
+kaizen telemetry configure --type posthog --host https://us.i.posthog.com --non-interactive
+
+# File or OTLP sinks (no provider credential prompt).
+kaizen telemetry configure --type file --path telemetry.ndjson
+kaizen telemetry configure --type otlp --endpoint http://127.0.0.1:4318
+
+# Send one synthetic event to every configured sink (per-sink ok/fail report).
+kaizen telemetry test
+
+# Inspect resolution and provider health.
+kaizen telemetry print-effective-config   # redacted: which fields resolve from env vs TOML
+kaizen telemetry doctor                   # call provider health, show query authority
+kaizen telemetry pull --days 1            # one Logs Search page; needs DD_APP_KEY for DD
+
+# Replay SQLite events through every configured exporter (no Kaizen POST).
+kaizen telemetry push
+
+# NDJSON file sink helpers.
+kaizen telemetry tail                       # read NDJSON from the file exporter (default path)
+kaizen telemetry tail --no-follow           # print once and exit; missing default file is empty
+kaizen telemetry tail --file /tmp/t.ndjson  # absolute or relative to workspace
+kaizen telemetry tail --json                # pretty-print each JSON line
 ```
 
 ## `kaizen mcp`
 
-Model Context Protocol server over stdio — **most** CLI workflows are available as MCP tools so agents (Cursor, Claude Code, Goose, OpenCode, Copilot, and so on) can query Kaizen without shelling. **CLI-only today:** `doctor`, `guidance`, `gc`, `completions`, `proxy run`, and all `kaizen telemetry` subcommands — run those from a real shell. Host config and tool list: [mcp.md](mcp.md).
+Model Context Protocol server over stdio — **most** CLI workflows are available as MCP tools so agents (Cursor, Claude Code, Goose, OpenCode, Copilot, and so on) can query Kaizen without shelling. **CLI-only today:** `doctor`, `guidance`, `gc`, `completions`, `proxy run`, and all `kaizen telemetry` subcommands (including the new `configure` wizard, `test`, and Datadog `pull`) — run those from a real shell. Host config and tool list: [mcp.md](mcp.md).
 
 ## `kaizen exp`
 

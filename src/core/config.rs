@@ -180,6 +180,72 @@ pub fn try_team_salt(cfg: &SyncConfig) -> Option<[u8; 32]> {
     bytes.try_into().ok()
 }
 
+/// Resolve a 32-byte redaction salt for telemetry-only flows (push/test) when sync is not
+/// configured. Order: configured `[sync].team_salt_hex` → `<kaizen_home>/local_salt.hex`
+/// → freshly generated and persisted at `0o600`. Telemetry never blocks on cloud sync.
+pub fn effective_redaction_salt(
+    cfg: &SyncConfig,
+    kaizen_home: &std::path::Path,
+) -> Result<[u8; 32]> {
+    if let Some(s) = try_team_salt(cfg) {
+        return Ok(s);
+    }
+    let path = kaizen_home.join("local_salt.hex");
+    if let Some(s) = read_local_salt(&path)? {
+        return Ok(s);
+    }
+    let bytes = generate_local_salt();
+    write_local_salt(&path, &bytes)?;
+    Ok(bytes)
+}
+
+fn read_local_salt(path: &std::path::Path) -> Result<Option<[u8; 32]>> {
+    use std::io::ErrorKind;
+    match std::fs::read_to_string(path) {
+        Ok(s) => Ok(parse_salt_hex(s.trim())),
+        Err(e) if e.kind() == ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(e.into()),
+    }
+}
+
+fn parse_salt_hex(h: &str) -> Option<[u8; 32]> {
+    if h.len() != 64 {
+        return None;
+    }
+    hex::decode(h).ok()?.try_into().ok()
+}
+
+fn generate_local_salt() -> [u8; 32] {
+    use rand::Rng;
+    let mut bytes = [0u8; 32];
+    rand::rng().fill_bytes(&mut bytes);
+    bytes
+}
+
+fn write_local_salt(path: &std::path::Path, bytes: &[u8; 32]) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let hex_s = hex::encode(bytes);
+    std::fs::write(path, hex_s.as_bytes())?;
+    set_user_only_perms(path)?;
+    Ok(())
+}
+
+#[cfg(unix)]
+fn set_user_only_perms(path: &std::path::Path) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    let mut perms = std::fs::metadata(path)?.permissions();
+    perms.set_mode(0o600);
+    std::fs::set_permissions(path, perms)?;
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn set_user_only_perms(_path: &std::path::Path) -> Result<()> {
+    Ok(())
+}
+
 fn default_true() -> bool {
     true
 }
@@ -1024,6 +1090,39 @@ mod tests {
         assert_eq!(cfg.retention.hot_days, 30);
         assert_eq!(cfg.storage.cold_after_days, 7);
         assert_eq!(cfg.storage.hot_max_bytes_value(), 1_073_741_824);
+    }
+
+    #[test]
+    fn effective_redaction_salt_prefers_configured_team_salt() {
+        let home = TempDir::new().unwrap();
+        let sync = SyncConfig {
+            team_salt_hex: "ab".repeat(32),
+            ..Default::default()
+        };
+        let salt = effective_redaction_salt(&sync, home.path()).unwrap();
+        assert_eq!(salt, [0xab_u8; 32]);
+        // No local file written when team salt was sufficient.
+        assert!(!home.path().join("local_salt.hex").exists());
+    }
+
+    #[test]
+    fn effective_redaction_salt_generates_and_persists_local_salt() {
+        let home = TempDir::new().unwrap();
+        let sync = SyncConfig::default();
+        let a = effective_redaction_salt(&sync, home.path()).unwrap();
+        let b = effective_redaction_salt(&sync, home.path()).unwrap();
+        assert_eq!(a, b, "second call must reuse the persisted local salt");
+        assert!(home.path().join("local_salt.hex").exists());
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(home.path().join("local_salt.hex"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777;
+            assert_eq!(mode, 0o600);
+        }
     }
 
     #[test]

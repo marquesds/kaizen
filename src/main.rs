@@ -481,7 +481,7 @@ enum TelemetrySubcommand {
     },
     /// Print JSON shapes for canonical telemetry items (see `sync::canonical`).
     PrintSchema,
-    /// Append `[[telemetry.exporters]]` template to `~/.kaizen/config.toml`.
+    /// Validating wizard: append a `[[telemetry.exporters]]` row after live `health` succeeds.
     Configure {
         #[arg(long)]
         workspace: Option<PathBuf>,
@@ -494,6 +494,29 @@ enum TelemetrySubcommand {
         /// File exporter path, absolute or relative to each workspace.
         #[arg(long)]
         path: Option<PathBuf>,
+        /// API key (DD_API_KEY for datadog, POSTHOG_API_KEY for posthog). Falls back to env.
+        #[arg(long)]
+        api_key: Option<String>,
+        /// Datadog site (e.g. `datadoghq.com`, `us5.datadoghq.com`). Falls back to DD_SITE.
+        #[arg(long)]
+        site: Option<String>,
+        /// PostHog host. Falls back to POSTHOG_HOST.
+        #[arg(long)]
+        host: Option<String>,
+        /// OTLP endpoint. Falls back to OTEL_EXPORTER_OTLP_ENDPOINT.
+        #[arg(long)]
+        endpoint: Option<String>,
+        /// Fail instead of prompting for missing values; for scripts and CI.
+        #[arg(long)]
+        non_interactive: bool,
+    },
+    /// Send one synthetic event to every configured `[[telemetry.exporters]]` and report ok/fail.
+    Test {
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
     },
     /// Redacted: merged telemetry exporter resolution (TOML + env).
     PrintEffectiveConfig {
@@ -1174,6 +1197,7 @@ fn main() -> anyhow::Result<()> {
                     kaizen::shell::telemetry::ConfigureOptions {
                         exporter_type: exporter_type.map(|t| t.as_str().to_string()),
                         path,
+                        ..Default::default()
                     },
                 )
             }
@@ -1212,6 +1236,11 @@ fn main() -> anyhow::Result<()> {
                 project,
                 exporter_type,
                 path,
+                api_key,
+                site,
+                host,
+                endpoint,
+                non_interactive,
             } => {
                 let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
                 kaizen::shell::telemetry::cmd_telemetry_configure(
@@ -1219,8 +1248,17 @@ fn main() -> anyhow::Result<()> {
                     kaizen::shell::telemetry::ConfigureOptions {
                         exporter_type: exporter_type.map(|t| t.as_str().to_string()),
                         path,
+                        api_key,
+                        site,
+                        host,
+                        endpoint,
+                        non_interactive,
                     },
                 )
+            }
+            TelemetrySubcommand::Test { workspace, project } => {
+                let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+                kaizen::shell::telemetry::cmd_telemetry_test(ws.as_deref())
             }
             TelemetrySubcommand::PrintEffectiveConfig { workspace, project } => {
                 let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;

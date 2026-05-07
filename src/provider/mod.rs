@@ -6,9 +6,9 @@ use serde_json::Value;
 use std::time::Duration;
 
 #[cfg(feature = "telemetry-datadog")]
-mod datadog;
+pub(crate) mod datadog;
 #[cfg(feature = "telemetry-posthog")]
-mod posthog;
+pub(crate) mod posthog;
 mod pull_import;
 
 /// Trailing time window for a pull (coarse; provider maps to its API).
@@ -44,18 +44,18 @@ pub trait TelemetryQueryProvider: Send + Sync {
 #[allow(dead_code)]
 const HTTP_TIMEOUT: Duration = Duration::from_secs(30);
 
-/// Build a `TelemetryQueryProvider` for the configured query authority, or `None` when pull is off.
+/// Build a `TelemetryQueryProvider` for the configured query authority, or `None` when pull
+/// is off. Resolves credentials from the matching `[[telemetry.exporters]]` row first, then
+/// env. This way `kaizen telemetry configure --type=datadog` is enough to drive `pull` —
+/// users do not have to *also* `export DD_API_KEY` in their shell.
 pub fn from_config(
-    q: &crate::core::config::TelemetryQueryConfig,
+    cfg: &crate::core::config::TelemetryConfig,
 ) -> Option<std::sync::Arc<dyn TelemetryQueryProvider>> {
     use crate::core::config::QueryAuthority;
-    match q.provider {
+    match cfg.query.provider {
         QueryAuthority::None => None,
         #[cfg(feature = "telemetry-posthog")]
-        QueryAuthority::Posthog => {
-            // Real impl needs host/key from env like exporters; minimal stub for compile.
-            posthog::posthog_from_env()
-        }
+        QueryAuthority::Posthog => posthog_provider(cfg),
         #[cfg(not(feature = "telemetry-posthog"))]
         QueryAuthority::Posthog => {
             tracing::warn!(
@@ -64,7 +64,7 @@ pub fn from_config(
             None
         }
         #[cfg(feature = "telemetry-datadog")]
-        QueryAuthority::Datadog => datadog::datadog_from_env(),
+        QueryAuthority::Datadog => datadog_provider(cfg),
         #[cfg(not(feature = "telemetry-datadog"))]
         QueryAuthority::Datadog => {
             tracing::warn!(
@@ -73,6 +73,36 @@ pub fn from_config(
             None
         }
     }
+}
+
+#[cfg(feature = "telemetry-datadog")]
+fn datadog_provider(
+    cfg: &crate::core::config::TelemetryConfig,
+) -> Option<std::sync::Arc<dyn TelemetryQueryProvider>> {
+    use crate::core::config::ExporterConfig;
+    let row = cfg
+        .exporters
+        .iter()
+        .find(|e| matches!(e, ExporterConfig::Datadog { .. }));
+    let resolved = row
+        .and_then(crate::telemetry::DatadogResolved::from_config)
+        .or_else(crate::telemetry::DatadogResolved::from_env_only)?;
+    Some(std::sync::Arc::new(datadog::DatadogQueryClient::new(&resolved)) as _)
+}
+
+#[cfg(feature = "telemetry-posthog")]
+fn posthog_provider(
+    cfg: &crate::core::config::TelemetryConfig,
+) -> Option<std::sync::Arc<dyn TelemetryQueryProvider>> {
+    use crate::core::config::ExporterConfig;
+    let row = cfg
+        .exporters
+        .iter()
+        .find(|e| matches!(e, ExporterConfig::PostHog { .. }));
+    let resolved = row
+        .and_then(crate::telemetry::PostHogResolved::from_config)
+        .or_else(crate::telemetry::PostHogResolved::from_env_only)?;
+    Some(std::sync::Arc::new(posthog::PostHogQueryClient::new(&resolved)) as _)
 }
 
 #[allow(dead_code)]

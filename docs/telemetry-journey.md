@@ -95,10 +95,38 @@ If these steps work, the full pipeline is alive in your environment: **collectio
 
 kaizen does not implement the model. It **observes** how an agent: requests tools, reads and edits files, and moves through your tree over time. **Tool spans** and **file facts** connect “what the agent did” to “where in the repo it mattered,” which is why retro and experiments can suggest repo-level changes (rules, skills, structure) with metrics grounded in your history. For experiment semantics, see [experiments.md](experiments.md).
 
+## Sending sessions to a third-party telemetry provider
+
+Once you have local sessions, you can fan them out to PostHog, Datadog, OTLP, or a local NDJSON file with the same redacted payload that Kaizen sync would post. The default Cargo build ships PostHog, Datadog, and OTLP exporters; `dev` tracing is opt-in. The end-to-end flow is:
+
+```bash
+# 1. Configure once — the wizard validates credentials with a live `health` call.
+export DD_API_KEY=...
+export DD_SITE=us5.datadoghq.com
+kaizen telemetry configure --type datadog --non-interactive
+
+# 2. Smoke-test the wiring with one synthetic event (per-sink ok/fail report).
+kaizen telemetry test
+
+# 3. Replay a window of stored sessions through every configured exporter (no Kaizen POST).
+kaizen telemetry push --days 7
+
+# 4. Inspect provider state.
+kaizen telemetry doctor
+kaizen telemetry pull --days 1   # Datadog Logs Search v2; requires DD_APP_KEY too
+```
+
+**No Kaizen account needed.** When `[sync].team_salt_hex` is empty, telemetry-only flows generate `~/.kaizen/local_salt.hex` (`chmod 0o600`) on first use and reuse it forever. The salt drives session/workspace id hashing and payload redaction the same way the team salt would.
+
+**Datadog credentials.** DD has two independent secrets and the wizard treats them differently. The **API Key** (32 hex chars, org-scoped, identifies the org) is required for log intake and gets persisted to `[[telemetry.exporters]]`; the wizard rejects `ddapp_*` Application Keys before the network round-trip because DD always 403s on that mistake. The **Application Key** (40 chars prefixed `ddapp_`, user-scoped) is only required for `kaizen telemetry pull` (Logs Search v2) and stays env-only via `DD_APP_KEY` — we deliberately do not persist user-scoped keys in TOML. Generate keys at Org Settings > API Keys and Personal Settings > Application Keys respectively.
+
+**Datadog log shape.** Each canonical item becomes one DD log object with top-level `timestamp`, `hostname`, `service: "kaizen"`, `ddsource: "kaizen"`, plus `agent`, `model`, `kind`, `tokens_in`, `tokens_out`, and friends promoted out of the payload so they drive DD facets. The full canonical item is nested under `kaizen` for users who want raw detail. Requests are chunked to respect DD's `1000` entries / ~5 MB caps; partial-chunk failures are logged with the chunk index.
+
 ## See also
 
 - [architecture.md](architecture.md) — module names and boundary list.
-- [config.md](config.md) — `~/.kaizen` vs workspace, tail sources, sync, proxy.
+- [config.md](config.md) — `~/.kaizen` vs workspace, tail sources, sync, proxy, telemetry exporters.
+- [usage.md#kaizen-telemetry](usage.md#kaizen-telemetry) — full CLI reference for the telemetry subcommands.
 - [../AGENTS.md](../AGENTS.md) — note on Cursor cost telemetry limitations.
 
 Long-form documentation is maintained in the **GitHub** tree under `docs/`. The [docs.rs](https://docs.rs/kaizen-cli) page documents the Rust library API for the published crate, not the full markdown book.
