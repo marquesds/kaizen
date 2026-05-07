@@ -8,7 +8,7 @@ mod file;
 mod resolve;
 
 #[cfg(feature = "telemetry-datadog")]
-mod datadog;
+pub mod datadog;
 #[cfg(feature = "telemetry-dev")]
 mod dev;
 #[cfg(feature = "telemetry-otlp")]
@@ -67,6 +67,24 @@ impl ExporterRegistry {
             }
         }
         Ok(())
+    }
+
+    /// Per-exporter names in registration order. Used by `kaizen telemetry test` for per-sink reporting.
+    pub fn exporter_names(&self) -> Vec<String> {
+        self.exporters
+            .iter()
+            .map(|e| e.name().to_string())
+            .collect()
+    }
+
+    /// Send `batch` to a single named exporter (first match). `Err` if no exporter has this name.
+    pub fn export_one(&self, name: &str, batch: &IngestExportBatch) -> Result<()> {
+        let exp = self
+            .exporters
+            .iter()
+            .find(|e| e.name() == name)
+            .ok_or_else(|| anyhow::anyhow!("no exporter named `{name}`"))?;
+        exp.export(batch)
     }
 }
 

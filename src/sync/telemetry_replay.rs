@@ -5,6 +5,7 @@
 use crate::core::config::SyncConfig;
 use crate::sync::export_batch::IngestExportBatch;
 use crate::sync::outbound::{EventsBatchBody, OutboundEvent};
+use crate::sync::smart::{OutboundToolSpan, ToolSpansBatchBody};
 use anyhow::Context;
 use anyhow::Result;
 
@@ -47,6 +48,53 @@ pub fn chunk_events_into_ingest_batches(
             team_id,
             workspace_hash,
             events: cur,
+        }));
+    }
+    Ok(batches)
+}
+
+/// Same packing rules as [`chunk_events_into_ingest_batches`] but over [`OutboundToolSpan`]
+/// rows. Keeps the per-batch limits identical so exporters see consistent shapes regardless
+/// of payload kind.
+pub fn chunk_tool_spans_into_ingest_batches(
+    team_id: String,
+    workspace_hash: String,
+    spans: Vec<OutboundToolSpan>,
+    cfg: &SyncConfig,
+) -> Result<Vec<IngestExportBatch>> {
+    let max_ev = cfg.events_per_batch_max.max(1);
+    let max_bytes = cfg.max_body_bytes;
+    let mut batches = Vec::new();
+    let mut cur: Vec<OutboundToolSpan> = Vec::new();
+    let mut bytes = 0usize;
+
+    for span in spans {
+        let inc =
+            serde_json::to_vec(&span).context("serialize outbound tool span for batch sizing")?;
+        if !cur.is_empty() && (cur.len() >= max_ev || bytes + inc.len() > max_bytes) {
+            batches.push(IngestExportBatch::ToolSpans(ToolSpansBatchBody {
+                team_id: team_id.clone(),
+                workspace_hash: workspace_hash.clone(),
+                spans: std::mem::take(&mut cur),
+            }));
+            bytes = 0;
+        }
+        cur.push(span);
+        bytes += inc.len();
+        if cur.len() >= max_ev {
+            batches.push(IngestExportBatch::ToolSpans(ToolSpansBatchBody {
+                team_id: team_id.clone(),
+                workspace_hash: workspace_hash.clone(),
+                spans: std::mem::take(&mut cur),
+            }));
+            bytes = 0;
+        }
+    }
+    if !cur.is_empty() {
+        batches.push(IngestExportBatch::ToolSpans(ToolSpansBatchBody {
+            team_id,
+            workspace_hash,
+            spans: cur,
         }));
     }
     Ok(batches)

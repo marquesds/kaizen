@@ -85,7 +85,7 @@ Tiered storage keeps recent rows in a hot append log, analytical history in Parq
 | `endpoint` | `""` | If empty, sync is disabled (no outbox flush) |
 | `team_token` | `""` | Bearer or team token (keep in user config, not in git) |
 | `team_id` | `""` | Team id for ingest |
-| `team_salt_hex` | `""` | 64 hex chars (32 bytes) for id hashing; prefer user config only |
+| `team_salt_hex` | `""` | 64 hex chars (32 bytes) for id hashing; prefer user config only. When unset, telemetry-only flows (`telemetry push`, `telemetry test`) auto-generate `~/.kaizen/local_salt.hex` (chmod `0o600`) and reuse it on subsequent runs so you do not need a Kaizen account to fan out to third-party sinks. |
 | `events_per_batch_max` | `500` | Max events per upload batch |
 | `max_body_bytes` | `1_000_000` | Max batch body size |
 | `flush_interval_ms` | `10_000` | Background flush interval |
@@ -97,7 +97,7 @@ Local HTTP forwarder for Anthropic-style APIs. Full key list, defaults, and `con
 
 ## `[telemetry]`
 
-Optional fan-out to local and third-party sinks: **`file`** (append-only NDJSON under the workspace), PostHog, Datadog, OTLP, or `dev` tracing, with the same redaction as Kaizen sync. The `file` sink needs no extra Cargo feature; others may (for example `telemetry-posthog`); see [Cargo features](../Cargo.toml) and [usage](usage.md#kaizen-telemetry).
+Optional fan-out to local and third-party sinks: **`file`** (append-only NDJSON under the workspace), PostHog, Datadog, OTLP, or `dev` tracing, with the same redaction as Kaizen sync. The default Cargo build now ships PostHog, Datadog, and OTLP support so `kaizen telemetry configure` works out of the box; the `dev` tracing sink stays opt-in behind `--features telemetry-dev`. See [Cargo features](../Cargo.toml) and [usage](usage.md#kaizen-telemetry).
 
 | Key | Default | Purpose |
 |-----|---------|--------|
@@ -126,7 +126,7 @@ When `true`, the corresponding field may be emitted in **cleartext** on outbound
 |------|-----------------|
 | file | (none) |
 | PostHog | `POSTHOG_API_KEY`, `POSTHOG_HOST` (or `KAIZEN_POSTHOG_*`) |
-| Datadog | `DD_API_KEY`, `DD_SITE` (or `KAIZEN_DD_*`) |
+| Datadog | `DD_API_KEY`, `DD_SITE` (or `KAIZEN_DD_*`); `DD_APP_KEY` is required for `kaizen telemetry pull` (Logs Search v2) |
 | OTLP | `OTEL_EXPORTER_OTLP_ENDPOINT` (or `KAIZEN_OTEL_EXPORTER_OTLP_ENDPOINT`) |
 
 Redacted effective resolution: `kaizen telemetry print-effective-config`. Implementation: `src/telemetry/resolve.rs`.

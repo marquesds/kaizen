@@ -264,9 +264,15 @@ name = "perf_read_report"
 path = "tests/perf/read_report.rs"
 
 [features]
-default = ["analytics-duckdb"]
+# Default ships the three production telemetry exporters so `kaizen telemetry configure`
+# works out of the box. `telemetry-dev` (file sink for local debugging) stays opt-in.
+default = [
+    "analytics-duckdb",
+    "telemetry-datadog",
+    "telemetry-posthog",
+    "telemetry-otlp",
+]
 analytics-duckdb = ["dep:duckdb", "duckdb/bundled", "duckdb/parquet"]
-# Optional fan-out targets (lean default build)
 telemetry-dev = []
 telemetry-posthog = []
 telemetry-datadog = []
@@ -327,6 +333,7 @@ arrow = { version = "58.1", default-features = false }
 parquet = { version = "58.1", default-features = false, features = ["arrow", "zstd"] }
 duckdb = { version = "1.10502.0", optional = true }
 tantivy = "0.26.1"
+gethostname = "1"
 
 [dev-dependencies]
 quint-connect = "0.1"

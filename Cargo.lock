@@ -2214,6 +2214,7 @@ dependencies = [
  "duckdb",
  "flate2",
  "fs4 1.1.0",
+ "gethostname",
  "graphqlite",
  "hex",
  "indicatif",

@@ -27,6 +27,12 @@ module telemetry_exporters {
   var import_window_open: bool
   // Which authority a pull refresh targets (or "none" when closed).
   var import_from: str
+  // How many Datadog log records the model has emitted (one per primary-OK fan-out unit).
+  var dd_records_emitted: int
+  // Driver mirrors these from the actual JSON produced by `dd_log_object`. Spec asserts they
+  // stay true once anything has been emitted; impl bug (missing field) flips them to false.
+  var dd_emit_has_timestamp: bool
+  var dd_emit_has_hostname: bool
 
   action init: bool = all {
     outbox' = 2,
@@ -37,7 +43,10 @@ module telemetry_exporters {
     fanout_n' = 2,
     query_authority' = "none",
     import_window_open' = false,
-    import_from' = "none"
+    import_from' = "none",
+    dd_records_emitted' = 0,
+    dd_emit_has_timestamp' = true,
+    dd_emit_has_hostname' = true
   }
 
   // Separate starting state: strict secondaries, single pending batch.
@@ -50,7 +59,10 @@ module telemetry_exporters {
     fanout_n' = 2,
     query_authority' = "none",
     import_window_open' = false,
-    import_from' = "none"
+    import_from' = "none",
+    dd_records_emitted' = 0,
+    dd_emit_has_timestamp' = true,
+    dd_emit_has_hostname' = true
   }
 
   // Primary OK + secondary OK: clear outbox, healthy sync.
@@ -64,7 +76,10 @@ module telemetry_exporters {
     fanout_n' = fanout_n,
     query_authority' = query_authority,
     import_window_open' = import_window_open,
-    import_from' = import_from
+    import_from' = import_from,
+    dd_records_emitted' = dd_records_emitted,
+    dd_emit_has_timestamp' = dd_emit_has_timestamp,
+    dd_emit_has_hostname' = dd_emit_has_hostname
   }
 
   // Primary OK, secondary fail, fail_open: still clear; sync not broken.
@@ -79,7 +94,10 @@ module telemetry_exporters {
     fanout_n' = fanout_n,
     query_authority' = query_authority,
     import_window_open' = import_window_open,
-    import_from' = import_from
+    import_from' = import_from,
+    dd_records_emitted' = dd_records_emitted,
+    dd_emit_has_timestamp' = dd_emit_has_timestamp,
+    dd_emit_has_hostname' = dd_emit_has_hostname
   }
 
   // Primary OK, secondary fail, not fail_open: do not clear (flush aborts before commit).
@@ -94,7 +112,10 @@ module telemetry_exporters {
     fanout_n' = fanout_n,
     query_authority' = query_authority,
     import_window_open' = import_window_open,
-    import_from' = import_from
+    import_from' = import_from,
+    dd_records_emitted' = dd_records_emitted,
+    dd_emit_has_timestamp' = dd_emit_has_timestamp,
+    dd_emit_has_hostname' = dd_emit_has_hostname
   }
 
   // Primary fail: outbox stays; sync broken; secondary irrelevant for durability.
@@ -104,6 +125,45 @@ module telemetry_exporters {
     secondary_failed' = false,
     fail_open' = fail_open,
     last_primary_ok' = false,
+    fanout_n' = fanout_n,
+    query_authority' = query_authority,
+    import_window_open' = import_window_open,
+    import_from' = import_from,
+    dd_records_emitted' = dd_records_emitted,
+    dd_emit_has_timestamp' = dd_emit_has_timestamp,
+    dd_emit_has_hostname' = dd_emit_has_hostname
+  }
+
+  // Builder emitted one Datadog log record from an Event-shape canonical item. Driver mirrors
+  // `has_*` from the actual JSON produced by `dd_log_object`.
+  action emit_dd_record: bool = all {
+    dd_records_emitted' = dd_records_emitted + 1,
+    dd_emit_has_timestamp' = true,
+    dd_emit_has_hostname' = true,
+    outbox' = outbox,
+    sync_broken' = sync_broken,
+    secondary_failed' = secondary_failed,
+    fail_open' = fail_open,
+    last_primary_ok' = last_primary_ok,
+    fanout_n' = fanout_n,
+    query_authority' = query_authority,
+    import_window_open' = import_window_open,
+    import_from' = import_from
+  }
+
+  // Same shape requirement, but the canonical item is a ToolSpan. `kaizen telemetry push` now
+  // ships both kinds, so the spec must verify both branches of `dd_log_object` produce a
+  // top-level `timestamp` and `hostname`. Without this, a regression that dropped either
+  // field on the span branch only would slip past the existing event-shape check.
+  action emit_dd_span_record: bool = all {
+    dd_records_emitted' = dd_records_emitted + 1,
+    dd_emit_has_timestamp' = true,
+    dd_emit_has_hostname' = true,
+    outbox' = outbox,
+    sync_broken' = sync_broken,
+    secondary_failed' = secondary_failed,
+    fail_open' = fail_open,
+    last_primary_ok' = last_primary_ok,
     fanout_n' = fanout_n,
     query_authority' = query_authority,
     import_window_open' = import_window_open,
@@ -123,7 +183,10 @@ module telemetry_exporters {
       last_primary_ok' = last_primary_ok,
       fanout_n' = fanout_n,
       import_window_open' = false,
-      import_from' = "none"
+      import_from' = "none",
+      dd_records_emitted' = dd_records_emitted,
+      dd_emit_has_timestamp' = dd_emit_has_timestamp,
+      dd_emit_has_hostname' = dd_emit_has_hostname
     }
   }
 
@@ -140,7 +203,10 @@ module telemetry_exporters {
       last_primary_ok' = last_primary_ok,
       query_authority' = query_authority,
       import_window_open' = false,
-      import_from' = "none"
+      import_from' = "none",
+      dd_records_emitted' = dd_records_emitted,
+      dd_emit_has_timestamp' = dd_emit_has_timestamp,
+      dd_emit_has_hostname' = dd_emit_has_hostname
     }
   }
 
@@ -156,7 +222,10 @@ module telemetry_exporters {
     fail_open' = fail_open,
     last_primary_ok' = last_primary_ok,
     fanout_n' = fanout_n,
-    query_authority' = query_authority
+    query_authority' = query_authority,
+    dd_records_emitted' = dd_records_emitted,
+    dd_emit_has_timestamp' = dd_emit_has_timestamp,
+    dd_emit_has_hostname' = dd_emit_has_hostname
   }
 
   // End the import window; a pull refresh never interleaves two authorities.
@@ -170,7 +239,10 @@ module telemetry_exporters {
     fail_open' = fail_open,
     last_primary_ok' = last_primary_ok,
     fanout_n' = fanout_n,
-    query_authority' = query_authority
+    query_authority' = query_authority,
+    dd_records_emitted' = dd_records_emitted,
+    dd_emit_has_timestamp' = dd_emit_has_timestamp,
+    dd_emit_has_hostname' = dd_emit_has_hostname
   }
 
   action step: bool = any {
@@ -181,7 +253,9 @@ module telemetry_exporters {
     set_query_authority,
     set_fanout,
     import_begin,
-    import_end
+    import_end,
+    emit_dd_record,
+    emit_dd_span_record
   }
 
   val outbox_nonnegative: bool = outbox >= 0
@@ -202,6 +276,11 @@ module telemetry_exporters {
   // "none" config never has an import window (no double authority for pull).
   val none_has_no_import: bool = (query_authority == "none") implies (not(import_window_open) and import_from == "none")
 
+  // Every emitted Datadog log record has both `timestamp` (top-level) and `hostname` so
+  // the Logs UI shows the right time and host facets. Driver mirrors `has_*` from real JSON.
+  val dd_records_well_formed: bool =
+    (dd_records_emitted > 0) implies (dd_emit_has_timestamp and dd_emit_has_hostname)
+
   run happyPath = {
     init.then(flush_both_ok).then(flush_both_ok).expect(outbox == 0 and not(sync_broken))
   }
@@ -217,5 +296,22 @@ module telemetry_exporters {
     init_fail_closed
       .then(flush_primary_ok_secondary_fail_strict)
       .expect(outbox == 1 and not(sync_broken) and secondary_failed)
+  }
+
+  // Emitted DD records carry timestamp + hostname so DD Logs faceting and time work.
+  run ddEmitWellFormed = {
+    init
+      .then(emit_dd_record)
+      .then(emit_dd_record)
+      .expect(dd_records_emitted == 2 and dd_emit_has_timestamp and dd_emit_has_hostname)
+  }
+
+  // Mixed event/span emissions still satisfy `dd_records_well_formed`.
+  run ddSpanEmitWellFormed = {
+    init
+      .then(emit_dd_record)
+      .then(emit_dd_span_record)
+      .then(emit_dd_span_record)
+      .expect(dd_records_emitted == 3 and dd_emit_has_timestamp and dd_emit_has_hostname)
   }
 }

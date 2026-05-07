@@ -19,10 +19,13 @@ pub struct PostHogResolved {
     pub project_api_key: String,
 }
 
-/// Effective Datadog settings after env overlay.
+/// Effective Datadog settings after env overlay. `app_key` is required for query/pull (Logs
+/// Search API v2) but not for log intake; we keep it optional and surface a clear error in
+/// `pull` when missing.
 pub struct DatadogResolved {
     pub site: String,
     pub api_key: String,
+    pub app_key: Option<String>,
 }
 
 /// Effective OTLP push endpoint.
@@ -78,7 +81,12 @@ impl DatadogResolved {
             .map(String::from)
             .or_else(|| env_two("DD_SITE", "KAIZEN_DD_SITE"))
             .unwrap_or_else(|| "datadoghq.com".to_string());
-        Some(Self { site, api_key })
+        let app_key = env_two("DD_APP_KEY", "KAIZEN_DD_APP_KEY");
+        Some(Self {
+            site,
+            api_key,
+            app_key,
+        })
     }
 
     /// Query / pull: API key and site from env only.
@@ -86,7 +94,12 @@ impl DatadogResolved {
         let api_key = env_two("DD_API_KEY", "KAIZEN_DD_API_KEY")?;
         let site =
             env_two("DD_SITE", "KAIZEN_DD_SITE").unwrap_or_else(|| "datadoghq.com".to_string());
-        Some(Self { site, api_key })
+        let app_key = env_two("DD_APP_KEY", "KAIZEN_DD_APP_KEY");
+        Some(Self {
+            site,
+            api_key,
+            app_key,
+        })
     }
 }
 

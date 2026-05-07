@@ -29,7 +29,7 @@ pub fn maybe_telemetry_pull(
     if source == DataSource::Local {
         return Ok(());
     }
-    let Some(p) = provider_from_config(&cfg.telemetry.query) else {
+    let Some(p) = provider_from_config(&cfg.telemetry) else {
         tracing::debug!("telemetry: no query provider; skip pull");
         return Ok(());
     };

@@ -16,6 +16,10 @@ struct TelemetryExportersState {
     query_authority: String,
     import_window_open: bool,
     import_from: String,
+    #[serde(with = "itf::de::As::<itf::de::Integer>")]
+    dd_records_emitted: i64,
+    dd_emit_has_timestamp: bool,
+    dd_emit_has_hostname: bool,
 }
 
 #[derive(Default)]
@@ -29,6 +33,9 @@ struct TelemetryExportersDriver {
     query_authority: String,
     import_window_open: bool,
     import_from: String,
+    dd_records_emitted: i64,
+    dd_emit_has_timestamp: bool,
+    dd_emit_has_hostname: bool,
 }
 
 impl State<TelemetryExportersDriver> for TelemetryExportersState {
@@ -43,6 +50,9 @@ impl State<TelemetryExportersDriver> for TelemetryExportersState {
             query_authority: d.query_authority.clone(),
             import_window_open: d.import_window_open,
             import_from: d.import_from.clone(),
+            dd_records_emitted: d.dd_records_emitted,
+            dd_emit_has_timestamp: d.dd_emit_has_timestamp,
+            dd_emit_has_hostname: d.dd_emit_has_hostname,
         })
     }
 }
@@ -89,6 +99,9 @@ impl Driver for TelemetryExportersDriver {
                 self.query_authority = "none".into();
                 self.import_window_open = false;
                 self.import_from = "none".into();
+                self.dd_records_emitted = 0;
+                self.dd_emit_has_timestamp = true;
+                self.dd_emit_has_hostname = true;
             }
             init_fail_closed => {
                 self.outbox = 1;
@@ -100,6 +113,9 @@ impl Driver for TelemetryExportersDriver {
                 self.query_authority = "none".into();
                 self.import_window_open = false;
                 self.import_from = "none".into();
+                self.dd_records_emitted = 0;
+                self.dd_emit_has_timestamp = true;
+                self.dd_emit_has_hostname = true;
             }
             flush_both_ok => {
                 if self.outbox > 0 {
@@ -158,9 +174,97 @@ impl Driver for TelemetryExportersDriver {
                     self.import_from = "none".into();
                 }
             }
+            emit_dd_record => {
+                let (has_ts, has_host) = build_real_dd_record();
+                self.dd_records_emitted += 1;
+                self.dd_emit_has_timestamp = has_ts;
+                self.dd_emit_has_hostname = has_host;
+            }
+            emit_dd_span_record => {
+                let (has_ts, has_host) = build_real_dd_span_record();
+                self.dd_records_emitted += 1;
+                self.dd_emit_has_timestamp = has_ts;
+                self.dd_emit_has_hostname = has_host;
+            }
             step => {}
         })
     }
+}
+
+/// Build one DD log object via the real `kaizen::telemetry::datadog::dd_log_object` and
+/// inspect the resulting JSON. Driver-side observation is what gives the spec invariant
+/// `dd_records_well_formed` real teeth: a regression that drops `timestamp` or `hostname`
+/// flips one bool to false and the spec rejects the trace.
+#[cfg(feature = "telemetry-datadog")]
+fn build_real_dd_record() -> (bool, bool) {
+    use kaizen::sync::IngestExportBatch;
+    use kaizen::sync::canonical::expand_ingest_batch;
+    use kaizen::sync::outbound::{EventsBatchBody, OutboundEvent};
+    let b = IngestExportBatch::Events(EventsBatchBody {
+        team_id: "t".into(),
+        workspace_hash: "wh".into(),
+        events: vec![OutboundEvent {
+            session_id_hash: "sid".into(),
+            event_seq: 0,
+            ts_ms: 1,
+            agent: "kaizen".into(),
+            model: "synthetic".into(),
+            kind: "lifecycle".into(),
+            source: "tail".into(),
+            tool: None,
+            tool_call_id: None,
+            tokens_in: None,
+            tokens_out: None,
+            reasoning_tokens: None,
+            cost_usd_e6: None,
+            payload: serde_json::json!({}),
+        }],
+    });
+    let items = expand_ingest_batch(&b);
+    let v = kaizen::telemetry::datadog::dd_log_object_for_test(&items[0], "spec-host");
+    (v.get("timestamp").is_some(), v.get("hostname").is_some())
+}
+
+#[cfg(not(feature = "telemetry-datadog"))]
+fn build_real_dd_record() -> (bool, bool) {
+    (true, true)
+}
+
+/// Same idea as `build_real_dd_record`, but exercises the [`OutboundToolSpan`] branch of
+/// `dd_log_object`. `kaizen telemetry push` emits both kinds, so the spec invariant
+/// `dd_records_well_formed` only has teeth on the span path if the driver actually constructs
+/// one through the real builder.
+#[cfg(feature = "telemetry-datadog")]
+fn build_real_dd_span_record() -> (bool, bool) {
+    use kaizen::sync::IngestExportBatch;
+    use kaizen::sync::canonical::expand_ingest_batch;
+    use kaizen::sync::smart::{OutboundToolSpan, ToolSpansBatchBody};
+    let b = IngestExportBatch::ToolSpans(ToolSpansBatchBody {
+        team_id: "t".into(),
+        workspace_hash: "wh".into(),
+        spans: vec![OutboundToolSpan {
+            session_id_hash: "sid".into(),
+            span_id_hash: "span".into(),
+            tool: Some("Read".into()),
+            status: "ok".into(),
+            started_at_ms: Some(1),
+            ended_at_ms: Some(2),
+            lead_time_ms: Some(1),
+            tokens_in: None,
+            tokens_out: None,
+            reasoning_tokens: None,
+            cost_usd_e6: None,
+            path_hashes: vec!["blake3:p".into()],
+        }],
+    });
+    let items = expand_ingest_batch(&b);
+    let v = kaizen::telemetry::datadog::dd_log_object_for_test(&items[0], "spec-host");
+    (v.get("timestamp").is_some(), v.get("hostname").is_some())
+}
+
+#[cfg(not(feature = "telemetry-datadog"))]
+fn build_real_dd_span_record() -> (bool, bool) {
+    (true, true)
 }
 
 #[quint_run(

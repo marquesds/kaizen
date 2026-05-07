@@ -4,7 +4,6 @@ use crate::provider::{PullPage, PullWindow, TelemetryQueryProvider, http_timeout
 use crate::telemetry::PostHogResolved;
 use anyhow::Result;
 use reqwest::blocking::Client;
-use std::sync::Arc;
 
 /// Live PostHog query client (HogQL / export to be fleshed out; v1 returns empty `pull`).
 pub struct PostHogQueryClient {
@@ -46,10 +45,4 @@ impl TelemetryQueryProvider for PostHogQueryClient {
         let _ = &self.api_key; // used when events API is wired
         Ok(PullPage::default())
     }
-}
-
-/// Returns `None` if env keys for PostHog are missing.
-pub fn posthog_from_env() -> Option<Arc<dyn TelemetryQueryProvider>> {
-    let r = PostHogResolved::from_env_only()?;
-    Some(Arc::new(PostHogQueryClient::new(&r)) as Arc<dyn TelemetryQueryProvider>)
 }

@@ -19,7 +19,9 @@ pub use context::SyncIngestContext;
 pub use engine::{FlushExporters, FlushStats, flush_outbox_once};
 pub use export_batch::IngestExportBatch;
 pub use outbound::{EventsBatchBody, OutboundEvent, hash_with_salt, workspace_hash};
-pub use telemetry_replay::chunk_events_into_ingest_batches;
+pub use telemetry_replay::{
+    chunk_events_into_ingest_batches, chunk_tool_spans_into_ingest_batches,
+};
 
 use crate::core::config::Config;
 use std::path::PathBuf;
