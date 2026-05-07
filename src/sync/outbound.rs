@@ -13,6 +13,8 @@ const BLAKE3_PREFIX: &str = "blake3:";
 pub struct EventsBatchBody {
     pub team_id: String,
     pub workspace_hash: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_name: Option<String>,
     pub events: Vec<OutboundEvent>,
 }
 

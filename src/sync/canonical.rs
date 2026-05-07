@@ -87,7 +87,7 @@ pub fn expand_ingest_batch(batch: &crate::sync::IngestExportBatch) -> Vec<Canoni
     let mut out: Vec<CanonicalItem> = Vec::new();
     match batch {
         IngestExportBatch::Events(b) => {
-            let env = canonical_envelope(&b.team_id, &b.workspace_hash);
+            let env = canonical_envelope(&b.team_id, &b.workspace_hash, b.project_name.as_deref());
             for e in &b.events {
                 out.push(CanonicalItem::Event(EventItem {
                     envelope: env.clone(),
@@ -97,7 +97,7 @@ pub fn expand_ingest_batch(batch: &crate::sync::IngestExportBatch) -> Vec<Canoni
             }
         }
         IngestExportBatch::ToolSpans(b) => {
-            let env = canonical_envelope(&b.team_id, &b.workspace_hash);
+            let env = canonical_envelope(&b.team_id, &b.workspace_hash, b.project_name.as_deref());
             for span in &b.spans {
                 out.push(CanonicalItem::ToolSpan(ToolSpanItem {
                     envelope: env.clone(),
@@ -107,7 +107,7 @@ pub fn expand_ingest_batch(batch: &crate::sync::IngestExportBatch) -> Vec<Canoni
             }
         }
         IngestExportBatch::RepoSnapshots(b) => {
-            let env = canonical_envelope(&b.team_id, &b.workspace_hash);
+            let env = canonical_envelope(&b.team_id, &b.workspace_hash, b.project_name.as_deref());
             for chunk in &b.snapshots {
                 out.push(CanonicalItem::RepoSnapshotChunk(RepoSnapshotChunkItem {
                     envelope: env.clone(),
@@ -117,7 +117,7 @@ pub fn expand_ingest_batch(batch: &crate::sync::IngestExportBatch) -> Vec<Canoni
             }
         }
         IngestExportBatch::WorkspaceFacts(b) => {
-            let env = canonical_envelope(&b.team_id, &b.workspace_hash);
+            let env = canonical_envelope(&b.team_id, &b.workspace_hash, b.project_name.as_deref());
             for row in &b.facts {
                 out.push(CanonicalItem::WorkspaceFactSnapshot {
                     envelope: env.clone(),
@@ -159,12 +159,23 @@ impl CanonicalItem {
     }
 }
 
-fn canonical_envelope(team_id: &str, workspace_hash: &str) -> CanonicalEnvelope {
+fn canonical_envelope(
+    team_id: &str,
+    workspace_hash: &str,
+    project_name: Option<&str>,
+) -> CanonicalEnvelope {
     CanonicalEnvelope {
         kaizen_schema_version: KAIZEN_SCHEMA_VERSION,
         team_id: team_id.to_string(),
         workspace_hash: workspace_hash.to_string(),
-        identity: None,
+        identity: project_name.map(project_identity),
+    }
+}
+
+fn project_identity(project_name: &str) -> ActorIdentity {
+    ActorIdentity {
+        workspace_label: Some(project_name.to_string()),
+        ..Default::default()
     }
 }
 
@@ -180,6 +191,7 @@ mod tests {
         let b = IngestExportBatch::Events(EventsBatchBody {
             team_id: "t1".into(),
             workspace_hash: "wh".into(),
+            project_name: Some("kaizen".into()),
             events: vec![
                 OutboundEvent {
                     session_id_hash: "s1".into(),
@@ -221,6 +233,16 @@ mod tests {
             v[0].envelope_kaizen_schema_version().unwrap(),
             KAIZEN_SCHEMA_VERSION
         );
+        let CanonicalItem::Event(item) = &v[0] else {
+            panic!("expected event");
+        };
+        assert_eq!(
+            item.envelope
+                .identity
+                .as_ref()
+                .and_then(|i| i.workspace_label.as_deref()),
+            Some("kaizen")
+        );
     }
 
     #[test]
@@ -228,6 +250,7 @@ mod tests {
         let b = IngestExportBatch::ToolSpans(ToolSpansBatchBody {
             team_id: "t".into(),
             workspace_hash: "w".into(),
+            project_name: None,
             spans: vec![OutboundToolSpan {
                 session_id_hash: "sh".into(),
                 span_id_hash: "ph".into(),
@@ -254,6 +277,7 @@ mod tests {
         let b = IngestExportBatch::WorkspaceFacts(WorkspaceFactsBatchBody {
             team_id: "t".into(),
             workspace_hash: "w".into(),
+            project_name: None,
             facts: vec![OutboundWorkspaceFactRow {
                 skill_slugs: vec!["a".into()],
                 rule_slugs: vec!["b".into()],

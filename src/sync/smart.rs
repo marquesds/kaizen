@@ -17,6 +17,8 @@ const SNAPSHOT_CHUNK: usize = 100;
 pub struct ToolSpansBatchBody {
     pub team_id: String,
     pub workspace_hash: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_name: Option<String>,
     pub spans: Vec<OutboundToolSpan>,
 }
 
@@ -41,6 +43,8 @@ pub struct OutboundToolSpan {
 pub struct RepoSnapshotsBatchBody {
     pub team_id: String,
     pub workspace_hash: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_name: Option<String>,
     pub snapshots: Vec<OutboundRepoSnapshotChunk>,
 }
 
@@ -94,6 +98,8 @@ pub struct OutboundWorkspaceFactRow {
 pub struct WorkspaceFactsBatchBody {
     pub team_id: String,
     pub workspace_hash: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_name: Option<String>,
     pub facts: Vec<OutboundWorkspaceFactRow>,
 }
 

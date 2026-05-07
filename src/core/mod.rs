@@ -10,6 +10,7 @@ pub mod event;
 pub mod machine_registry;
 pub mod migrate_home;
 pub mod paths;
+pub mod project_identity;
 pub mod repo;
 pub mod session;
 pub mod workspace;

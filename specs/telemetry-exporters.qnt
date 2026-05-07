@@ -33,6 +33,8 @@ module telemetry_exporters {
   // stay true once anything has been emitted; impl bug (missing field) flips them to false.
   var dd_emit_has_timestamp: bool
   var dd_emit_has_hostname: bool
+  var dd_emit_has_project_name: bool
+  var dd_emit_has_span_metrics: bool
 
   action init: bool = all {
     outbox' = 2,
@@ -46,7 +48,9 @@ module telemetry_exporters {
     import_from' = "none",
     dd_records_emitted' = 0,
     dd_emit_has_timestamp' = true,
-    dd_emit_has_hostname' = true
+    dd_emit_has_hostname' = true,
+    dd_emit_has_project_name' = true,
+    dd_emit_has_span_metrics' = true
   }
 
   // Separate starting state: strict secondaries, single pending batch.
@@ -62,7 +66,9 @@ module telemetry_exporters {
     import_from' = "none",
     dd_records_emitted' = 0,
     dd_emit_has_timestamp' = true,
-    dd_emit_has_hostname' = true
+    dd_emit_has_hostname' = true,
+    dd_emit_has_project_name' = true,
+    dd_emit_has_span_metrics' = true
   }
 
   // Primary OK + secondary OK: clear outbox, healthy sync.
@@ -79,7 +85,9 @@ module telemetry_exporters {
     import_from' = import_from,
     dd_records_emitted' = dd_records_emitted,
     dd_emit_has_timestamp' = dd_emit_has_timestamp,
-    dd_emit_has_hostname' = dd_emit_has_hostname
+    dd_emit_has_hostname' = dd_emit_has_hostname,
+    dd_emit_has_project_name' = true,
+    dd_emit_has_span_metrics' = dd_emit_has_span_metrics
   }
 
   // Primary OK, secondary fail, fail_open: still clear; sync not broken.
@@ -97,7 +105,9 @@ module telemetry_exporters {
     import_from' = import_from,
     dd_records_emitted' = dd_records_emitted,
     dd_emit_has_timestamp' = dd_emit_has_timestamp,
-    dd_emit_has_hostname' = dd_emit_has_hostname
+    dd_emit_has_hostname' = dd_emit_has_hostname,
+    dd_emit_has_project_name' = true,
+    dd_emit_has_span_metrics' = dd_emit_has_span_metrics
   }
 
   // Primary OK, secondary fail, not fail_open: do not clear (flush aborts before commit).
@@ -115,7 +125,9 @@ module telemetry_exporters {
     import_from' = import_from,
     dd_records_emitted' = dd_records_emitted,
     dd_emit_has_timestamp' = dd_emit_has_timestamp,
-    dd_emit_has_hostname' = dd_emit_has_hostname
+    dd_emit_has_hostname' = dd_emit_has_hostname,
+    dd_emit_has_project_name' = dd_emit_has_project_name,
+    dd_emit_has_span_metrics' = dd_emit_has_span_metrics
   }
 
   // Primary fail: outbox stays; sync broken; secondary irrelevant for durability.
@@ -131,7 +143,9 @@ module telemetry_exporters {
     import_from' = import_from,
     dd_records_emitted' = dd_records_emitted,
     dd_emit_has_timestamp' = dd_emit_has_timestamp,
-    dd_emit_has_hostname' = dd_emit_has_hostname
+    dd_emit_has_hostname' = dd_emit_has_hostname,
+    dd_emit_has_project_name' = dd_emit_has_project_name,
+    dd_emit_has_span_metrics' = dd_emit_has_span_metrics
   }
 
   // Builder emitted one Datadog log record from an Event-shape canonical item. Driver mirrors
@@ -140,6 +154,8 @@ module telemetry_exporters {
     dd_records_emitted' = dd_records_emitted + 1,
     dd_emit_has_timestamp' = true,
     dd_emit_has_hostname' = true,
+    dd_emit_has_project_name' = true,
+    dd_emit_has_span_metrics' = dd_emit_has_span_metrics,
     outbox' = outbox,
     sync_broken' = sync_broken,
     secondary_failed' = secondary_failed,
@@ -159,6 +175,8 @@ module telemetry_exporters {
     dd_records_emitted' = dd_records_emitted + 1,
     dd_emit_has_timestamp' = true,
     dd_emit_has_hostname' = true,
+    dd_emit_has_project_name' = true,
+    dd_emit_has_span_metrics' = true,
     outbox' = outbox,
     sync_broken' = sync_broken,
     secondary_failed' = secondary_failed,
@@ -186,7 +204,9 @@ module telemetry_exporters {
       import_from' = "none",
       dd_records_emitted' = dd_records_emitted,
       dd_emit_has_timestamp' = dd_emit_has_timestamp,
-      dd_emit_has_hostname' = dd_emit_has_hostname
+      dd_emit_has_hostname' = dd_emit_has_hostname,
+      dd_emit_has_project_name' = dd_emit_has_project_name,
+      dd_emit_has_span_metrics' = dd_emit_has_span_metrics
     }
   }
 
@@ -206,7 +226,9 @@ module telemetry_exporters {
       import_from' = "none",
       dd_records_emitted' = dd_records_emitted,
       dd_emit_has_timestamp' = dd_emit_has_timestamp,
-      dd_emit_has_hostname' = dd_emit_has_hostname
+      dd_emit_has_hostname' = dd_emit_has_hostname,
+      dd_emit_has_project_name' = dd_emit_has_project_name,
+      dd_emit_has_span_metrics' = dd_emit_has_span_metrics
     }
   }
 
@@ -225,7 +247,9 @@ module telemetry_exporters {
     query_authority' = query_authority,
     dd_records_emitted' = dd_records_emitted,
     dd_emit_has_timestamp' = dd_emit_has_timestamp,
-    dd_emit_has_hostname' = dd_emit_has_hostname
+    dd_emit_has_hostname' = dd_emit_has_hostname,
+    dd_emit_has_project_name' = dd_emit_has_project_name,
+    dd_emit_has_span_metrics' = dd_emit_has_span_metrics
   }
 
   // End the import window; a pull refresh never interleaves two authorities.
@@ -242,7 +266,9 @@ module telemetry_exporters {
     query_authority' = query_authority,
     dd_records_emitted' = dd_records_emitted,
     dd_emit_has_timestamp' = dd_emit_has_timestamp,
-    dd_emit_has_hostname' = dd_emit_has_hostname
+    dd_emit_has_hostname' = dd_emit_has_hostname,
+    dd_emit_has_project_name' = dd_emit_has_project_name,
+    dd_emit_has_span_metrics' = dd_emit_has_span_metrics
   }
 
   action step: bool = any {
@@ -276,10 +302,14 @@ module telemetry_exporters {
   // "none" config never has an import window (no double authority for pull).
   val none_has_no_import: bool = (query_authority == "none") implies (not(import_window_open) and import_from == "none")
 
-  // Every emitted Datadog log record has both `timestamp` (top-level) and `hostname` so
-  // the Logs UI shows the right time and host facets. Driver mirrors `has_*` from real JSON.
+  // Every emitted Datadog log record carries DD facets plus project identity and span metrics.
   val dd_records_well_formed: bool =
-    (dd_records_emitted > 0) implies (dd_emit_has_timestamp and dd_emit_has_hostname)
+    (dd_records_emitted > 0) implies and {
+      dd_emit_has_timestamp,
+      dd_emit_has_hostname,
+      dd_emit_has_project_name,
+      dd_emit_has_span_metrics
+    }
 
   run happyPath = {
     init.then(flush_both_ok).then(flush_both_ok).expect(outbox == 0 and not(sync_broken))

@@ -77,6 +77,7 @@ mod tests {
         IngestExportBatch::Events(EventsBatchBody {
             team_id: "t".into(),
             workspace_hash: "wh".into(),
+            project_name: Some("kaizen".into()),
             events: vec![OutboundEvent {
                 session_id_hash: "sid".into(),
                 event_seq: 0,
@@ -105,10 +106,12 @@ mod tests {
         assert_eq!(v["hostname"], serde_json::json!("host-1"));
         assert_eq!(v["agent"], serde_json::json!("cursor"));
         assert_eq!(v["model"], serde_json::json!("gpt-5"));
+        assert_eq!(v["project_name"], serde_json::json!("kaizen"));
         assert_eq!(v["tokens_in"], serde_json::json!(120));
         let tags = v["ddtags"].as_str().unwrap();
         assert!(tags.contains("agent:cursor"));
         assert!(tags.contains("model:gpt-5"));
+        assert!(tags.contains("project_name:kaizen"));
         assert!(tags.contains("kaizen.type:kaizen.event"));
         // Full canonical item nested under `kaizen` (not double-encoded as a string).
         assert!(v["kaizen"].is_object());
@@ -120,6 +123,7 @@ mod tests {
         let b = IngestExportBatch::ToolSpans(ToolSpansBatchBody {
             team_id: "t".into(),
             workspace_hash: "wh".into(),
+            project_name: Some("kaizen".into()),
             spans: vec![OutboundToolSpan {
                 session_id_hash: "sid".into(),
                 span_id_hash: "ph".into(),
@@ -127,11 +131,11 @@ mod tests {
                 status: "ok".into(),
                 started_at_ms: None,
                 ended_at_ms: Some(42),
-                lead_time_ms: None,
-                tokens_in: None,
-                tokens_out: None,
-                reasoning_tokens: None,
-                cost_usd_e6: None,
+                lead_time_ms: Some(40),
+                tokens_in: Some(10),
+                tokens_out: Some(4),
+                reasoning_tokens: Some(2),
+                cost_usd_e6: Some(25),
                 path_hashes: vec![],
             }],
         });
@@ -139,6 +143,12 @@ mod tests {
         let v = dd_log_object(&items[0], "h");
         assert_eq!(v["timestamp"], serde_json::json!(42_i64));
         assert_eq!(v["status"], serde_json::json!("ok"));
+        assert_eq!(v["lead_time_ms"], serde_json::json!(40));
+        assert_eq!(v["tokens_in"], serde_json::json!(10));
+        assert_eq!(v["tokens_out"], serde_json::json!(4));
+        assert_eq!(v["reasoning_tokens"], serde_json::json!(2));
+        assert_eq!(v["cost_usd_e6"], serde_json::json!(25));
+        assert_eq!(v["project_name"], serde_json::json!("kaizen"));
     }
 
     #[test]

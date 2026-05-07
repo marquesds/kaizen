@@ -20,6 +20,7 @@ pub fn telemetry_file_line(batch: &IngestExportBatch, emitted_at_ms: i64) -> Val
                 b.events.len(),
                 b.team_id.as_str(),
                 b.workspace_hash.as_str(),
+                b.project_name.as_deref(),
                 emitted_at_ms,
             );
             merge_events(&mut o, b);
@@ -31,6 +32,7 @@ pub fn telemetry_file_line(batch: &IngestExportBatch, emitted_at_ms: i64) -> Val
                 b.spans.len(),
                 b.team_id.as_str(),
                 b.workspace_hash.as_str(),
+                b.project_name.as_deref(),
                 emitted_at_ms,
             );
             merge_tool_spans(&mut o, b);
@@ -42,6 +44,7 @@ pub fn telemetry_file_line(batch: &IngestExportBatch, emitted_at_ms: i64) -> Val
                 b.snapshots.len(),
                 b.team_id.as_str(),
                 b.workspace_hash.as_str(),
+                b.project_name.as_deref(),
                 emitted_at_ms,
             );
             merge_repo(&mut o, b);
@@ -53,6 +56,7 @@ pub fn telemetry_file_line(batch: &IngestExportBatch, emitted_at_ms: i64) -> Val
                 b.facts.len(),
                 b.team_id.as_str(),
                 b.workspace_hash.as_str(),
+                b.project_name.as_deref(),
                 emitted_at_ms,
             );
             Value::Object(o)
@@ -80,6 +84,7 @@ fn base_envelope(
     item_count: usize,
     team: &str,
     wh: &str,
+    project_name: Option<&str>,
     t: i64,
 ) -> serde_json::Map<String, Value> {
     let mut o = serde_json::Map::new();
@@ -89,6 +94,9 @@ fn base_envelope(
     o.insert("emitted_at_ms".into(), t.into());
     o.insert("team_id".into(), team.into());
     o.insert("workspace_hash".into(), wh.into());
+    if let Some(name) = project_name {
+        o.insert("project_name".into(), name.into());
+    }
     o
 }
 
@@ -215,6 +223,7 @@ mod tests {
         let b = IngestExportBatch::Events(EventsBatchBody {
             team_id: "t1".into(),
             workspace_hash: "wh1".into(),
+            project_name: None,
             events: vec![ev(10, "x", "tail", "s1"), ev(20, "x", "hook", "s2")],
         });
         let j = telemetry_file_line(&b, 0);
