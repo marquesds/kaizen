@@ -1,25 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Pure JSON builder + chunker for Datadog Logs API. No I/O here; HTTP lives in
-//! [`super::transport`]. Boundary call to `gethostname` is the one exception so callers do not
-//! have to thread a hostname through every test.
+//! Pure JSON builder + chunker for Datadog Logs API; HTTP lives in [`super::transport`].
 
 use crate::sync::IngestExportBatch;
 use crate::sync::canonical::{CanonicalItem, expand_ingest_batch};
 use serde_json::{Value, json};
 
-/// DD Logs API caps (`POST /api/v2/logs`): up to 1000 entries and ~5 MB JSON per request.
-/// We chunk a touch under 5 MB to leave room for HTTP envelope.
+/// DD Logs API caps, with byte slack for HTTP envelope.
 pub const MAX_ITEMS_PER_CHUNK: usize = 1000;
 pub const MAX_BYTES_PER_CHUNK: usize = 5 * 1024 * 1024 - 64 * 1024;
 
-/// Resolve the local hostname once; safe boundary call. Empty string if the OS denies it
-/// (rare); the rest of the pipeline still emits a usable record.
 pub fn current_hostname() -> String {
     gethostname::gethostname().to_string_lossy().into_owned()
 }
 
-/// Build one DD log object per canonical item. Pure and total: every input shape produces a
-/// well-formed object with `timestamp` (ms) and `hostname` so DD time + facets work.
 pub fn build_log_objects(batch: &IngestExportBatch, hostname: &str) -> Vec<Value> {
     expand_ingest_batch(batch)
         .iter()
@@ -27,18 +20,18 @@ pub fn build_log_objects(batch: &IngestExportBatch, hostname: &str) -> Vec<Value
         .collect()
 }
 
-/// One Datadog log object for a single [`CanonicalItem`]. Top-level fields drive DD facets;
-/// the full canonical payload is nested under `kaizen` for users who want raw detail.
+/// One Datadog log object for a single [`CanonicalItem`].
 pub fn dd_log_object(item: &CanonicalItem, hostname: &str) -> Value {
     let kind_tag = item.telemetry_kind();
     let ts_ms = item_timestamp_ms(item);
     let (agent, model) = item_agent_model(item);
+    let project_name = item_project_name(item);
     let mut obj = json!({
         "timestamp": ts_ms,
         "hostname": hostname,
         "ddsource": "kaizen",
         "service": "kaizen",
-        "ddtags": ddtags(kind_tag, agent.as_deref(), model.as_deref()),
+        "ddtags": ddtags(kind_tag, agent.as_deref(), model.as_deref(), project_name),
         "kaizen_type": kind_tag,
         "message": short_message(item, agent.as_deref(), model.as_deref()),
         "kaizen": serde_json::to_value(item).unwrap_or(Value::Null),
@@ -54,8 +47,6 @@ pub fn dd_log_object(item: &CanonicalItem, hostname: &str) -> Value {
     obj
 }
 
-/// Split log objects into chunks that respect both the entry-count and byte caps. Pure: the
-/// sum of all chunk lengths equals the input length, order preserved.
 pub fn chunk_for_dd(items: Vec<Value>) -> Vec<Vec<Value>> {
     let mut out: Vec<Vec<Value>> = Vec::new();
     let mut cur: Vec<Value> = Vec::new();
@@ -77,13 +68,16 @@ pub fn chunk_for_dd(items: Vec<Value>) -> Vec<Vec<Value>> {
     out
 }
 
-fn ddtags(kind: &str, agent: Option<&str>, model: Option<&str>) -> String {
+fn ddtags(kind: &str, agent: Option<&str>, model: Option<&str>, project: Option<&str>) -> String {
     let mut parts = vec![format!("source:kaizen"), format!("kaizen.type:{kind}")];
     if let Some(a) = agent {
         parts.push(format!("agent:{a}"));
     }
     if let Some(m) = model {
         parts.push(format!("model:{m}"));
+    }
+    if let Some(p) = project {
+        parts.push(format!("project_name:{p}"));
     }
     parts.join(",")
 }
@@ -105,16 +99,23 @@ fn item_agent_model(item: &CanonicalItem) -> (Option<String>, Option<String>) {
     }
 }
 
+fn item_project_name(item: &CanonicalItem) -> Option<&str> {
+    item_envelope(item)
+        .identity
+        .as_ref()
+        .and_then(|i| i.workspace_label.as_deref())
+}
+
 fn promote_top_level(m: &mut serde_json::Map<String, Value>, item: &CanonicalItem) {
-    let env = match item {
-        CanonicalItem::Event(i) => &i.envelope,
-        CanonicalItem::ToolSpan(i) => &i.envelope,
-        CanonicalItem::RepoSnapshotChunk(i) => &i.envelope,
-        CanonicalItem::WorkspaceFactSnapshot { envelope, .. } => envelope,
-    };
+    let env = item_envelope(item);
     m.insert(
         "workspace_hash".into(),
         Value::String(env.workspace_hash.clone()),
+    );
+    insert_some(
+        m,
+        "project_name",
+        item_project_name(item).map(|s| Value::String(s.to_string())),
     );
     match item {
         CanonicalItem::Event(i) => {
@@ -126,6 +127,11 @@ fn promote_top_level(m: &mut serde_json::Map<String, Value>, item: &CanonicalIte
             insert_some(m, "tool", i.event.tool.clone().map(Value::String));
             insert_some(m, "tokens_in", i.event.tokens_in.map(|n| json!(n)));
             insert_some(m, "tokens_out", i.event.tokens_out.map(|n| json!(n)));
+            insert_some(
+                m,
+                "reasoning_tokens",
+                i.event.reasoning_tokens.map(|n| json!(n)),
+            );
             insert_some(m, "cost_usd_e6", i.event.cost_usd_e6.map(|n| json!(n)));
         }
         CanonicalItem::ToolSpan(i) => {
@@ -135,6 +141,15 @@ fn promote_top_level(m: &mut serde_json::Map<String, Value>, item: &CanonicalIte
             );
             insert_some(m, "tool", i.span.tool.clone().map(Value::String));
             m.insert("status".into(), Value::String(i.span.status.clone()));
+            insert_some(m, "lead_time_ms", i.span.lead_time_ms.map(|n| json!(n)));
+            insert_some(m, "tokens_in", i.span.tokens_in.map(|n| json!(n)));
+            insert_some(m, "tokens_out", i.span.tokens_out.map(|n| json!(n)));
+            insert_some(
+                m,
+                "reasoning_tokens",
+                i.span.reasoning_tokens.map(|n| json!(n)),
+            );
+            insert_some(m, "cost_usd_e6", i.span.cost_usd_e6.map(|n| json!(n)));
         }
         CanonicalItem::RepoSnapshotChunk(i) => {
             m.insert(
@@ -146,6 +161,15 @@ fn promote_top_level(m: &mut serde_json::Map<String, Value>, item: &CanonicalIte
     }
 }
 
+fn item_envelope(item: &CanonicalItem) -> &crate::sync::canonical::CanonicalEnvelope {
+    match item {
+        CanonicalItem::Event(i) => &i.envelope,
+        CanonicalItem::ToolSpan(i) => &i.envelope,
+        CanonicalItem::RepoSnapshotChunk(i) => &i.envelope,
+        CanonicalItem::WorkspaceFactSnapshot { envelope, .. } => envelope,
+    }
+}
+
 fn insert_some(m: &mut serde_json::Map<String, Value>, key: &str, v: Option<Value>) {
     if let Some(v) = v {
         m.insert(key.into(), v);
@@ -153,7 +177,6 @@ fn insert_some(m: &mut serde_json::Map<String, Value>, key: &str, v: Option<Valu
 }
 
 fn short_message(item: &CanonicalItem, agent: Option<&str>, model: Option<&str>) -> String {
-    let kind = item.telemetry_kind();
     let agent = agent.unwrap_or("kaizen");
     let model = model.unwrap_or("-");
     match item {
@@ -163,7 +186,7 @@ fn short_message(item: &CanonicalItem, agent: Option<&str>, model: Option<&str>)
             i.event.tokens_in.unwrap_or(0),
             i.event.tokens_out.unwrap_or(0),
         ),
-        _ => kind.to_string(),
+        _ => item.telemetry_kind().to_string(),
     }
 }
 

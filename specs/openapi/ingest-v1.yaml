@@ -86,6 +86,9 @@ components:
         workspace_hash:
           type: string
           description: Prefix `blake3:` + hex digest
+        project_name:
+          type: string
+          description: Optional GitHub repo name or workspace folder label for provider facets.
         events:
           type: array
           items:

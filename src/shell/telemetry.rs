@@ -3,6 +3,7 @@
 
 use crate::core::config::{self, ExporterConfig, effective_redaction_salt};
 use crate::core::paths::kaizen_dir;
+use crate::core::project_identity::project_name;
 use crate::provider::{PullWindow, TelemetryQueryProvider, from_config as provider_from_config};
 use crate::shell::cli::workspace_path;
 use crate::shell::scope;
@@ -535,6 +536,7 @@ pub fn cmd_telemetry_push(
         let store = Store::open(&crate::core::workspace::db_path(root)?)?;
         let ws_key = root.to_string_lossy().to_string();
         let wh = workspace_hash(&salt, root.as_path());
+        let project = project_name(root.as_path());
 
         let event_rows = store.retro_events_in_window(&ws_key, start_ms, end_ms)?;
         let stale_events = event_rows
@@ -553,6 +555,7 @@ pub fn cmd_telemetry_push(
         let event_batches = chunk_events_into_ingest_batches(
             team_id.clone(),
             wh.clone(),
+            project.clone(),
             outbound_events,
             &cfg.sync,
         )?;
@@ -572,8 +575,13 @@ pub fn cmd_telemetry_push(
             .map(|r| outbound_tool_span(r, &salt))
             .collect();
         let n_spans = outbound_spans.len() as u64;
-        let span_batches =
-            chunk_tool_spans_into_ingest_batches(team_id.clone(), wh, outbound_spans, &cfg.sync)?;
+        let span_batches = chunk_tool_spans_into_ingest_batches(
+            team_id.clone(),
+            wh,
+            project,
+            outbound_spans,
+            &cfg.sync,
+        )?;
 
         let bcount = (event_batches.len() + span_batches.len()) as u64;
         total_events += n_events;
@@ -662,6 +670,7 @@ fn synthetic_batch(team_id: &str) -> IngestExportBatch {
     IngestExportBatch::Events(EventsBatchBody {
         team_id: team_id.to_string(),
         workspace_hash: "blake3:test-workspace".into(),
+        project_name: Some("telemetry-test".into()),
         events: vec![OutboundEvent {
             session_id_hash: "blake3:test-session".into(),
             event_seq: 0,

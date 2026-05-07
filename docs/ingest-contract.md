@@ -25,6 +25,9 @@ idempotent, project-scoped.
 - Server MUST reject unknown required fields with `400` and a
   machine-readable code.
 - Client sends `X-Kaizen-Client: kaizen/<semver>` for telemetry.
+- Batched event/tool/repo/workspace bodies may include optional
+  `project_name`, derived from GitHub origin repo name or workspace folder.
+  `workspace_hash` remains the stable join key.
 
 ## Endpoints
 
@@ -57,6 +60,7 @@ Body:
 {
   "team_id": "kaizen-eng",
   "workspace_hash": "blake3:5f3c...",
+  "project_name": "kaizen",
   "events": [
     {
       "session_id_hash": "blake3:9a2b...",
@@ -125,6 +129,7 @@ Exact-or-null only. No estimated token or lead-time backfill.
 {
   "team_id": "kaizen-eng",
   "workspace_hash": "blake3:5f3c...",
+  "project_name": "kaizen",
   "spans": [
     {
       "session_id_hash": "blake3:9a2b...",
@@ -152,6 +157,7 @@ Chunked code facts. No raw paths, symbols, commits, or file contents.
 {
   "team_id": "kaizen-eng",
   "workspace_hash": "blake3:5f3c...",
+  "project_name": "kaizen",
   "snapshots": [
     {
       "snapshot_id_hash": "blake3:de91...",
@@ -194,12 +200,13 @@ Chunked code facts. No raw paths, symbols, commits, or file contents.
 
 ## `POST /v1/workspace-facts`
 
-One batch per outbox flush of kind `workspace_facts`. Same transport as other batched `POST` routes (Bearer, gzip, idempotency key, `202` / `409` / `413` / `429` semantics). Body shape matches the client `WorkspaceFactsBatchBody`: `team_id`, `workspace_hash`, and a `facts` array of objects with `skill_slugs` and `rule_slugs` (Blake3-hashed identifiers, not raw paths, unless your redaction policy allowlists cleartext).
+One batch per outbox flush of kind `workspace_facts`. Same transport as other batched `POST` routes (Bearer, gzip, idempotency key, `202` / `409` / `413` / `429` semantics). Body shape matches the client `WorkspaceFactsBatchBody`: `team_id`, `workspace_hash`, optional `project_name`, and a `facts` array of objects with `skill_slugs` and `rule_slugs` (Blake3-hashed identifiers, not raw paths, unless your redaction policy allowlists cleartext).
 
 ```json
 {
   "team_id": "kaizen-eng",
   "workspace_hash": "blake3:5f3c...",
+  "project_name": "kaizen",
   "facts": [
     {
       "skill_slugs": ["blake3:aa11...", "blake3:bb22..."],

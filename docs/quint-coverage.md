@@ -17,7 +17,7 @@ When to add or extend a spec: see [`.cursor/rules/quint-before-code.mdc`](../.cu
 | [`specs/event-log-hot.qnt`](../specs/event-log-hot.qnt) | unit tests in `src/store/hot_log.rs` | hot log append, replay, index |
 | [`specs/sync-backpressure.qnt`](../specs/sync-backpressure.qnt) | `tests/spec/sync_backpressure.rs` | sync |
 | [`specs/daemon-handshake.qnt`](../specs/daemon-handshake.qnt) | `tests/spec/daemon_lifecycle.rs` | daemon lifecycle, background start readiness, protocol retry |
-| [`specs/telemetry-exporters.qnt`](../specs/telemetry-exporters.qnt) | `tests/spec/telemetry_exporters.rs` | telemetry (query authority + N-way fan-out + Datadog log records carry `timestamp` and `hostname` for both event and tool_span canonical kinds) |
+| [`specs/telemetry-exporters.qnt`](../specs/telemetry-exporters.qnt) | `tests/spec/telemetry_exporters.rs` | telemetry (query authority + N-way fan-out + Datadog log records carry `timestamp`, `hostname`, `project_name`, and span metrics for event/tool_span canonical kinds) |
 | [`specs/telemetry-file-metadata.qnt`](../specs/telemetry-file-metadata.qnt) | `tests/spec/telemetry_file_metadata.rs` | file NDJSON: envelope vs body-only metadata, tail follow, missing-file tail behavior |
 | [`specs/telemetry-push-replay.qnt`](../specs/telemetry-push-replay.qnt) | `tests/spec/telemetry_push_replay.rs` | `telemetry push` (exporter replay, chunking) |
 | [`specs/provider-pull-cache.qnt`](../specs/provider-pull-cache.qnt) | `tests/spec/provider_pull_cache.rs` | provider pull / remote cache |

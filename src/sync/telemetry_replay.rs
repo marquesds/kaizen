@@ -13,6 +13,7 @@ use anyhow::Result;
 pub fn chunk_events_into_ingest_batches(
     team_id: String,
     workspace_hash: String,
+    project_name: Option<String>,
     events: Vec<OutboundEvent>,
     cfg: &SyncConfig,
 ) -> Result<Vec<IngestExportBatch>> {
@@ -28,6 +29,7 @@ pub fn chunk_events_into_ingest_batches(
             batches.push(IngestExportBatch::Events(EventsBatchBody {
                 team_id: team_id.clone(),
                 workspace_hash: workspace_hash.clone(),
+                project_name: project_name.clone(),
                 events: std::mem::take(&mut cur),
             }));
             bytes = 0;
@@ -38,6 +40,7 @@ pub fn chunk_events_into_ingest_batches(
             batches.push(IngestExportBatch::Events(EventsBatchBody {
                 team_id: team_id.clone(),
                 workspace_hash: workspace_hash.clone(),
+                project_name: project_name.clone(),
                 events: std::mem::take(&mut cur),
             }));
             bytes = 0;
@@ -47,6 +50,7 @@ pub fn chunk_events_into_ingest_batches(
         batches.push(IngestExportBatch::Events(EventsBatchBody {
             team_id,
             workspace_hash,
+            project_name,
             events: cur,
         }));
     }
@@ -59,6 +63,7 @@ pub fn chunk_events_into_ingest_batches(
 pub fn chunk_tool_spans_into_ingest_batches(
     team_id: String,
     workspace_hash: String,
+    project_name: Option<String>,
     spans: Vec<OutboundToolSpan>,
     cfg: &SyncConfig,
 ) -> Result<Vec<IngestExportBatch>> {
@@ -75,6 +80,7 @@ pub fn chunk_tool_spans_into_ingest_batches(
             batches.push(IngestExportBatch::ToolSpans(ToolSpansBatchBody {
                 team_id: team_id.clone(),
                 workspace_hash: workspace_hash.clone(),
+                project_name: project_name.clone(),
                 spans: std::mem::take(&mut cur),
             }));
             bytes = 0;
@@ -85,6 +91,7 @@ pub fn chunk_tool_spans_into_ingest_batches(
             batches.push(IngestExportBatch::ToolSpans(ToolSpansBatchBody {
                 team_id: team_id.clone(),
                 workspace_hash: workspace_hash.clone(),
+                project_name: project_name.clone(),
                 spans: std::mem::take(&mut cur),
             }));
             bytes = 0;
@@ -94,6 +101,7 @@ pub fn chunk_tool_spans_into_ingest_batches(
         batches.push(IngestExportBatch::ToolSpans(ToolSpansBatchBody {
             team_id,
             workspace_hash,
+            project_name,
             spans: cur,
         }));
     }
@@ -144,7 +152,7 @@ mod tests {
             })
             .collect();
         let batches =
-            chunk_events_into_ingest_batches("t".into(), "w".into(), events, &cfg).unwrap();
+            chunk_events_into_ingest_batches("t".into(), "w".into(), None, events, &cfg).unwrap();
         assert_eq!(batches.len(), 3);
         let counts: Vec<_> = batches
             .iter()
@@ -169,7 +177,7 @@ mod tests {
             dummy_ev(json!({"x": "cc"})),
         ];
         let batches =
-            chunk_events_into_ingest_batches("t".into(), "w".into(), events, &cfg).unwrap();
+            chunk_events_into_ingest_batches("t".into(), "w".into(), None, events, &cfg).unwrap();
         assert!(batches.len() >= 2);
         for b in &batches {
             let IngestExportBatch::Events(body) = b else {

@@ -105,7 +105,7 @@ Optional fan-out to local and third-party sinks: **`file`** (append-only NDJSON 
 
 ### `[telemetry.query]`
 
-Remote read-back (provider pull) and cache policy. OTLP is **export only**; it is not a query authority. Defaults keep pull disabled and identity fields hashed/omitted unless allowlisted.
+Remote read-back (provider pull) and cache policy. OTLP is **export only**; it is not a query authority. Defaults keep pull disabled and optional identity fields hashed/omitted unless allowlisted. Telemetry exporters always include `project_name` as a repo-level label: GitHub origin repo name when available, workspace folder name otherwise. `workspace_hash` remains the stable join key.
 
 | Key | Default | Purpose |
 |-----|---------|--------|
@@ -116,7 +116,7 @@ Remote read-back (provider pull) and cache policy. OTLP is **export only**; it i
 
 ### `[telemetry.query.identity_allowlist]`
 
-When `true`, the corresponding field may be emitted in **cleartext** on outbound / canonical telemetry for that key; when `false` (default), omit or hash. Keys: `team`, `workspace_label`, `runner_label`, `actor_kind`, `actor_label`, `agent`, `model`, `env`, `job`, `branch`.
+When `true`, the corresponding field may be emitted in **cleartext** on outbound / canonical telemetry for that key; when `false` (default), omit or hash. Keys: `team`, `runner_label`, `actor_kind`, `actor_label`, `agent`, `model`, `env`, `job`, `branch`. `workspace_label` is reserved for exporter-derived `project_name`, which is always sent as repo identity rather than actor identity.
 
 **Exporters** are `[[telemetry.exporters]]` tables with `type = "file" | "posthog" | "datadog" | "otlp" | "dev" | "none"`. For `file`, optional `path` (relative paths resolve against the workspace root) defaults to **`~/.kaizen/projects/<slug>/telemetry.ndjson`**. The `kaizen telemetry configure` command appends a template block to `~/.kaizen/config.toml`.
 

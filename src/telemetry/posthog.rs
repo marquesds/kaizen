@@ -3,7 +3,7 @@
 //! one capture entry per **canonical** item (see `sync::canonical`).
 
 use crate::sync::IngestExportBatch;
-use crate::sync::canonical::{CanonicalItem, expand_ingest_batch};
+use crate::sync::canonical::{CanonicalEnvelope, CanonicalItem, expand_ingest_batch};
 use crate::sync::outbound::OutboundEvent;
 use crate::telemetry::TelemetryExporter;
 use anyhow::Result;
@@ -85,69 +85,96 @@ fn first_distinct_id(items: &[CanonicalItem]) -> Result<&str> {
 
 fn capture_for_item(item: &CanonicalItem, distinct_id: &str) -> Result<serde_json::Value> {
     match item {
-        CanonicalItem::Event(e) => phantom_event("kaizen.event", &e.event, distinct_id),
+        CanonicalItem::Event(e) => {
+            phantom_event("kaizen.event", &e.event, &e.envelope, distinct_id)
+        }
         CanonicalItem::ToolSpan(t) => {
             let span = serde_json::to_value(&t.span)?;
-            Ok(serde_json::json!({
-                "event": "kaizen.tool_span",
-                "distinct_id": distinct_id,
-                "properties": {
-                    "kaizen_schema_version": t.envelope.kaizen_schema_version,
-                    "team_id": &t.envelope.team_id,
-                    "workspace_hash": &t.envelope.workspace_hash,
-                    "span": span,
-                }
-            }))
+            Ok(capture(
+                "kaizen.tool_span",
+                envelope_props(&t.envelope, "span", span),
+                distinct_id,
+            ))
         }
         CanonicalItem::RepoSnapshotChunk(c) => {
             let chunk = serde_json::to_value(&c.chunk)?;
-            Ok(serde_json::json!({
-                "event": "kaizen.repo_snapshot_chunk",
-                "distinct_id": distinct_id,
-                "properties": {
-                    "kaizen_schema_version": c.envelope.kaizen_schema_version,
-                    "team_id": &c.envelope.team_id,
-                    "workspace_hash": &c.envelope.workspace_hash,
-                    "chunk": chunk,
-                }
-            }))
+            Ok(capture(
+                "kaizen.repo_snapshot_chunk",
+                envelope_props(&c.envelope, "chunk", chunk),
+                distinct_id,
+            ))
         }
         CanonicalItem::WorkspaceFactSnapshot {
             envelope, payload, ..
-        } => Ok(serde_json::json!({
-            "event": "kaizen.workspace_fact_snapshot",
-            "distinct_id": distinct_id,
-            "properties": {
-                "kaizen_schema_version": envelope.kaizen_schema_version,
-                "team_id": &envelope.team_id,
-                "workspace_hash": &envelope.workspace_hash,
-                "payload": payload,
-            }
-        })),
+        } => Ok(capture(
+            "kaizen.workspace_fact_snapshot",
+            envelope_props(envelope, "payload", serde_json::to_value(payload)?),
+            distinct_id,
+        )),
     }
 }
 
-fn phantom_event(name: &str, e: &OutboundEvent, distinct_id: &str) -> Result<serde_json::Value> {
-    let props = serde_json::to_value(e)?;
-    Ok(serde_json::json!({
+fn phantom_event(
+    name: &str,
+    e: &OutboundEvent,
+    envelope: &CanonicalEnvelope,
+    distinct_id: &str,
+) -> Result<serde_json::Value> {
+    let mut props = serde_json::to_value(e)?;
+    merge_project_name(&mut props, envelope);
+    Ok(capture(name, props, distinct_id))
+}
+
+fn capture(name: &str, props: serde_json::Value, distinct_id: &str) -> serde_json::Value {
+    serde_json::json!({
         "event": name,
         "distinct_id": distinct_id,
         "properties": props,
-    }))
+    })
+}
+
+fn envelope_props(
+    envelope: &CanonicalEnvelope,
+    key: &str,
+    value: serde_json::Value,
+) -> serde_json::Value {
+    let mut props = serde_json::json!({
+        "kaizen_schema_version": envelope.kaizen_schema_version,
+        "team_id": &envelope.team_id,
+        "workspace_hash": &envelope.workspace_hash,
+        key: value,
+    });
+    merge_project_name(&mut props, envelope);
+    props
+}
+
+fn merge_project_name(props: &mut serde_json::Value, envelope: &CanonicalEnvelope) {
+    if let Some(name) = project_name(envelope)
+        && let Some(map) = props.as_object_mut()
+    {
+        map.insert("project_name".into(), name.into());
+    }
+}
+
+fn project_name(envelope: &CanonicalEnvelope) -> Option<&str> {
+    envelope
+        .identity
+        .as_ref()
+        .and_then(|i| i.workspace_label.as_deref())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::sync::IngestExportBatch;
-    use crate::sync::outbound::EventsBatchBody;
-    use crate::sync::outbound::OutboundEvent;
+    use crate::sync::outbound::{EventsBatchBody, OutboundEvent};
 
     #[test]
     fn one_capture_per_row_matches_expand() {
         let b = IngestExportBatch::Events(EventsBatchBody {
             team_id: "t".into(),
             workspace_hash: "w".into(),
+            project_name: Some("kaizen".into()),
             events: vec![OutboundEvent {
                 session_id_hash: "a".into(),
                 event_seq: 0,
@@ -167,6 +194,6 @@ mod tests {
         });
         let arr = build_batch_array(&b).unwrap();
         assert_eq!(arr.len(), 1);
-        assert_eq!(arr[0]["event"], "kaizen.event");
+        assert_eq!(arr[0]["properties"]["project_name"], "kaizen");
     }
 }

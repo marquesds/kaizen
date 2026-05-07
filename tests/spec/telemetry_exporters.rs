@@ -20,6 +20,8 @@ struct TelemetryExportersState {
     dd_records_emitted: i64,
     dd_emit_has_timestamp: bool,
     dd_emit_has_hostname: bool,
+    dd_emit_has_project_name: bool,
+    dd_emit_has_span_metrics: bool,
 }
 
 #[derive(Default)]
@@ -36,6 +38,8 @@ struct TelemetryExportersDriver {
     dd_records_emitted: i64,
     dd_emit_has_timestamp: bool,
     dd_emit_has_hostname: bool,
+    dd_emit_has_project_name: bool,
+    dd_emit_has_span_metrics: bool,
 }
 
 impl State<TelemetryExportersDriver> for TelemetryExportersState {
@@ -53,6 +57,8 @@ impl State<TelemetryExportersDriver> for TelemetryExportersState {
             dd_records_emitted: d.dd_records_emitted,
             dd_emit_has_timestamp: d.dd_emit_has_timestamp,
             dd_emit_has_hostname: d.dd_emit_has_hostname,
+            dd_emit_has_project_name: d.dd_emit_has_project_name,
+            dd_emit_has_span_metrics: d.dd_emit_has_span_metrics,
         })
     }
 }
@@ -102,6 +108,8 @@ impl Driver for TelemetryExportersDriver {
                 self.dd_records_emitted = 0;
                 self.dd_emit_has_timestamp = true;
                 self.dd_emit_has_hostname = true;
+                self.dd_emit_has_project_name = true;
+                self.dd_emit_has_span_metrics = true;
             }
             init_fail_closed => {
                 self.outbox = 1;
@@ -116,6 +124,8 @@ impl Driver for TelemetryExportersDriver {
                 self.dd_records_emitted = 0;
                 self.dd_emit_has_timestamp = true;
                 self.dd_emit_has_hostname = true;
+                self.dd_emit_has_project_name = true;
+                self.dd_emit_has_span_metrics = true;
             }
             flush_both_ok => {
                 if self.outbox > 0 {
@@ -175,16 +185,19 @@ impl Driver for TelemetryExportersDriver {
                 }
             }
             emit_dd_record => {
-                let (has_ts, has_host) = build_real_dd_record();
+                let (has_ts, has_host, has_project) = build_real_dd_record();
                 self.dd_records_emitted += 1;
                 self.dd_emit_has_timestamp = has_ts;
                 self.dd_emit_has_hostname = has_host;
+                self.dd_emit_has_project_name = has_project;
             }
             emit_dd_span_record => {
-                let (has_ts, has_host) = build_real_dd_span_record();
+                let (has_ts, has_host, has_project, has_span_metrics) = build_real_dd_span_record();
                 self.dd_records_emitted += 1;
                 self.dd_emit_has_timestamp = has_ts;
                 self.dd_emit_has_hostname = has_host;
+                self.dd_emit_has_project_name = has_project;
+                self.dd_emit_has_span_metrics = has_span_metrics;
             }
             step => {}
         })
@@ -196,13 +209,14 @@ impl Driver for TelemetryExportersDriver {
 /// `dd_records_well_formed` real teeth: a regression that drops `timestamp` or `hostname`
 /// flips one bool to false and the spec rejects the trace.
 #[cfg(feature = "telemetry-datadog")]
-fn build_real_dd_record() -> (bool, bool) {
+fn build_real_dd_record() -> (bool, bool, bool) {
     use kaizen::sync::IngestExportBatch;
     use kaizen::sync::canonical::expand_ingest_batch;
     use kaizen::sync::outbound::{EventsBatchBody, OutboundEvent};
     let b = IngestExportBatch::Events(EventsBatchBody {
         team_id: "t".into(),
         workspace_hash: "wh".into(),
+        project_name: Some("kaizen".into()),
         events: vec![OutboundEvent {
             session_id_hash: "sid".into(),
             event_seq: 0,
@@ -222,12 +236,16 @@ fn build_real_dd_record() -> (bool, bool) {
     });
     let items = expand_ingest_batch(&b);
     let v = kaizen::telemetry::datadog::dd_log_object_for_test(&items[0], "spec-host");
-    (v.get("timestamp").is_some(), v.get("hostname").is_some())
+    (
+        v.get("timestamp").is_some(),
+        v.get("hostname").is_some(),
+        v.get("project_name").is_some(),
+    )
 }
 
 #[cfg(not(feature = "telemetry-datadog"))]
-fn build_real_dd_record() -> (bool, bool) {
-    (true, true)
+fn build_real_dd_record() -> (bool, bool, bool) {
+    (true, true, true)
 }
 
 /// Same idea as `build_real_dd_record`, but exercises the [`OutboundToolSpan`] branch of
@@ -235,13 +253,14 @@ fn build_real_dd_record() -> (bool, bool) {
 /// `dd_records_well_formed` only has teeth on the span path if the driver actually constructs
 /// one through the real builder.
 #[cfg(feature = "telemetry-datadog")]
-fn build_real_dd_span_record() -> (bool, bool) {
+fn build_real_dd_span_record() -> (bool, bool, bool, bool) {
     use kaizen::sync::IngestExportBatch;
     use kaizen::sync::canonical::expand_ingest_batch;
     use kaizen::sync::smart::{OutboundToolSpan, ToolSpansBatchBody};
     let b = IngestExportBatch::ToolSpans(ToolSpansBatchBody {
         team_id: "t".into(),
         workspace_hash: "wh".into(),
+        project_name: Some("kaizen".into()),
         spans: vec![OutboundToolSpan {
             session_id_hash: "sid".into(),
             span_id_hash: "span".into(),
@@ -250,21 +269,26 @@ fn build_real_dd_span_record() -> (bool, bool) {
             started_at_ms: Some(1),
             ended_at_ms: Some(2),
             lead_time_ms: Some(1),
-            tokens_in: None,
-            tokens_out: None,
-            reasoning_tokens: None,
-            cost_usd_e6: None,
+            tokens_in: Some(10),
+            tokens_out: Some(4),
+            reasoning_tokens: Some(2),
+            cost_usd_e6: Some(25),
             path_hashes: vec!["blake3:p".into()],
         }],
     });
     let items = expand_ingest_batch(&b);
     let v = kaizen::telemetry::datadog::dd_log_object_for_test(&items[0], "spec-host");
-    (v.get("timestamp").is_some(), v.get("hostname").is_some())
+    (
+        v.get("timestamp").is_some(),
+        v.get("hostname").is_some(),
+        v.get("project_name").is_some(),
+        v.get("lead_time_ms").is_some(),
+    )
 }
 
 #[cfg(not(feature = "telemetry-datadog"))]
-fn build_real_dd_span_record() -> (bool, bool) {
-    (true, true)
+fn build_real_dd_span_record() -> (bool, bool, bool, bool) {
+    (true, true, true, true)
 }
 
 #[quint_run(

@@ -41,6 +41,7 @@ pub fn flush_outbox_once(
     }
     let client = SyncHttpClient::new(&cfg.endpoint, &cfg.team_token)?;
     let workspace_hash = crate::sync::outbound::workspace_hash(team_salt, workspace_root);
+    let project_name = crate::core::project_identity::project_name(workspace_root);
     let mut stats = FlushStats::default();
 
     while store.outbox_pending_count()? > 0 {
@@ -51,7 +52,14 @@ pub fn flush_outbox_once(
         let Some(kind) = rows.first().map(|(_, k, _)| k.clone()) else {
             break;
         };
-        let sent = match build_batch(&rows, cfg, &cfg.team_id, &workspace_hash, &kind)? {
+        let sent = match build_batch(
+            &rows,
+            cfg,
+            &cfg.team_id,
+            &workspace_hash,
+            &project_name,
+            &kind,
+        )? {
             Some((ids, batch)) => post_batch_resilient(&client, store, batch, &ids, flush)?,
             None => break,
         };
@@ -79,6 +87,7 @@ fn build_batch(
     cfg: &crate::core::config::SyncConfig,
     team_id: &str,
     workspace_hash: &str,
+    project_name: &Option<String>,
     kind: &str,
 ) -> Result<Option<(Vec<i64>, IngestExportBatch)>> {
     match kind {
@@ -92,6 +101,7 @@ fn build_batch(
                 IngestExportBatch::Events(EventsBatchBody {
                     team_id: team_id.into(),
                     workspace_hash: workspace_hash.into(),
+                    project_name: project_name.clone(),
                     events,
                 }),
             )))
@@ -106,6 +116,7 @@ fn build_batch(
                 IngestExportBatch::ToolSpans(ToolSpansBatchBody {
                     team_id: team_id.into(),
                     workspace_hash: workspace_hash.into(),
+                    project_name: project_name.clone(),
                     spans,
                 }),
             )))
@@ -121,6 +132,7 @@ fn build_batch(
                 IngestExportBatch::RepoSnapshots(RepoSnapshotsBatchBody {
                     team_id: team_id.into(),
                     workspace_hash: workspace_hash.into(),
+                    project_name: project_name.clone(),
                     snapshots,
                 }),
             )))
@@ -135,6 +147,7 @@ fn build_batch(
                 IngestExportBatch::WorkspaceFacts(WorkspaceFactsBatchBody {
                     team_id: team_id.into(),
                     workspace_hash: workspace_hash.into(),
+                    project_name: project_name.clone(),
                     facts,
                 }),
             )))
@@ -355,11 +368,13 @@ fn split_batch(body: IngestExportBatch, mid: usize) -> (IngestExportBatch, Inges
             IngestExportBatch::Events(EventsBatchBody {
                 team_id: body.team_id.clone(),
                 workspace_hash: body.workspace_hash.clone(),
+                project_name: body.project_name.clone(),
                 events: body.events[..mid].to_vec(),
             }),
             IngestExportBatch::Events(EventsBatchBody {
                 team_id: body.team_id,
                 workspace_hash: body.workspace_hash,
+                project_name: body.project_name,
                 events: body.events[mid..].to_vec(),
             }),
         ),
@@ -367,11 +382,13 @@ fn split_batch(body: IngestExportBatch, mid: usize) -> (IngestExportBatch, Inges
             IngestExportBatch::ToolSpans(ToolSpansBatchBody {
                 team_id: body.team_id.clone(),
                 workspace_hash: body.workspace_hash.clone(),
+                project_name: body.project_name.clone(),
                 spans: body.spans[..mid].to_vec(),
             }),
             IngestExportBatch::ToolSpans(ToolSpansBatchBody {
                 team_id: body.team_id,
                 workspace_hash: body.workspace_hash,
+                project_name: body.project_name,
                 spans: body.spans[mid..].to_vec(),
             }),
         ),
@@ -379,11 +396,13 @@ fn split_batch(body: IngestExportBatch, mid: usize) -> (IngestExportBatch, Inges
             IngestExportBatch::RepoSnapshots(RepoSnapshotsBatchBody {
                 team_id: body.team_id.clone(),
                 workspace_hash: body.workspace_hash.clone(),
+                project_name: body.project_name.clone(),
                 snapshots: body.snapshots[..mid].to_vec(),
             }),
             IngestExportBatch::RepoSnapshots(RepoSnapshotsBatchBody {
                 team_id: body.team_id,
                 workspace_hash: body.workspace_hash,
+                project_name: body.project_name,
                 snapshots: body.snapshots[mid..].to_vec(),
             }),
         ),
@@ -391,11 +410,13 @@ fn split_batch(body: IngestExportBatch, mid: usize) -> (IngestExportBatch, Inges
             IngestExportBatch::WorkspaceFacts(WorkspaceFactsBatchBody {
                 team_id: body.team_id.clone(),
                 workspace_hash: body.workspace_hash.clone(),
+                project_name: body.project_name.clone(),
                 facts: body.facts[..mid].to_vec(),
             }),
             IngestExportBatch::WorkspaceFacts(WorkspaceFactsBatchBody {
                 team_id: body.team_id,
                 workspace_hash: body.workspace_hash,
+                project_name: body.project_name,
                 facts: body.facts[mid..].to_vec(),
             }),
         ),
