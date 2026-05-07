@@ -623,12 +623,14 @@ pub(crate) fn scan_all_agents(
 ) -> Result<()> {
     let _spin = ScanSpinner::start("Scanning agent sessions…");
     let slug = workspace_slug(ws_str);
+    let cursor_slug = crate::core::paths::cursor_slug(ws);
+    let claude_slug = crate::core::paths::claude_code_slug(ws);
     let sync_ctx = crate::sync::ingest_ctx(cfg, ws.to_path_buf());
 
     for root in &cfg.scan.roots {
         let expanded = expand_home(root);
         let cursor_dir = PathBuf::from(&expanded)
-            .join(&slug)
+            .join(&cursor_slug)
             .join("agent-transcripts");
         scan_agent_dirs(
             &cursor_dir,
@@ -652,7 +654,7 @@ pub(crate) fn scan_all_agents(
 
     let claude_dir = PathBuf::from(&home)
         .join(".claude/projects")
-        .join(&slug)
+        .join(&claude_slug)
         .join("sessions");
     scan_agent_dirs(
         &claude_dir,

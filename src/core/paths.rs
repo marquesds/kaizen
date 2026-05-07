@@ -17,10 +17,36 @@ pub fn kaizen_dir() -> Option<PathBuf> {
 }
 
 /// `/Users/lucas/Projects/kaizen` → `Users-lucas-Projects-kaizen`
+///
+/// Used for kaizen's own data dir (`~/.kaizen/projects/<slug>/`).
 pub fn workspace_slug(path: &Path) -> String {
     path.to_string_lossy()
         .trim_start_matches('/')
         .replace('/', "-")
+}
+
+/// Cursor project slug: strips leading `/`, then replaces `/` and `.` with `-`.
+///
+/// Cursor stores transcripts at `~/.cursor/projects/<cursor_slug>/agent-transcripts`.
+/// Example: `/Users/lucas.marques/Projects/kaizen` → `Users-lucas-marques-Projects-kaizen`.
+pub fn cursor_slug(path: &Path) -> String {
+    path.to_string_lossy()
+        .trim_start_matches('/')
+        .replace(['/', '.'], "-")
+}
+
+/// Claude Code project slug: leading `/` becomes `-`, then `/` and `.` → `-`.
+///
+/// Claude Code stores sessions at `~/.claude/projects/<claude_slug>/sessions`.
+/// Example: `/Users/lucas.marques/Projects/kaizen` → `-Users-lucas-marques-Projects-kaizen`.
+pub fn claude_code_slug(path: &Path) -> String {
+    let s = path.to_string_lossy();
+    let with_leading = if let Some(rest) = s.strip_prefix('/') {
+        format!("-{rest}")
+    } else {
+        s.into_owned()
+    };
+    with_leading.replace(['/', '.'], "-")
 }
 
 /// `~/.kaizen/projects/<slug>/` (or `$KAIZEN_HOME/projects/<slug>/`), created on demand.
