@@ -42,10 +42,8 @@ impl ProjectLookupDriver {
             .ok_or_else(|| anyhow::anyhow!("expected nondet pick `n` for resolve action"))?;
         match v {
             Value::Number(n) => Ok(*n),
-            Value::BigInt(n) => {
-                i64::try_from(n.clone().into_inner())
-                    .map_err(|_| anyhow::anyhow!("nondet `n` overflows i64: {v:?}"))
-            }
+            Value::BigInt(n) => i64::try_from(n.clone().into_inner())
+                .map_err(|_| anyhow::anyhow!("nondet `n` overflows i64: {v:?}")),
             _ => anyhow::bail!("nondet `n` was not a number: {v:?}"),
         }
     }
