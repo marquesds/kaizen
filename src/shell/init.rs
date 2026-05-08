@@ -52,6 +52,7 @@ fn ensure_config(out: &mut String, ws: &Path) -> Result<()> {
 /// Hook command string written to `.cursor/hooks.json`.
 pub const KAIZEN_CURSOR_HOOK_CMD: &str = "kaizen ingest hook --source cursor";
 pub const KAIZEN_OPENCLAW_HOOK_CMD: &str = "kaizen ingest hook --source openclaw";
+const KAIZEN_OPENCLAW_SPAWN_ARGS: &str = r#""ingest", "hook", "--source", "openclaw""#;
 /// Hook command string written to `.claude/settings.json`.
 pub const KAIZEN_CLAUDE_HOOK_CMD: &str = "kaizen ingest hook --source claude";
 
@@ -420,7 +421,7 @@ pub fn patch_openclaw_handlers(out: &mut String, ws: &Path) -> Result<()> {
     let handler_path = hook_dir.join("handler.ts");
     if handler_path.exists() {
         let existing = std::fs::read_to_string(&handler_path)?;
-        if existing.contains(KAIZEN_OPENCLAW_HOOK_CMD) {
+        if openclaw_handler_contains_kaizen(&existing) {
             writeln!(out, "  skipped  ~/.openclaw/hooks/kaizen-events/handler.ts").unwrap();
             return Ok(());
         }
@@ -456,7 +457,12 @@ pub fn openclaw_kaizen_hook_wiring(_ws: &Path) -> Result<Option<bool>, String> {
         return Ok(Some(false));
     }
     let raw = std::fs::read_to_string(&handler_path).map_err(|e| e.to_string())?;
-    Ok(Some(raw.contains(KAIZEN_OPENCLAW_HOOK_CMD)))
+    Ok(Some(openclaw_handler_contains_kaizen(&raw)))
+}
+
+fn openclaw_handler_contains_kaizen(raw: &str) -> bool {
+    raw.contains(KAIZEN_OPENCLAW_HOOK_CMD)
+        || (raw.contains(r#"spawn("kaizen""#) && raw.contains(KAIZEN_OPENCLAW_SPAWN_ARGS))
 }
 
 /// Text that `kaizen init` would print to stdout.

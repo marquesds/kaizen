@@ -162,3 +162,34 @@ impl Driver for InitDriver {
 fn init_setup_run() -> impl Driver {
     InitDriver::default()
 }
+
+fn env_lock() -> &'static std::sync::Mutex<()> {
+    static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
+    LOCK.get_or_init(|| std::sync::Mutex::new(()))
+}
+
+#[test]
+fn generated_openclaw_handler_is_wired() -> anyhow::Result<()> {
+    let _guard = env_lock().lock().unwrap();
+    let old_home = std::env::var_os("HOME");
+    let tmp = tempfile::tempdir()?;
+    let ws = tmp.path().join("repo");
+    std::fs::create_dir_all(&ws)?;
+
+    unsafe { std::env::set_var("HOME", tmp.path()) };
+    let mut out = String::new();
+    kaizen::shell::init::patch_openclaw_handlers(&mut out, &ws)?;
+    let wired =
+        kaizen::shell::init::openclaw_kaizen_hook_wiring(&ws).map_err(anyhow::Error::msg)?;
+    restore_home(old_home);
+
+    assert_eq!(wired, Some(true));
+    Ok(())
+}
+
+fn restore_home(old_home: Option<std::ffi::OsString>) {
+    match old_home {
+        Some(v) => unsafe { std::env::set_var("HOME", v) },
+        None => unsafe { std::env::remove_var("HOME") },
+    }
+}

@@ -1,28 +1,5 @@
 {
   "hooks": {
-    "PostToolUse": [
-      {
-        "command": "kaizen ingest hook --source cursor"
-      }
-    ],
-    "PreToolUse": [
-      {
-        "command": "kaizen ingest hook --source cursor"
-      }
-    ],
-    "SessionStart": [
-      {
-        "command": "kaizen ingest hook --source cursor"
-      }
-    ],
-    "Stop": [
-      {
-        "command": "cargo run --bin kaizen -- ingest hook --source cursor"
-      },
-      {
-        "command": "kaizen ingest hook --source cursor"
-      }
-    ],
     "beforeReadFile": [
       {
         "command": ".cursor/hooks/read-cap.sh"

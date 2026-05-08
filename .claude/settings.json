@@ -1,15 +1,5 @@
 {
   "hooks": {
-    "PostToolUse": [
-      {
-        "hooks": [
-          {
-            "command": "kaizen ingest hook --source claude",
-            "type": "command"
-          }
-        ]
-      }
-    ],
     "PreToolUse": [
       {
         "hooks": [
@@ -19,42 +9,6 @@
           }
         ],
         "matcher": "Bash"
-      },
-      {
-        "hooks": [
-          {
-            "command": "kaizen ingest hook --source claude",
-            "type": "command"
-          }
-        ]
-      }
-    ],
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "command": "kaizen ingest hook --source claude",
-            "type": "command"
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "command": "cargo run --bin kaizen -- ingest hook --source claude",
-            "type": "command"
-          }
-        ]
-      },
-      {
-        "hooks": [
-          {
-            "command": "kaizen ingest hook --source claude",
-            "type": "command"
-          }
-        ]
       }
     ]
   },
