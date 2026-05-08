@@ -17,9 +17,14 @@ jobs:
     steps:
       - uses: dtolnay/rust-toolchain@stable
       - run: |
-          set -eu
-          VERS=$(curl -sS --fail 'https://crates.io/api/v1/crates/kaizen-cli/versions?per_page=100' \
-            | jq -r '.versions[].num')
+          set -euo pipefail
+          UA='marquesds/kaizen crates-io-yank (https://github.com/marquesds/kaizen)'
+          CRATE_JSON="$(curl -sSf \
+            -H "User-Agent: ${UA}" \
+            'https://crates.io/api/v1/crates/kaizen-cli/versions?per_page=100')"
+          VERS="$(printf '%s' "${CRATE_JSON}" | jq -r '.versions[].num')"
+          test -n "${VERS}"
+          printf '%s\n' "${VERS}"
           for ver in ${VERS}; do
             printf 'yanking %s\n' "${ver}"
             cargo yank --vers "${ver}" kaizen-cli
