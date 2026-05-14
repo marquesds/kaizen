@@ -3,38 +3,48 @@
 
 use crate::store::sqlite::{Store, SummaryStats};
 use anyhow::Result;
-use std::path::{Path, PathBuf};
+use std::path::Path;
+#[cfg(feature = "analytics-duckdb")]
+use std::path::PathBuf;
 
 pub struct QueryStore {
+    #[cfg(feature = "analytics-duckdb")]
     root: PathBuf,
 }
 
 impl QueryStore {
-    pub fn open(root: &Path) -> Result<Self> {
+    pub fn open(_root: &Path) -> Result<Self> {
         Ok(Self {
-            root: root.to_path_buf(),
+            #[cfg(feature = "analytics-duckdb")]
+            root: _root.to_path_buf(),
         })
     }
 
     pub fn summary_stats(&self, sqlite: &Store, workspace: &str) -> Result<SummaryStats> {
-        let mut stats = sqlite.summary_stats(workspace)?;
-        #[cfg(feature = "analytics-duckdb")]
-        {
-            if self.events_glob_exists() {
-                let duck = duckdb::Connection::open_in_memory()?;
-                let glob = sql_string(&self.events_glob());
-                let cost: i64 = duck.query_row(
-                    &format!("SELECT COALESCE(SUM(cost_usd_e6), 0) FROM read_parquet({glob})"),
-                    [],
-                    |r| r.get(0),
-                )?;
-                stats.total_cost_usd_e6 = stats.total_cost_usd_e6.saturating_add(cost);
-                stats.top_tools = merge_top_tools(
-                    stats.top_tools,
-                    cold_top_tools(&duck, &glob).unwrap_or_default(),
-                );
-            }
+        self.merge_cold_stats(sqlite.summary_stats(workspace)?)
+    }
+
+    #[cfg(feature = "analytics-duckdb")]
+    fn merge_cold_stats(&self, mut stats: SummaryStats) -> Result<SummaryStats> {
+        if self.events_glob_exists() {
+            let duck = duckdb::Connection::open_in_memory()?;
+            let glob = sql_string(&self.events_glob());
+            let cost: i64 = duck.query_row(
+                &format!("SELECT COALESCE(SUM(cost_usd_e6), 0) FROM read_parquet({glob})"),
+                [],
+                |r| r.get(0),
+            )?;
+            stats.total_cost_usd_e6 = stats.total_cost_usd_e6.saturating_add(cost);
+            stats.top_tools = merge_top_tools(
+                stats.top_tools,
+                cold_top_tools(&duck, &glob).unwrap_or_default(),
+            );
         }
+        Ok(stats)
+    }
+
+    #[cfg(not(feature = "analytics-duckdb"))]
+    fn merge_cold_stats(&self, stats: SummaryStats) -> Result<SummaryStats> {
         Ok(stats)
     }
 
@@ -58,6 +68,7 @@ impl QueryStore {
         }
     }
 
+    #[cfg(feature = "analytics-duckdb")]
     fn events_glob(&self) -> String {
         self.root
             .join("cold/events/*.parquet")
@@ -65,6 +76,7 @@ impl QueryStore {
             .to_string()
     }
 
+    #[cfg(feature = "analytics-duckdb")]
     fn events_glob_exists(&self) -> bool {
         self.root.join("cold/events").exists()
     }
@@ -83,6 +95,7 @@ fn cold_top_tools(duck: &duckdb::Connection, glob: &str) -> Result<Vec<(String, 
     Ok(rows.filter_map(|r| r.ok()).collect())
 }
 
+#[cfg(feature = "analytics-duckdb")]
 fn merge_top_tools(mut warm: Vec<(String, u64)>, cold: Vec<(String, u64)>) -> Vec<(String, u64)> {
     for (tool, n) in cold {
         if let Some((_, total)) = warm.iter_mut().find(|(t, _)| t == &tool) {
@@ -96,6 +109,7 @@ fn merge_top_tools(mut warm: Vec<(String, u64)>, cold: Vec<(String, u64)>) -> Ve
     warm
 }
 
+#[cfg(feature = "analytics-duckdb")]
 fn sql_string(s: &str) -> String {
     format!("'{}'", s.replace('\'', "''"))
 }

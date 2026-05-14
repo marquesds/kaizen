@@ -4,7 +4,9 @@
 use crate::core::config::{self, ExporterConfig, effective_redaction_salt};
 use crate::core::paths::kaizen_dir;
 use crate::core::project_identity::project_name;
-use crate::provider::{PullWindow, TelemetryQueryProvider, from_config as provider_from_config};
+#[cfg(any(feature = "telemetry-datadog", feature = "telemetry-posthog"))]
+use crate::provider::TelemetryQueryProvider;
+use crate::provider::{PullWindow, from_config as provider_from_config};
 use crate::shell::cli::workspace_path;
 use crate::shell::scope;
 use crate::store::Store;

@@ -5,8 +5,8 @@ mod view;
 mod worker;
 
 use crate::core::event::{Event, SessionRecord, SessionStatus};
+use crate::metrics::report;
 use crate::metrics::types::MetricsReport;
-use crate::metrics::{index, report};
 use crate::store::span_tree::SpanNode;
 use crate::store::{SessionFilter, Store};
 use crate::ui::theme;
@@ -34,6 +34,7 @@ use std::sync::{
 };
 use time::OffsetDateTime;
 use tokio::sync::{Notify, mpsc};
+use tokio::task::JoinHandle;
 use tokio::time::{Duration, Instant, sleep_until};
 use view::{DetailData, DetailState, EventView, SessionView};
 use worker::{StoreRequest, StoreResponse, spawn_store_worker};
@@ -833,7 +834,7 @@ fn spawn_report_worker(
     dirty: Arc<AtomicBool>,
     notify: Arc<Notify>,
     ui_tx: mpsc::UnboundedSender<()>,
-) {
+) -> JoinHandle<()> {
     tokio::spawn(async move {
         let mut last_run = Instant::now() - Duration::from_millis(REPORT_REFRESH_MIN_MS);
         loop {
@@ -859,22 +860,17 @@ fn spawn_report_worker(
                 let _ = ui_tx.send(());
             }
         }
-    });
+    })
 }
 
-fn spawn_tui_setup_worker(
-    workspace: PathBuf,
-    db_path: PathBuf,
-    report_dirty: Arc<AtomicBool>,
-    report_notify: Arc<Notify>,
-) {
-    tokio::task::spawn_blocking(move || {
-        if let Ok(store) = Store::open(&db_path) {
-            let _ = index::ensure_indexed(&store, &workspace, false);
-            report_dirty.store(true, Ordering::Release);
-            report_notify.notify_one();
-        }
-    });
+struct BackgroundWorkers {
+    report: JoinHandle<()>,
+}
+
+impl BackgroundWorkers {
+    fn shutdown(self) {
+        self.report.abort();
+    }
 }
 
 async fn wait_for_deadline(deadline: Option<Instant>) {
@@ -893,26 +889,22 @@ pub async fn run(workspace: &Path) -> Result<()> {
     let report_dirty = Arc::new(AtomicBool::new(true));
     let report_notify = Arc::new(Notify::new());
     let (report_ui_tx, mut report_ui_rx) = mpsc::unbounded_channel();
-    spawn_report_worker(
-        db_path.clone(),
-        workspace.to_string_lossy().to_string(),
-        metrics_cache.clone(),
-        report_dirty.clone(),
-        report_notify.clone(),
-        report_ui_tx,
-    );
+    let workers = BackgroundWorkers {
+        report: spawn_report_worker(
+            db_path.clone(),
+            workspace.to_string_lossy().to_string(),
+            metrics_cache.clone(),
+            report_dirty.clone(),
+            report_notify.clone(),
+            report_ui_tx,
+        ),
+    };
     let mut app = App::open(
         workspace,
         metrics_cache,
         report_dirty.clone(),
         report_notify.clone(),
     )?;
-    spawn_tui_setup_worker(
-        workspace.to_path_buf(),
-        db_path.clone(),
-        report_dirty.clone(),
-        report_notify.clone(),
-    );
     enable_raw_mode()?;
     let mut stdout = std::io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
@@ -1101,6 +1093,8 @@ pub async fn run(workspace: &Path) -> Result<()> {
     }
 
     input_stop.store(true, Ordering::Release);
+    workers.shutdown();
+    drop(app);
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     Ok(())
@@ -1181,6 +1175,18 @@ mod tests {
         view.reset_for("s2");
         assert_ne!(view.generation(), token);
         assert!(view.window.is_empty());
+    }
+
+    #[test]
+    fn runtime_shutdown_timeout_bounds_blocking_task() {
+        let start = std::time::Instant::now();
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.spawn_blocking(|| std::thread::sleep(std::time::Duration::from_millis(200)));
+        rt.shutdown_timeout(std::time::Duration::from_millis(10));
+        assert!(start.elapsed() < std::time::Duration::from_millis(150));
     }
 
     #[cfg(unix)]

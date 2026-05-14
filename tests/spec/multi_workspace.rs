@@ -217,6 +217,10 @@ fn sessions_list_defaults_to_100_and_limit_zero_returns_all() -> anyhow::Result<
     let capped_json: serde_json::Value = serde_json::from_str(&capped)?;
     assert_eq!(capped_json["count"], 100);
 
+    let custom = sessions_list_text(Some(&ws), true, false, false, Some(2))?;
+    let custom_json: serde_json::Value = serde_json::from_str(&custom)?;
+    assert_eq!(custom_json["count"], 2);
+
     let all = sessions_list_text(Some(&ws), true, false, false, Some(0))?;
     let all_json: serde_json::Value = serde_json::from_str(&all)?;
     assert_eq!(all_json["count"], 105);
