@@ -53,6 +53,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: linux-stable
+          cache-bin: "false"
       - run: cargo clippy --all-targets -- -D warnings
 
   doc:
@@ -64,6 +65,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: linux-stable
+          cache-bin: "false"
       - name: cargo doc
         run: cargo doc --no-deps --all-features
         env:
@@ -88,7 +90,7 @@ jobs:
   test:
     name: test (${{ matrix.os }} / ${{ matrix.rust }})
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         include:
           - os: macos-latest
@@ -96,6 +98,8 @@ jobs:
           - os: ubuntu-latest
             rust: "1.95"
     runs-on: ${{ matrix.os }}
+    env:
+      CARGO_BUILD_JOBS: 2
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -116,6 +120,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.os }}-${{ matrix.rust }}
+          cache-bin: "false"
       - run: cargo nextest run -j 4 --all --locked --features duckdb/bundled,duckdb/parquet
       - run: cargo test --doc --all --locked --features duckdb/bundled,duckdb/parquet
 
