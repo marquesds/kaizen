@@ -98,6 +98,15 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.quint
+          key: quint-evaluator-${{ runner.os }}-v0.6.0
+      - run: npm install -g @informalsystems/quint@0.32.0
+      - run: scripts/install-quint-evaluator.sh
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust }}
