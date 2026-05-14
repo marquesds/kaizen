@@ -1,6 +1,0 @@
-[test-groups]
-quint = { max-threads = 1 }
-
-[[profile.default.overrides]]
-filter = 'test(/_run$/)'
-test-group = 'quint'
