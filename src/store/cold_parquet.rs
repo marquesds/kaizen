@@ -20,6 +20,72 @@ use time::{OffsetDateTime, format_description::well_known::Iso8601};
 
 pub const SCHEMA_VERSION: &str = "1";
 
+pub struct DailyEventWriter {
+    root: PathBuf,
+    max_rows: usize,
+    groups: BTreeMap<String, Vec<Event>>,
+    next_chunk: BTreeMap<String, u64>,
+    paths: Vec<PathBuf>,
+}
+
+impl DailyEventWriter {
+    pub fn new(root: &Path, max_rows: usize) -> Self {
+        Self {
+            root: root.to_path_buf(),
+            max_rows: max_rows.max(1),
+            groups: BTreeMap::new(),
+            next_chunk: BTreeMap::new(),
+            paths: Vec::new(),
+        }
+    }
+
+    pub fn push(&mut self, event: Event) -> Result<()> {
+        let day = partition_day(event.ts_ms)?;
+        let full = push_group(&mut self.groups, day.clone(), event, self.max_rows);
+        if full {
+            self.flush_day(&day)?;
+        }
+        Ok(())
+    }
+
+    pub fn finish(mut self) -> Result<Vec<PathBuf>> {
+        while let Some(day) = self.groups.keys().next().cloned() {
+            self.flush_day(&day)?;
+        }
+        Ok(self.paths)
+    }
+
+    fn flush_day(&mut self, day: &str) -> Result<()> {
+        let Some(rows) = self.groups.remove(day) else {
+            return Ok(());
+        };
+        let path = self.next_chunk_path(day)?;
+        write_batch(&path, &rows)?;
+        self.paths.push(path);
+        Ok(())
+    }
+
+    fn next_chunk_path(&mut self, day: &str) -> Result<PathBuf> {
+        let dir = self.root.join("cold/events");
+        std::fs::create_dir_all(&dir)?;
+        let n = self.next_chunk.entry(day.to_string()).or_default();
+        let path = dir.join(format!("{day}-{n:06}.parquet"));
+        *n += 1;
+        Ok(path)
+    }
+}
+
+fn push_group(
+    groups: &mut BTreeMap<String, Vec<Event>>,
+    day: String,
+    event: Event,
+    max_rows: usize,
+) -> bool {
+    let rows = groups.entry(day).or_default();
+    rows.push(event);
+    rows.len() >= max_rows
+}
+
 pub fn write_daily_events(root: &Path, events: &[Event]) -> Result<Vec<PathBuf>> {
     let mut groups: BTreeMap<String, Vec<Event>> = BTreeMap::new();
     for event in events {
@@ -28,6 +94,13 @@ pub fn write_daily_events(root: &Path, events: &[Event]) -> Result<Vec<PathBuf>>
             .or_default()
             .push(event.clone());
     }
+    write_daily_event_groups(root, groups)
+}
+
+pub fn write_daily_event_groups(
+    root: &Path,
+    groups: BTreeMap<String, Vec<Event>>,
+) -> Result<Vec<PathBuf>> {
     let mut paths = Vec::new();
     for (day, rows) in groups {
         let dir = root.join("cold/events");

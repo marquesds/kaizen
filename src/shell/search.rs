@@ -2,10 +2,13 @@
 //! `kaizen sessions search` and `kaizen search reindex`.
 
 use crate::core::config::{self, try_team_salt};
+use crate::core::event::Event;
+use crate::search::extract::{redacted_event_text, snippet};
 use crate::search::{SearchHit, SearchQuery};
 use crate::shell::cli::{open_workspace_read_store, workspace_path};
 use crate::shell::fmt::fmt_ts;
 use crate::store::Store;
+use crate::store::event_index::{is_valid_slug, paths_from_event_payload, skills_from_event_json};
 use anyhow::{Context, Result};
 use std::path::Path;
 
@@ -56,9 +59,62 @@ pub fn sessions_search_hits(
         limit,
     };
     let data_dir = crate::core::paths::project_data_dir(&ws)?;
+    if let Some(hits) = exact_tool_hits(&store, &ws, &opts, &salt)? {
+        return Ok((hits, false));
+    }
     match crate::search::search(&data_dir, &opts, &ws, &salt, |s, q| store.get_event(s, q)) {
         Ok(hits) => Ok((hits, false)),
         Err(e) => anyhow::bail!("search index unavailable: {e}; run `kaizen search reindex`"),
+    }
+}
+
+fn exact_tool_hits(
+    store: &Store,
+    workspace: &Path,
+    opts: &SearchQuery,
+    salt: &[u8; 32],
+) -> Result<Option<Vec<SearchHit>>> {
+    let Some(tool) = exact_tool_query(opts) else {
+        return Ok(None);
+    };
+    let ws = workspace.to_string_lossy();
+    let rows =
+        store.search_tool_events(&ws, tool, opts.since_ms, opts.agent.as_deref(), opts.limit)?;
+    let hits = rows
+        .into_iter()
+        .map(|(agent, event)| tool_hit(agent, event, workspace, salt, &opts.query))
+        .collect::<Vec<_>>();
+    Ok((!hits.is_empty()).then_some(hits))
+}
+
+fn exact_tool_query(opts: &SearchQuery) -> Option<&str> {
+    if opts.limit == 0 || opts.kind.is_some() || !is_valid_slug(&opts.query) {
+        return None;
+    }
+    Some(opts.query.as_str())
+}
+
+fn tool_hit(
+    agent: String,
+    event: Event,
+    workspace: &Path,
+    salt: &[u8; 32],
+    query: &str,
+) -> SearchHit {
+    let text = redacted_event_text(&event, workspace, salt);
+    SearchHit {
+        session_id: event.session_id.clone(),
+        seq: event.seq,
+        ts_ms: event.ts_ms,
+        agent,
+        kind: crate::search::kind_label(&event.kind)
+            .unwrap_or("unknown")
+            .to_string(),
+        score: 1.0,
+        snippet: snippet(&text, query),
+        paths: paths_from_event_payload(&event.payload),
+        skills: skills_from_event_json(&event.payload),
+        tokens_total: crate::search::tokens_total(&event),
     }
 }
 

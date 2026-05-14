@@ -1,76 +1,42 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Pure smart-metric report builder.
+//! Smart-metric report builder.
 
-use crate::metrics::types::{MetricsReport, RankedFile, RankedTool, ToolSpanView};
+use crate::metrics::types::{MetricsReport, RankedTool};
 use crate::store::Store;
 use anyhow::Result;
-use std::collections::HashMap;
 
 pub fn build_report(store: &Store, workspace: &str, days: u32) -> Result<MetricsReport> {
     let snapshot = store.latest_repo_snapshot(workspace)?;
-    let facts = snapshot
-        .as_ref()
-        .map(|snap| store.file_facts_for_snapshot(&snap.id))
-        .transpose()?
-        .unwrap_or_default();
     let end_ms = now_ms();
     let start_ms = end_ms.saturating_sub(days as u64 * 86_400_000);
-    let spans = store.tool_spans_in_window(workspace, start_ms, end_ms)?;
+    let tools = store.tool_rank_rows_in_window(workspace, start_ms, end_ms)?;
+    let files = snapshot.as_ref().map(|snap| snap.id.as_str());
+    let hottest = files
+        .map(|id| store.hottest_files_for_snapshot(id))
+        .transpose()?;
+    let changed = files
+        .map(|id| store.most_changed_files_for_snapshot(id))
+        .transpose()?;
+    let complex = files
+        .map(|id| store.most_complex_files_for_snapshot(id))
+        .transpose()?;
+    let risky = files
+        .map(|id| store.highest_risk_files_for_snapshot(id))
+        .transpose()?;
+    let pain = files
+        .map(|id| store.pain_hotspots_for_snapshot(id, workspace, start_ms, end_ms))
+        .transpose()?;
     Ok(MetricsReport {
         snapshot,
-        hottest_files: top_files(&facts, |f| f.churn_30d as u64 * f.complexity_total as u64),
-        most_changed_files: top_files(&facts, |f| f.churn_30d as u64),
-        most_complex_files: top_files(&facts, |f| f.complexity_total as u64),
-        highest_risk_files: top_files(&facts, |f| {
-            f.churn_30d as u64 * f.authors_90d as u64 * f.complexity_total as u64
-        }),
-        slowest_tools: rank_tools(&spans, ToolRankMode::Latency),
-        highest_token_tools: rank_tools(&spans, ToolRankMode::Tokens),
-        highest_reasoning_tools: rank_tools(&spans, ToolRankMode::Reasoning),
-        agent_pain_hotspots: pain_hotspots(&facts, &spans),
+        hottest_files: hottest.unwrap_or_default(),
+        most_changed_files: changed.unwrap_or_default(),
+        most_complex_files: complex.unwrap_or_default(),
+        highest_risk_files: risky.unwrap_or_default(),
+        slowest_tools: top_tools(tools.clone(), ToolRankMode::Latency),
+        highest_token_tools: top_tools(tools.clone(), ToolRankMode::Tokens),
+        highest_reasoning_tools: top_tools(tools, ToolRankMode::Reasoning),
+        agent_pain_hotspots: pain.unwrap_or_default(),
     })
-}
-
-fn top_files<F>(facts: &[crate::metrics::types::FileFact], value: F) -> Vec<RankedFile>
-where
-    F: Fn(&crate::metrics::types::FileFact) -> u64,
-{
-    let mut out = facts
-        .iter()
-        .map(|fact| RankedFile {
-            path: fact.path.clone(),
-            value: value(fact),
-            complexity_total: fact.complexity_total,
-            churn_30d: fact.churn_30d,
-        })
-        .collect::<Vec<_>>();
-    out.sort_by(|a, b| b.value.cmp(&a.value).then_with(|| a.path.cmp(&b.path)));
-    out.truncate(10);
-    out
-}
-
-fn pain_hotspots(
-    facts: &[crate::metrics::types::FileFact],
-    spans: &[ToolSpanView],
-) -> Vec<RankedFile> {
-    let mut counts: HashMap<String, u64> = HashMap::new();
-    for span in spans {
-        for path in &span.paths {
-            *counts.entry(path.clone()).or_default() += 1;
-        }
-    }
-    let mut out = facts
-        .iter()
-        .map(|fact| RankedFile {
-            path: fact.path.clone(),
-            value: counts.get(&fact.path).copied().unwrap_or(0) * fact.complexity_total as u64,
-            complexity_total: fact.complexity_total,
-            churn_30d: fact.churn_30d,
-        })
-        .collect::<Vec<_>>();
-    out.sort_by(|a, b| b.value.cmp(&a.value).then_with(|| a.path.cmp(&b.path)));
-    out.truncate(10);
-    out
 }
 
 enum ToolRankMode {
@@ -79,41 +45,7 @@ enum ToolRankMode {
     Reasoning,
 }
 
-fn rank_tools(spans: &[ToolSpanView], mode: ToolRankMode) -> Vec<RankedTool> {
-    let mut by_tool: HashMap<String, Vec<&ToolSpanView>> = HashMap::new();
-    for span in spans {
-        by_tool.entry(span.tool.clone()).or_default().push(span);
-    }
-    let mut out = by_tool
-        .into_iter()
-        .map(|(tool, items)| {
-            let mut latencies = items
-                .iter()
-                .filter_map(|span| span.lead_time_ms)
-                .collect::<Vec<_>>();
-            latencies.sort_unstable();
-            let total_tokens = items
-                .iter()
-                .map(|span| {
-                    span.tokens_in.unwrap_or(0) as u64
-                        + span.tokens_out.unwrap_or(0) as u64
-                        + span.reasoning_tokens.unwrap_or(0) as u64
-                })
-                .sum::<u64>();
-            let total_reasoning_tokens = items
-                .iter()
-                .map(|span| span.reasoning_tokens.unwrap_or(0) as u64)
-                .sum::<u64>();
-            RankedTool {
-                tool,
-                calls: items.len() as u64,
-                p50_ms: percentile(&latencies, 50),
-                p95_ms: percentile(&latencies, 95),
-                total_tokens,
-                total_reasoning_tokens,
-            }
-        })
-        .collect::<Vec<_>>();
+fn top_tools(mut out: Vec<RankedTool>, mode: ToolRankMode) -> Vec<RankedTool> {
     out.sort_by(|a, b| {
         tool_rank_value(b, &mode)
             .cmp(&tool_rank_value(a, &mode))
@@ -129,14 +61,6 @@ fn tool_rank_value(tool: &RankedTool, mode: &ToolRankMode) -> u64 {
         ToolRankMode::Tokens => tool.total_tokens,
         ToolRankMode::Reasoning => tool.total_reasoning_tokens,
     }
-}
-
-fn percentile(values: &[u64], pct: usize) -> Option<u64> {
-    if values.is_empty() {
-        return None;
-    }
-    let idx = ((values.len() - 1) * pct) / 100;
-    Some(values[idx])
 }
 
 fn now_ms() -> u64 {

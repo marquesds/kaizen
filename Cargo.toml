@@ -104,6 +104,10 @@ name = "metrics_pipeline"
 path = "tests/spec/metrics_pipeline.rs"
 
 [[test]]
+name = "metrics_report_compact"
+path = "tests/spec/metrics_report_compact.rs"
+
+[[test]]
 name = "tui_app"
 path = "tests/spec/tui_app.rs"
 

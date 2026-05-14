@@ -16,7 +16,8 @@ fn migrate_v2_round_trip_perf() -> anyhow::Result<()> {
         .to_string();
     unsafe { std::env::set_var("KAIZEN_HOT_LOG", "0") };
     let seed_start = Instant::now();
-    let store = Store::open(&ws.join(".kaizen/kaizen.db"))?;
+    let db_path = kaizen::core::workspace::db_path(ws)?;
+    let store = Store::open(&db_path)?;
     for n in 0..SESSIONS {
         let id = format!("s{n:06}");
         store.upsert_session(&session(&id, &ws_key))?;
@@ -35,7 +36,7 @@ fn migrate_v2_round_trip_perf() -> anyhow::Result<()> {
     eprintln!("  seed: {:.1}s", seed_elapsed.as_secs_f64());
     eprintln!("  v2: {:.1}s", v2_elapsed.as_secs_f64());
     eprintln!("  v1: {:.1}s", v1_elapsed.as_secs_f64());
-    let restored = Store::open_read_only(&ws.join(".kaizen/kaizen.db"))?;
+    let restored = Store::open_read_only(&db_path)?;
     assert_eq!(restored.list_sessions(&ws_key)?.len(), SESSIONS);
     Ok(())
 }
