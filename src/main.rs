@@ -1068,7 +1068,12 @@ fn main() -> anyhow::Result<()> {
             let ws = resolve_ws(workspace.as_deref(), project.as_deref())?
                 .map(Ok)
                 .unwrap_or_else(|| kaizen::core::workspace::resolve(None))?;
-            tokio::runtime::Runtime::new()?.block_on(kaizen::ui::tui::run(&ws))
+            let rt = tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()?;
+            let result = rt.block_on(kaizen::ui::tui::run(&ws));
+            rt.shutdown_timeout(std::time::Duration::from_millis(500));
+            result
         }
         Command::Init { workspace, project } => {
             let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;

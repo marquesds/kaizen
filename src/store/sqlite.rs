@@ -3,7 +3,9 @@
 
 use crate::core::config::try_team_salt;
 use crate::core::event::{Event, EventKind, EventSource, SessionRecord, SessionStatus};
-use crate::metrics::types::{FileFact, RepoEdge, RepoSnapshotRecord, ToolSpanView};
+use crate::metrics::types::{
+    FileFact, RankedFile, RankedTool, RepoEdge, RepoSnapshotRecord, ToolSpanView,
+};
 use crate::store::event_index::index_event_derived;
 use crate::store::projector::{DEFAULT_ORPHAN_TTL_MS, Projector, ProjectorEvent};
 use crate::store::tool_span_index::{
@@ -31,6 +33,54 @@ const SESSION_SELECT: &str = "SELECT id, agent, model, workspace, started_at_ms,
     status, trace_path, start_commit, end_commit, branch, dirty_start, dirty_end,
     repo_binding_source, prompt_fingerprint, parent_session_id, agent_version, os, arch,
     repo_file_count, repo_total_loc FROM sessions";
+const PAIN_HOTSPOTS_SQL: &str = "
+    SELECT f.path,
+           COUNT(s.id) * f.complexity_total AS value,
+           f.complexity_total,
+           f.churn_30d
+    FROM file_facts f
+    LEFT JOIN tool_span_paths tsp ON tsp.path = f.path
+    LEFT JOIN tool_spans ts ON ts.span_id = tsp.span_id
+       AND ((ts.started_at_ms >= ?3 AND ts.started_at_ms <= ?4)
+         OR (ts.started_at_ms IS NULL AND ts.ended_at_ms >= ?3 AND ts.ended_at_ms <= ?4))
+    LEFT JOIN sessions s ON s.id = ts.session_id AND s.workspace = ?2
+    WHERE f.snapshot_id = ?1
+    GROUP BY f.path, f.complexity_total, f.churn_30d
+    ORDER BY value DESC, f.path ASC
+    LIMIT 10";
+const TOOL_RANK_ROWS_SQL: &str = "
+    WITH scoped AS (
+      SELECT COALESCE(ts.tool, 'unknown') AS tool,
+             ts.lead_time_ms,
+             COALESCE(ts.tokens_in, 0) + COALESCE(ts.tokens_out, 0)
+                 + COALESCE(ts.reasoning_tokens, 0) AS total_tokens,
+             COALESCE(ts.reasoning_tokens, 0) AS reasoning_tokens
+      FROM tool_spans ts
+      JOIN sessions s ON s.id = ts.session_id
+      WHERE s.workspace = ?1
+        AND ((ts.started_at_ms >= ?2 AND ts.started_at_ms <= ?3)
+          OR (ts.started_at_ms IS NULL AND ts.ended_at_ms >= ?2 AND ts.ended_at_ms <= ?3))
+    ),
+    agg AS (
+      SELECT tool, COUNT(*) AS calls, SUM(total_tokens) AS total_tokens,
+             SUM(reasoning_tokens) AS total_reasoning_tokens
+      FROM scoped GROUP BY tool
+    ),
+    lat AS (
+      SELECT tool, lead_time_ms,
+             ROW_NUMBER() OVER (PARTITION BY tool ORDER BY lead_time_ms) AS rn,
+             COUNT(*) OVER (PARTITION BY tool) AS n
+      FROM scoped WHERE lead_time_ms IS NOT NULL
+    ),
+    pct AS (
+      SELECT tool,
+             MAX(CASE WHEN rn = CAST(((n - 1) * 50) / 100 AS INTEGER) + 1 THEN lead_time_ms END) AS p50_ms,
+             MAX(CASE WHEN rn = CAST(((n - 1) * 95) / 100 AS INTEGER) + 1 THEN lead_time_ms END) AS p95_ms
+      FROM lat GROUP BY tool
+    )
+    SELECT agg.tool, agg.calls, pct.p50_ms, pct.p95_ms,
+           agg.total_tokens, agg.total_reasoning_tokens
+    FROM agg LEFT JOIN pct ON pct.tool = agg.tool";
 
 const MIGRATIONS: &[&str] = &[
     "CREATE TABLE IF NOT EXISTS sessions (
@@ -274,8 +324,10 @@ const MIGRATIONS: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS events_ts_idx ON events(ts_ms)",
     "CREATE INDEX IF NOT EXISTS events_ts_session_seq_idx ON events(ts_ms, session_id, seq)",
     "CREATE INDEX IF NOT EXISTS events_session_ts_seq_idx ON events(session_id, ts_ms, seq)",
+    "CREATE INDEX IF NOT EXISTS events_tool_ts_session_seq_idx ON events(tool, ts_ms DESC, session_id, seq)",
     "CREATE INDEX IF NOT EXISTS tool_spans_session_started_idx ON tool_spans(session_id, started_at_ms)",
     "CREATE INDEX IF NOT EXISTS tool_spans_session_ended_idx ON tool_spans(session_id, ended_at_ms)",
+    "CREATE INDEX IF NOT EXISTS tool_span_paths_path_idx ON tool_span_paths(path, span_id)",
     "CREATE INDEX IF NOT EXISTS feedback_session_idx ON session_feedback(session_id)",
 ];
 
@@ -1299,6 +1351,37 @@ impl Store {
             .map_err(Into::into)
     }
 
+    pub fn search_tool_events(
+        &self,
+        workspace: &str,
+        tool: &str,
+        since_ms: Option<u64>,
+        agent: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<(String, Event)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT e.session_id, e.seq, e.ts_ms, COALESCE(e.ts_exact, 0), e.kind, e.source, e.tool, e.tool_call_id,
+                    e.tokens_in, e.tokens_out, e.reasoning_tokens, e.cost_usd_e6, e.payload,
+                    e.stop_reason, e.latency_ms, e.ttft_ms, e.retry_count,
+                    e.context_used_tokens, e.context_max_tokens,
+                    e.cache_creation_tokens, e.cache_read_tokens, e.system_prompt_tokens,
+                    s.agent
+             FROM events e JOIN sessions s ON s.id = e.session_id
+             WHERE e.tool = ?2
+               AND (s.workspace = ?1 OR NOT EXISTS (SELECT 1 FROM sessions WHERE workspace = ?1))
+               AND (?3 IS NULL OR e.ts_ms >= ?3)
+               AND (?4 IS NULL OR s.agent = ?4)
+             ORDER BY e.ts_ms DESC, e.session_id ASC, e.seq ASC
+             LIMIT ?5",
+        )?;
+        let since = since_ms.map(|v| v as i64);
+        let rows = stmt.query_map(
+            params![workspace, tool, since, agent, limit as i64],
+            search_tool_event_row,
+        )?;
+        rows.map(|r| r.map_err(anyhow::Error::from)).collect()
+    }
+
     pub fn workspace_events(&self, workspace: &str) -> Result<Vec<(SessionRecord, Event)>> {
         let mut out = Vec::new();
         for session in self.list_sessions(workspace)? {
@@ -2172,6 +2255,66 @@ impl Store {
         Ok(rows.filter_map(|row| row.ok()).collect())
     }
 
+    pub fn hottest_files_for_snapshot(&self, snapshot_id: &str) -> Result<Vec<RankedFile>> {
+        self.ranked_files_for_snapshot(snapshot_id, "churn_30d * complexity_total")
+    }
+
+    pub fn most_changed_files_for_snapshot(&self, snapshot_id: &str) -> Result<Vec<RankedFile>> {
+        self.ranked_files_for_snapshot(snapshot_id, "churn_30d")
+    }
+
+    pub fn most_complex_files_for_snapshot(&self, snapshot_id: &str) -> Result<Vec<RankedFile>> {
+        self.ranked_files_for_snapshot(snapshot_id, "complexity_total")
+    }
+
+    pub fn highest_risk_files_for_snapshot(&self, snapshot_id: &str) -> Result<Vec<RankedFile>> {
+        self.ranked_files_for_snapshot(snapshot_id, "churn_30d * authors_90d * complexity_total")
+    }
+
+    fn ranked_files_for_snapshot(
+        &self,
+        snapshot_id: &str,
+        value_sql: &str,
+    ) -> Result<Vec<RankedFile>> {
+        let sql = format!(
+            "SELECT path, {value_sql}, complexity_total, churn_30d
+             FROM file_facts WHERE snapshot_id = ?1
+             ORDER BY {value_sql} DESC, path ASC LIMIT 10"
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let rows = stmt.query_map(params![snapshot_id], ranked_file_row)?;
+        rows.map(|r| r.map_err(anyhow::Error::from)).collect()
+    }
+
+    pub fn pain_hotspots_for_snapshot(
+        &self,
+        snapshot_id: &str,
+        workspace: &str,
+        start_ms: u64,
+        end_ms: u64,
+    ) -> Result<Vec<RankedFile>> {
+        let mut stmt = self.conn.prepare(PAIN_HOTSPOTS_SQL)?;
+        let rows = stmt.query_map(
+            params![snapshot_id, workspace, start_ms as i64, end_ms as i64],
+            ranked_file_row,
+        )?;
+        rows.map(|r| r.map_err(anyhow::Error::from)).collect()
+    }
+
+    pub fn tool_rank_rows_in_window(
+        &self,
+        workspace: &str,
+        start_ms: u64,
+        end_ms: u64,
+    ) -> Result<Vec<RankedTool>> {
+        let mut stmt = self.conn.prepare(TOOL_RANK_ROWS_SQL)?;
+        let rows = stmt.query_map(
+            params![workspace, start_ms as i64, end_ms as i64],
+            ranked_tool_row,
+        )?;
+        rows.map(|r| r.map_err(anyhow::Error::from)).collect()
+    }
+
     pub fn tool_spans_in_window(
         &self,
         workspace: &str,
@@ -2885,6 +3028,26 @@ fn session_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<SessionRecord> {
     })
 }
 
+fn ranked_file_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<RankedFile> {
+    Ok(RankedFile {
+        path: row.get(0)?,
+        value: row.get::<_, i64>(1)? as u64,
+        complexity_total: row.get::<_, i64>(2)? as u32,
+        churn_30d: row.get::<_, i64>(3)? as u32,
+    })
+}
+
+fn ranked_tool_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<RankedTool> {
+    Ok(RankedTool {
+        tool: row.get(0)?,
+        calls: row.get::<_, i64>(1)? as u64,
+        p50_ms: row.get::<_, Option<i64>>(2)?.map(|v| v as u64),
+        p95_ms: row.get::<_, Option<i64>>(3)?.map(|v| v as u64),
+        total_tokens: row.get::<_, i64>(4)? as u64,
+        total_reasoning_tokens: row.get::<_, i64>(5)? as u64,
+    })
+}
+
 fn event_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Event> {
     let payload_str: String = row.get(12)?;
     Ok(Event {
@@ -2911,6 +3074,10 @@ fn event_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Event> {
         cache_read_tokens: row.get::<_, Option<i64>>(20)?.map(|v| v as u32),
         system_prompt_tokens: row.get::<_, Option<i64>>(21)?.map(|v| v as u32),
     })
+}
+
+fn search_tool_event_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<(String, Event)> {
+    Ok((row.get(22)?, event_row(row)?))
 }
 
 fn session_filter_sql(workspace: &str, filter: &SessionFilter) -> (String, Vec<Value>) {

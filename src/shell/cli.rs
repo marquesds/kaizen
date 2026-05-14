@@ -184,6 +184,12 @@ pub fn sessions_list_text(
     limit: Option<usize>,
 ) -> Result<String> {
     let roots = scope::resolve(workspace, all_workspaces)?;
+    let output_limit = limit.unwrap_or(100);
+    let query_limit = if output_limit == 0 {
+        i64::MAX as usize
+    } else {
+        output_limit
+    };
     let mut sessions = Vec::new();
     if crate::daemon::enabled() && !refresh {
         for workspace in &roots {
@@ -192,7 +198,7 @@ pub fn sessions_list_text(
                 crate::daemon::request_blocking(crate::ipc::DaemonRequest::ListSessions {
                     workspace: ws_str,
                     offset: 0,
-                    limit: i64::MAX as usize,
+                    limit: query_limit,
                     filter: crate::store::SessionFilter::default(),
                 })?;
             match response {
@@ -206,7 +212,20 @@ pub fn sessions_list_text(
             let store = open_workspace_read_store(workspace, refresh)?;
             maybe_refresh_store(workspace, &store, refresh)?;
             let ws_str = workspace.to_string_lossy().to_string();
-            sessions.extend(store.list_sessions(&ws_str)?);
+            if output_limit == 0 {
+                sessions.extend(store.list_sessions(&ws_str)?);
+            } else {
+                sessions.extend(
+                    store
+                        .list_sessions_page(
+                            &ws_str,
+                            0,
+                            query_limit,
+                            crate::store::SessionFilter::default(),
+                        )?
+                        .rows,
+                );
+            }
         }
     }
     sessions.sort_by(|a, b| {
@@ -214,7 +233,6 @@ pub fn sessions_list_text(
             .cmp(&a.started_at_ms)
             .then_with(|| a.id.cmp(&b.id))
     });
-    let output_limit = limit.unwrap_or(100);
     if output_limit > 0 {
         let n = output_limit;
         sessions.truncate(n);

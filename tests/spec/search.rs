@@ -87,12 +87,33 @@ fn missing_index_errors_with_reindex_hint() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[test]
+fn exact_tool_search_uses_bounded_sql_path() -> anyhow::Result<()> {
+    let _guard = env_lock().lock().unwrap();
+    let home = TempDir::new()?;
+    let dir = TempDir::new()?;
+    let ws = dir.path();
+    unsafe { std::env::set_var("KAIZEN_HOME", home.path()) };
+    let data_dir = kaizen::core::paths::project_data_dir(ws)?;
+    let store = Store::open(&data_dir.join("kaizen.db"))?;
+    store.upsert_session(&session(ws))?;
+    store.append_event(&tool_event("read_file"))?;
+    let _ = std::fs::remove_dir_all(data_dir.join("search"));
+    let out = sessions_search_text(Some(ws), "read_file", None, None, None, 10)?;
+    unsafe { std::env::remove_var("KAIZEN_HOME") };
+    assert!(out.contains("read_file"));
+    assert!(!out.contains("search index unavailable"));
+    Ok(())
+}
+
 fn session(ws: &std::path::Path) -> SessionRecord {
     SessionRecord {
         id: "s1".into(),
         agent: "claude-code".into(),
         model: None,
-        workspace: ws.to_string_lossy().to_string(),
+        workspace: kaizen::core::workspace::canonical(ws)
+            .to_string_lossy()
+            .to_string(),
         started_at_ms: 1,
         ended_at_ms: None,
         status: SessionStatus::Running,
@@ -110,6 +131,15 @@ fn session(ws: &std::path::Path) -> SessionRecord {
         arch: None,
         repo_file_count: None,
         repo_total_loc: None,
+    }
+}
+
+fn tool_event(tool: &str) -> Event {
+    Event {
+        kind: EventKind::ToolCall,
+        tool: Some(tool.into()),
+        payload: json!({ "path": "src/main.rs" }),
+        ..event(tool, 10)
     }
 }
 
