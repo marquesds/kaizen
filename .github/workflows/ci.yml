@@ -90,7 +90,7 @@ jobs:
   test:
     name: test (${{ matrix.os }} / ${{ matrix.rust }})
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         include:
           - os: macos-latest
@@ -98,6 +98,8 @@ jobs:
           - os: ubuntu-latest
             rust: "1.95"
     runs-on: ${{ matrix.os }}
+    env:
+      CARGO_BUILD_JOBS: 2
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
