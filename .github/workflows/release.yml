@@ -242,40 +242,6 @@ jobs:
           git commit -m "bump kaizen-cli to v${VERSION}" -m "Synced from ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}@${SHORT}"
           git push origin HEAD:main
 
-  sync-cargo-on-main:
-    name: sync Cargo.toml on default branch
-    # Commit version bump on main after GitHub release so the tree matches the shipped tag.
-    needs: [verify, release]
-    if: ${{ !contains(needs.verify.outputs.release_version, '-') }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.repository.default_branch || 'main' }}
-          token: ${{ secrets.RELEASE_PUSH_TOKEN != '' && secrets.RELEASE_PUSH_TOKEN || github.token }}
-          fetch-depth: 0
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Commit version to match release (no CI re-run)
-        env:
-          RELEASE_VERSION: ${{ needs.verify.outputs.release_version }}
-        run: |
-          set -euo pipefail
-          branch="${{ github.event.repository.default_branch || 'main' }}"
-          current=$(awk -F'"' '/^version = / {print $2; exit}' Cargo.toml)
-          if [ "$current" != "$RELEASE_VERSION" ]; then
-            sed -i "s/^version = \".*\"/version = \"$RELEASE_VERSION\"/" Cargo.toml
-            cargo generate-lockfile
-          fi
-          if git diff --quiet; then
-            echo "No changes; nothing to commit."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.toml Cargo.lock
-          git commit -m "chore: sync version to v${RELEASE_VERSION} from release [skip ci]" -m "Tag v${RELEASE_VERSION}; matches GitHub release."
-          git push origin "HEAD:refs/heads/${branch}"
-
   publish-crate:
     name: publish to crates.io
     needs: [verify, release]
@@ -289,7 +255,16 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: publish
+      - name: Verify crate version
+        run: |
+          cargo_version=$(awk -F'"' '/^version = / {print $2; exit}' Cargo.toml)
+          test "$cargo_version" = "${{ needs.verify.outputs.release_version }}"
       - name: Publish
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish --locked --no-verify
+        run: |
+          if [ -z "${CARGO_REGISTRY_TOKEN:-}" ]; then
+            echo "Set secret CARGO_REGISTRY_TOKEN so CI can publish kaizen-cli to crates.io." >&2
+            exit 1
+          fi
+          cargo publish --locked

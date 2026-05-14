@@ -145,6 +145,7 @@ jobs:
     permissions:
       actions: write
       contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -159,7 +160,9 @@ jobs:
           NEXT_TAG="${DRY_OUTPUT#RELEASE_TAG=}"
           NEXT_VERSION="${NEXT_TAG#v}"
           echo "Next tag: $NEXT_TAG, version: $NEXT_VERSION" >&2
-          
+          echo "next_tag=$NEXT_TAG" >> "$GITHUB_OUTPUT"
+          echo "next_version=$NEXT_VERSION" >> "$GITHUB_OUTPUT"
+
           CURRENT_VERSION=$(awk -F'"' '/^version = / {print $2; exit}' Cargo.toml)
           if [ "$CURRENT_VERSION" != "$NEXT_VERSION" ]; then
             echo "Bumping Cargo.toml from $CURRENT_VERSION to $NEXT_VERSION"
@@ -172,18 +175,46 @@ jobs:
       - name: Update Cargo.lock
         if: steps.bump.outputs.bumped == 'true'
         run: cargo generate-lockfile
-      - name: Commit version bump
+      - name: Open version bump PR
         if: steps.bump.outputs.bumped == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN }}
+          NEXT_TAG: ${{ steps.bump.outputs.next_tag }}
+          NEXT_VERSION: ${{ steps.bump.outputs.next_version }}
         run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "Set secret RELEASE_PUSH_TOKEN so CI can open the release bump PR and trigger required checks." >&2
+            exit 1
+          fi
+          branch="release/${NEXT_TAG}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$branch"
           git add Cargo.toml Cargo.lock
-          git commit -m "chore: bump version to ${NEXT_VERSION}" -m "Auto-bump for release tag $NEXT_TAG [skip ci]"
-          git push origin HEAD:${{ github.event.repository.default_branch }}
-          # Update local checkout to include the pushed commit
-          git fetch origin ${{ github.event.repository.default_branch }}
-          git reset --hard origin/${{ github.event.repository.default_branch }}
+          git commit -m "chore: bump version to ${NEXT_VERSION}" -m "Prepare ${NEXT_TAG}; CI will push the tag after this PR lands."
+          git push --force-with-lease \
+            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            "HEAD:${branch}"
+          body="$(mktemp)"
+          {
+            echo "Automated release version bump for ${NEXT_TAG}."
+            echo
+            echo "After this PR merges, the protected-branch CI run will push ${NEXT_TAG}."
+          } > "$body"
+          if gh pr view "$branch" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh pr edit "$branch" --repo "$GITHUB_REPOSITORY" \
+              --title "chore: bump version to ${NEXT_VERSION}" \
+              --body-file "$body"
+          else
+            gh pr create --repo "$GITHUB_REPOSITORY" \
+              --head "$branch" \
+              --base "${{ github.event.repository.default_branch }}" \
+              --title "chore: bump version to ${NEXT_VERSION}" \
+              --body-file "$body"
+          fi
       - name: Push version tag when needed
+        if: steps.bump.outputs.bumped == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_PUSH_USER: ${{ github.repository_owner }}
