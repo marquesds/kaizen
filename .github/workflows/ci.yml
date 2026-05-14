@@ -53,6 +53,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: linux-stable
+          cache-bin: "false"
       - run: cargo clippy --all-targets -- -D warnings
 
   doc:
@@ -64,6 +65,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: linux-stable
+          cache-bin: "false"
       - name: cargo doc
         run: cargo doc --no-deps --all-features
         env:
@@ -116,6 +118,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.os }}-${{ matrix.rust }}
+          cache-bin: "false"
       - run: cargo nextest run -j 4 --all --locked --features duckdb/bundled,duckdb/parquet
       - run: cargo test --doc --all --locked --features duckdb/bundled,duckdb/parquet
 
