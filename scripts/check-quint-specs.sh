@@ -11,11 +11,39 @@ if ! command -v quint >/dev/null 2>&1; then
 fi
 
 status=0
-for f in specs/*.qnt; do
-	[ -f "$f" ] || continue
-	printf '%s\n' "quint typecheck $f"
-	quint typecheck "$f" || status=1
-done
+jobs="${QUINT_JOBS:-}"
+if [ -z "$jobs" ]; then
+	jobs="$(getconf _NPROCESSORS_ONLN 2>/dev/null || printf '%s\n' 2)"
+fi
+
+case "$jobs" in
+	''|*[!0-9]*|0) jobs=2 ;;
+esac
+
+tmpdir="$(mktemp -d)"
+cleanup() {
+	rm -rf "$tmpdir"
+}
+trap cleanup EXIT INT TERM
+
+set -- specs/*.qnt
+if [ -f "$1" ]; then
+	printf '%s\0' "$@" |
+		xargs -0 -n 1 -P "$jobs" sh -c '
+			tmpdir="$0"
+			f="$1"
+			name="$(printf "%s" "$f" | sed "s#[^A-Za-z0-9_.-]#_#g")"
+			printf "%s\n" "quint typecheck $f"
+			quint typecheck "$f" || {
+				: > "$tmpdir/$name.fail"
+				exit 1
+			}
+		' "$tmpdir" || status=1
+fi
+
+if [ "$status" -ne 0 ]; then
+	printf '%s\n' "check-quint-specs: one or more Quint typechecks failed" >&2
+fi
 
 # `init` must not be an arm of `action step`: simulation bootstraps via the default
 # init transition only. Listing init in step allows reset from any state and can
