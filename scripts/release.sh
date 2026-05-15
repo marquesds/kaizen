@@ -42,9 +42,11 @@ fi
 echo ">> cargo fmt --check"
 cargo fmt --all -- --check
 echo ">> cargo clippy -D warnings"
-cargo clippy --all-targets -- -D warnings
+cargo clippy --all-targets --no-default-features --features dev-fast -- -D warnings
 echo ">> cargo test"
-cargo test --all
+cargo test --all --no-default-features --features dev-fast
+echo ">> cargo test --features full"
+cargo test --all --features full
 echo ">> cargo deny check"
 cargo deny --manifest-path Cargo.toml check --config .cargo/deny.toml
 
