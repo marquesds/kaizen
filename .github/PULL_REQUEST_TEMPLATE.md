@@ -13,8 +13,9 @@
 ## Testing
 
 - [ ] `cargo fmt --all -- --check`
-- [ ] `cargo clippy --all-targets -- -D warnings`
-- [ ] `cargo test --all`
+- [ ] `cargo clippy --all-targets --no-default-features --features dev-fast -- -D warnings`
+- [ ] `cargo test --all --no-default-features --features dev-fast`
+- [ ] `cargo test --all --features full` when DuckDB/cold analytics changed
 - [ ] Docs updated (`docs/`, `README.md`, `CHANGELOG.md`)
 
 ## Related

@@ -1,9 +1,12 @@
 # Install
 
-The registry package is **[`kaizen-cli`](https://crates.io/crates/kaizen-cli)**; `cargo install kaizen-cli`
-places the **`kaizen`** binary on your `PATH`. Prefer `cargo install kaizen-cli --locked` for released
-versions; use a **git clone** when you need `main` or are contributing. Long-form user docs live in
-the [GitHub `docs/`](https://github.com/marquesds/kaizen/tree/main/docs) tree, not in the registry package tarball.
+Prefer Homebrew or GitHub release binaries for normal installs. Those binaries
+already include DuckDB, so users do not compile native dependencies locally. The
+registry package is **[`kaizen-cli`](https://crates.io/crates/kaizen-cli)**; use
+`cargo install kaizen-cli --locked` when you explicitly want a source build. Use a
+**git clone** when you need `main` or are contributing. Long-form user docs live
+in the [GitHub `docs/`](https://github.com/marquesds/kaizen/tree/main/docs) tree,
+not in the registry package tarball.
 
 ## Requirements
 
@@ -12,10 +15,18 @@ the [GitHub `docs/`](https://github.com/marquesds/kaizen/tree/main/docs) tree, n
 - **macOS or Linux.** Windows is not supported in v0.1.
 - Optional (contributors): Node 20+ for Quint specs, `cargo-audit`, `cargo-deny`.
 
+## From GitHub Releases
+
+**Recommended for end users** — download the matching `kaizen-v<version>-<target>.tar.gz`
+from [GitHub Releases](https://github.com/marquesds/kaizen/releases), verify the
+matching `.sha256` asset, and place `kaizen` on your `PATH`.
+
 ## From crates.io
 
-**Recommended for end users** — installs a released version into Cargo’s bin directory
-(`~/.cargo/bin/kaizen`, or `$CARGO_HOME/bin/kaizen`):
+Installs a released version into Cargo’s bin directory (`~/.cargo/bin/kaizen`,
+or `$CARGO_HOME/bin/kaizen`). This is a source build and can compile native
+dependencies such as DuckDB. Prefer Homebrew or GitHub release binaries when you
+want the fastest install.
 
 ```bash
 cargo install kaizen-cli --locked
@@ -28,7 +39,8 @@ The unrelated [`kaizen`](https://crates.io/crates/kaizen) crate on crates.io is 
 
 ## From Homebrew (third-party tap)
 
-There is no [homebrew-core](https://github.com/Homebrew/homebrew-core) formula in this repository
+**Recommended for end users** — installs a prebuilt release binary with DuckDB
+already bundled. There is no [homebrew-core](https://github.com/Homebrew/homebrew-core) formula in this repository
 yet. Install from a **tap** that hosts the formula (for example your own
 [`homebrew-tap`](https://github.com/marquesds/homebrew-tap) after you copy
 [`packaging/homebrew/kaizen-cli.rb`](https://github.com/marquesds/kaizen/blob/main/packaging/homebrew/kaizen-cli.rb)
@@ -51,6 +63,8 @@ cd kaizen
 ```
 
 **2. Build and install the binary into Cargo’s bin directory**
+
+This is a source build and may compile DuckDB.
 
 Pick one:
 
@@ -94,7 +108,17 @@ cargo build --release
 
 ## Update or reinstall
 
-**From crates.io** (picks latest compatible release, or set `--version`):
+**Release binary**:
+
+```bash
+kaizen upgrade
+```
+
+`kaizen upgrade` downloads the latest GitHub release binary for macOS/Linux,
+verifies its SHA-256 checksum, and replaces the current binary. Homebrew installs
+delegate to `brew upgrade kaizen-cli`.
+
+**From crates.io** (source build; picks latest compatible release, or set `--version`):
 
 ```bash
 cargo install kaizen-cli --locked --force
