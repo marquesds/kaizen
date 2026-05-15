@@ -2,7 +2,9 @@
 //! CLI command implementations.
 
 use crate::collect::tail::claude::scan_claude_session_dir;
+use crate::collect::tail::claude_code::scan_claude_project_dir;
 use crate::collect::tail::codex::scan_codex_session_dir;
+use crate::collect::tail::codex_desktop::scan_codex_sessions_root;
 use crate::collect::tail::copilot_cli::scan_copilot_cli_workspace;
 use crate::collect::tail::copilot_vscode::scan_copilot_vscode_workspace;
 use crate::collect::tail::cursor::scan_session_dir_all;
@@ -17,7 +19,7 @@ use crate::shell::scope;
 use crate::store::{SYNC_STATE_LAST_AGENT_SCAN_MS, SYNC_STATE_LAST_AUTO_PRUNE_MS, Store};
 use anyhow::Result;
 use serde::Serialize;
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 
@@ -47,6 +49,33 @@ struct SummaryJsonOut {
     hotspot: Option<crate::metrics::types::RankedFile>,
     #[serde(skip_serializing_if = "Option::is_none")]
     slowest_tool: Option<crate::metrics::types::RankedTool>,
+}
+
+#[derive(Clone, Debug, Default, Serialize)]
+pub(crate) struct AgentScanStats {
+    pub sessions_found: u64,
+    pub sessions_upserted: u64,
+    pub events_found: u64,
+    pub events_upserted: u64,
+    pub agents: BTreeSet<String>,
+}
+
+impl AgentScanStats {
+    fn record(&mut self, record: &SessionRecord, event_count: usize) {
+        self.sessions_found += 1;
+        self.sessions_upserted += 1;
+        self.events_found += event_count as u64;
+        self.events_upserted += event_count as u64;
+        self.agents.insert(record.agent.clone());
+    }
+
+    pub(crate) fn merge(&mut self, other: &Self) {
+        self.sessions_found += other.sessions_found;
+        self.sessions_upserted += other.sessions_upserted;
+        self.events_found += other.events_found;
+        self.events_upserted += other.events_upserted;
+        self.agents.extend(other.agents.iter().cloned());
+    }
 }
 
 /// Summary/MCP: sessions exist but rollup has no stored micro-USD — show honest footnote, not invented spend.
@@ -639,99 +668,105 @@ pub(crate) fn scan_all_agents(
     ws_str: &str,
     store: &Store,
 ) -> Result<()> {
+    scan_all_agents_with_stats(ws, cfg, ws_str, store).map(|_| ())
+}
+
+pub(crate) fn scan_all_agents_with_stats(
+    ws: &Path,
+    cfg: &config::Config,
+    ws_str: &str,
+    store: &Store,
+) -> Result<AgentScanStats> {
     let _spin = ScanSpinner::start("Scanning agent sessions…");
+    let sync_ctx = crate::sync::ingest_ctx(cfg, ws.to_path_buf());
+    let sessions = collect_all_agent_sessions(ws, cfg, ws_str)?;
+    let stats = persist_session_batch(store, sessions, sync_ctx.as_ref())?;
+    maybe_auto_prune_after_scan(store, cfg)?;
+    Ok(stats)
+}
+
+pub(crate) fn collect_all_agent_sessions(
+    ws: &Path,
+    cfg: &config::Config,
+    ws_str: &str,
+) -> Result<Vec<(SessionRecord, Vec<Event>)>> {
+    let mut out = Vec::new();
     let slug = workspace_slug(ws_str);
     let cursor_slug = crate::core::paths::cursor_slug(ws);
     let claude_slug = crate::core::paths::claude_code_slug(ws);
-    let sync_ctx = crate::sync::ingest_ctx(cfg, ws.to_path_buf());
 
     for root in &cfg.scan.roots {
         let expanded = expand_home(root);
         let cursor_dir = PathBuf::from(&expanded)
             .join(&cursor_slug)
             .join("agent-transcripts");
-        scan_agent_dirs(
-            &cursor_dir,
-            store,
-            |p| {
-                scan_session_dir_all(p).map(|sessions| {
-                    sessions
-                        .into_iter()
-                        .map(|(mut r, evs)| {
-                            r.workspace = ws_str.to_string();
-                            (r, evs)
-                        })
-                        .collect()
-                })
-            },
-            sync_ctx.as_ref(),
-        )?;
+        out.extend(collect_agent_dirs(&cursor_dir, |p| {
+            scan_session_dir_all(p).map(|sessions| {
+                sessions
+                    .into_iter()
+                    .map(|(mut r, evs)| {
+                        r.workspace = ws_str.to_string();
+                        (r, evs)
+                    })
+                    .collect()
+            })
+        })?);
     }
 
     let home = std::env::var("HOME").unwrap_or_default();
 
-    let claude_dir = PathBuf::from(&home)
+    let claude_project = PathBuf::from(&home)
         .join(".claude/projects")
-        .join(&claude_slug)
-        .join("sessions");
-    scan_agent_dirs(
-        &claude_dir,
-        store,
-        |p| {
-            scan_claude_session_dir(p).map(|(mut r, evs)| {
-                r.workspace = ws_str.to_string();
-                vec![(r, evs)]
-            })
-        },
-        sync_ctx.as_ref(),
-    )?;
+        .join(&claude_slug);
+    out.extend(scan_claude_project_dir(&claude_project, ws)?);
+    let claude_dir = claude_project.join("sessions");
+    out.extend(collect_agent_dirs(&claude_dir, |p| {
+        scan_claude_session_dir(p).map(|(mut r, evs)| {
+            r.workspace = ws_str.to_string();
+            vec![(r, evs)]
+        })
+    })?);
 
     let codex_dir = PathBuf::from(&home).join(".codex/sessions").join(&slug);
-    scan_agent_dirs(
-        &codex_dir,
-        store,
-        |p| {
-            scan_codex_session_dir(p).map(|(mut r, evs)| {
-                r.workspace = ws_str.to_string();
-                vec![(r, evs)]
-            })
-        },
-        sync_ctx.as_ref(),
-    )?;
+    out.extend(collect_agent_dirs(&codex_dir, |p| {
+        scan_codex_session_dir(p).map(|(mut r, evs)| {
+            r.workspace = ws_str.to_string();
+            vec![(r, evs)]
+        })
+    })?);
+    out.extend(scan_codex_sessions_root(
+        &PathBuf::from(&home).join(".codex/sessions"),
+        ws,
+    )?);
 
     let tail = &cfg.sources.tail;
     let home_pb = PathBuf::from(&home);
     if tail.goose {
-        let sessions = scan_goose_workspace(&home_pb, ws)?;
-        persist_session_batch(store, sessions, sync_ctx.as_ref())?;
+        out.extend(scan_goose_workspace(&home_pb, ws)?);
     }
     if tail.openclaw {
-        let sessions = scan_openclaw_workspace(ws)?;
-        persist_session_batch(store, sessions, sync_ctx.as_ref())?;
+        out.extend(scan_openclaw_workspace(ws)?);
     }
     if tail.opencode {
-        let sessions = scan_opencode_workspace(ws)?;
-        persist_session_batch(store, sessions, sync_ctx.as_ref())?;
+        out.extend(scan_opencode_workspace(ws)?);
     }
     if tail.copilot_cli {
-        let sessions = scan_copilot_cli_workspace(ws)?;
-        persist_session_batch(store, sessions, sync_ctx.as_ref())?;
+        out.extend(scan_copilot_cli_workspace(ws)?);
     }
     if tail.copilot_vscode {
-        let sessions = scan_copilot_vscode_workspace(ws)?;
-        persist_session_batch(store, sessions, sync_ctx.as_ref())?;
+        out.extend(scan_copilot_vscode_workspace(ws)?);
     }
-
-    maybe_auto_prune_after_scan(store, cfg)?;
-    Ok(())
+    Ok(out)
 }
 
-fn persist_session_batch(
+pub(crate) fn persist_session_batch(
     store: &Store,
     sessions: Vec<(SessionRecord, Vec<Event>)>,
     sync_ctx: Option<&crate::sync::SyncIngestContext>,
-) -> Result<()> {
+) -> Result<AgentScanStats> {
+    let mut stats = AgentScanStats::default();
     for (mut record, events) in sessions {
+        stats.record(&record, events.len());
         if record.start_commit.is_none() && !record.workspace.is_empty() {
             let binding = crate::core::repo::binding_for_session(
                 Path::new(&record.workspace),
@@ -754,55 +789,30 @@ fn persist_session_batch(
             store.flush_projector_session(&record.id, flush_ms)?;
         }
     }
-    Ok(())
+    Ok(stats)
 }
 
-pub(crate) fn scan_agent_dirs<F>(
+pub(crate) fn collect_agent_dirs<F>(
     dir: &Path,
-    store: &Store,
     scanner: F,
-    sync_ctx: Option<&crate::sync::SyncIngestContext>,
-) -> Result<()>
+) -> Result<Vec<(SessionRecord, Vec<Event>)>>
 where
     F: Fn(&Path) -> Result<Vec<(SessionRecord, Vec<Event>)>>,
 {
     if !dir.exists() {
-        return Ok(());
+        return Ok(Vec::new());
     }
+    let mut out = Vec::new();
     for entry in std::fs::read_dir(dir)?.filter_map(|e| e.ok()) {
         if !entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
             continue;
         }
         match scanner(&entry.path()) {
-            Ok(sessions) => {
-                for (mut record, events) in sessions {
-                    if record.start_commit.is_none() && !record.workspace.is_empty() {
-                        let binding = crate::core::repo::binding_for_session(
-                            Path::new(&record.workspace),
-                            record.started_at_ms,
-                            record.ended_at_ms,
-                        );
-                        record.start_commit = binding.start_commit;
-                        record.end_commit = binding.end_commit;
-                        record.branch = binding.branch;
-                        record.dirty_start = binding.dirty_start;
-                        record.dirty_end = binding.dirty_end;
-                        record.repo_binding_source = binding.source;
-                    }
-                    store.upsert_session(&record)?;
-                    let flush_ms = record.ended_at_ms.unwrap_or(record.started_at_ms);
-                    for ev in events {
-                        store.append_event_with_sync(&ev, sync_ctx)?;
-                    }
-                    if record.status == crate::core::event::SessionStatus::Done {
-                        store.flush_projector_session(&record.id, flush_ms)?;
-                    }
-                }
-            }
+            Ok(sessions) => out.extend(sessions),
             Err(e) => tracing::warn!("scan {:?}: {e}", entry.path()),
         }
     }
-    Ok(())
+    Ok(out)
 }
 
 pub(crate) fn workspace_path(workspace: Option<&Path>) -> Result<PathBuf> {

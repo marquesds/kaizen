@@ -1,0 +1,3 @@
+{"type":"user","timestamp":"2026-05-15T20:47:40.597Z","cwd":"/tmp/kaizen-modern","sessionId":"claude-modern-1","version":"1.0.0","message":{"role":"user","content":"run tests"}}
+{"type":"assistant","timestamp":"2026-05-15T20:47:41.000Z","cwd":"/tmp/kaizen-modern","sessionId":"claude-modern-1","model":"claude-sonnet-4","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_1","name":"Bash","input":{"command":"cargo test"}}]},"tokens":{"inputTokens":1000,"outputTokens":200}}
+{"type":"user","timestamp":"2026-05-15T20:47:42.000Z","cwd":"/tmp/kaizen-modern","sessionId":"claude-modern-1","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"ok"}]}}

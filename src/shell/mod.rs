@@ -11,6 +11,7 @@ pub mod ingest;
 pub mod init;
 pub mod insights;
 pub mod kaizen_child;
+pub mod load;
 pub mod metrics;
 pub mod migrate;
 pub mod outcomes_cmd;
