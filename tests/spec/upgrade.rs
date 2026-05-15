@@ -35,22 +35,28 @@ impl UpgradeDriver {
         self.method = 1;
     }
 
-    fn detect_cargo(&mut self) {
-        assert_eq!(self.phase, 1, "detect_cargo");
+    fn detect_release(&mut self) {
+        assert_eq!(self.phase, 1, "detect_release");
         self.phase = 2;
         self.method = 2;
     }
 
-    fn spawn_ok(&mut self) {
-        assert_eq!(self.phase, 2, "spawn_ok phase");
-        assert_ne!(self.method, 0, "spawn_ok method known");
+    fn detect_source(&mut self) {
+        assert_eq!(self.phase, 1, "detect_source");
+        self.phase = 2;
+        self.method = 3;
+    }
+
+    fn execute_ok(&mut self) {
+        assert_eq!(self.phase, 2, "execute_ok phase");
+        assert_ne!(self.method, 0, "execute_ok method known");
         self.phase = 3;
         self.last_ok = true;
     }
 
-    fn spawn_fail(&mut self) {
-        assert_eq!(self.phase, 2, "spawn_fail phase");
-        assert_ne!(self.method, 0, "spawn_fail method known");
+    fn execute_fail(&mut self) {
+        assert_eq!(self.phase, 2, "execute_fail phase");
+        assert_ne!(self.method, 0, "execute_fail method known");
         self.phase = 3;
         self.last_ok = false;
     }
@@ -74,9 +80,10 @@ impl Driver for UpgradeDriver {
             "init" | "step" => self.init_d(),
             "begin_detect" => self.begin_detect(),
             "detect_homebrew" => self.detect_homebrew(),
-            "detect_cargo" => self.detect_cargo(),
-            "spawn_ok" => self.spawn_ok(),
-            "spawn_fail" => self.spawn_fail(),
+            "detect_release" => self.detect_release(),
+            "detect_source" => self.detect_source(),
+            "execute_ok" => self.execute_ok(),
+            "execute_fail" => self.execute_fail(),
             other => anyhow::bail!("unexpected action: {other}"),
         }
         Ok(())

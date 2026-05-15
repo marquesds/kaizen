@@ -109,12 +109,21 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: release-${{ matrix.target }}
+          cache-bin: "false"
       - name: Build
         env:
           DUCKDB_DOWNLOAD_LIB: "0"
         run: |
           cargo build --release --locked --target ${{ matrix.target }} --bin kaizen \
-            --features duckdb/bundled,duckdb/parquet
+            --features full
+      - name: Verify DuckDB is bundled
+        run: |
+          BIN="target/${{ matrix.target }}/release/kaizen"
+          if [[ "${{ matrix.target }}" == *apple* ]]; then
+            ! otool -L "$BIN" | grep -i libduckdb
+          else
+            ! ldd "$BIN" | grep -i libduckdb
+          fi
       - name: Package
         id: pkg
         run: |
@@ -255,6 +264,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: publish
+          cache-bin: "false"
       - name: Verify crate version
         run: |
           cargo_version=$(awk -F'"' '/^version = / {print $2; exit}' Cargo.toml)

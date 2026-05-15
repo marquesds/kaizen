@@ -164,6 +164,10 @@ name = "upgrade"
 path = "tests/spec/upgrade.rs"
 
 [[test]]
+name = "query_duckdb"
+path = "tests/spec/query_duckdb.rs"
+
+[[test]]
 name = "multi_workspace"
 path = "tests/spec/multi_workspace.rs"
 
@@ -268,24 +272,24 @@ name = "perf_read_report"
 path = "tests/perf/read_report.rs"
 
 [features]
-# Default ships the three production telemetry exporters so `kaizen telemetry configure`
-# works out of the box. `telemetry-dev` (file sink for local debugging) stays opt-in.
-default = [
-    "analytics-duckdb",
-    "telemetry-datadog",
-    "telemetry-posthog",
-    "telemetry-otlp",
-]
+# Default is the full end-user build. Contributors should use `dev-fast`
+# through the task runner for the common no-DuckDB loop.
+default = ["full"]
+full = ["analytics-duckdb", "telemetry-prod"]
+dev-fast = ["telemetry-prod"]
 analytics-duckdb = ["dep:duckdb", "duckdb/bundled", "duckdb/parquet"]
 telemetry-dev = []
 telemetry-posthog = []
 telemetry-datadog = []
 telemetry-otlp = []
-telemetry-all = [
-    "telemetry-dev",
+telemetry-prod = [
     "telemetry-posthog",
     "telemetry-datadog",
     "telemetry-otlp",
+]
+telemetry-all = [
+    "telemetry-dev",
+    "telemetry-prod",
 ]
 
 [dependencies]
@@ -297,6 +301,7 @@ indicatif = "0.18"
 arboard = "3"
 anyhow = "1"
 tempfile = "3"
+tar = "0.4"
 rusqlite = { version = "0.39", features = ["bundled"] }
 rand = { version = "0.10", features = ["std_rng"] }
 tokio = { version = "1", features = ["full"] }
@@ -314,6 +319,7 @@ blake3 = "1"
 aho-corasick = "1"
 regex = "1"
 hex = "0.4"
+sha2 = "0.10"
 time = { version = "0.3", features = ["formatting", "macros", "local-offset"] }
 fs4 = { version = "1.0", features = ["sync"] }
 graphqlite = "0.4"

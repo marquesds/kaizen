@@ -115,18 +115,19 @@ If **`kaizen summary`** shows **$0.00** but session count is above zero, events 
 
 ## `kaizen upgrade`
 
-Upgrade kaizen to the latest release. Detects the install method from the running binary path and delegates to the right tool — no flags required.
+Upgrade kaizen to the latest release. Detects the install method from the running binary path. Non-Homebrew installs download the GitHub release binary and verify its `.sha256` asset so upgrades do not compile DuckDB locally.
 
 | Install method | Command run |
 |---|---|
 | Homebrew (`/Cellar/kaizen-cli`, `/opt/homebrew/`, `/usr/local/Cellar/`) | `brew upgrade kaizen-cli` |
-| Cargo (default) | `cargo install kaizen-cli --locked --force` |
+| Release / Cargo-path binary (default) | Download, verify, and replace with the latest GitHub release binary |
+| Source fallback | `kaizen upgrade --from-source` runs `cargo install kaizen-cli --locked --force` |
 
 ```bash
 kaizen upgrade
 ```
 
-Subprocess output streams directly to the terminal. Exits non-zero if the underlying tool fails.
+Homebrew and source fallback subprocess output streams directly to the terminal. Exits non-zero if download, checksum verification, binary replacement, or the fallback subprocess fails.
 
 ## `kaizen gc`
 
