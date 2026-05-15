@@ -251,7 +251,11 @@ enum Command {
     Mcp,
     /// Upgrade kaizen to the latest release.
     #[command(next_help_heading = "Operate")]
-    Upgrade,
+    Upgrade {
+        /// Build from crates.io instead of installing a release binary.
+        #[arg(long)]
+        from_source: bool,
+    },
     /// Print shell completion script to stdout; redirect or eval to install.
     #[command(next_help_heading = "Shell")]
     Completions {
@@ -1310,7 +1314,7 @@ fn main() -> anyhow::Result<()> {
             ProjectsCommand::List => kaizen::shell::projects::cmd_projects_list(),
         },
         Command::Exp { subcmd } => dispatch_exp(subcmd),
-        Command::Upgrade => kaizen::shell::upgrade::cmd_upgrade(),
+        Command::Upgrade { from_source } => kaizen::shell::upgrade::cmd_upgrade(from_source),
         Command::Mcp => {
             // Requires multi-threaded runtime (rmcp + spawn_blocking in tools)
             let rt = tokio::runtime::Builder::new_multi_thread()
