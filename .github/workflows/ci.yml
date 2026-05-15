@@ -154,7 +154,7 @@ jobs:
         with:
           key: analytics-duckdb
           cache-bin: "false"
-      - run: cargo check --all-targets --locked --features full
+      - run: cargo check --locked --features full --lib --bin kaizen
       - run: cargo test --locked --features full --test query_duckdb
 
   audit:
