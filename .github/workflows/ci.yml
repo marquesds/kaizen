@@ -88,7 +88,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: ~/.quint
           key: quint-evaluator-${{ runner.os }}-v0.6.0
@@ -114,7 +114,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: ~/.quint
           key: quint-evaluator-${{ runner.os }}-v0.6.0
