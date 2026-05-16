@@ -102,6 +102,19 @@ enum Command {
         #[arg(long, conflicts_with = "workspace")]
         project: Option<String>,
     },
+    /// Load previous local agent sessions into Kaizen stores.
+    #[command(next_help_heading = "Trust & observe")]
+    Load {
+        /// workspace root; omit to load all registered workspaces
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
+        /// Emit JSON load summary.
+        #[arg(long)]
+        json: bool,
+    },
     /// Prune local sessions older than retention window (see `[retention].hot_days` or `--days`).
     #[command(next_help_heading = "Operate")]
     Gc {
@@ -791,6 +804,18 @@ enum SessionsCommand {
         #[arg(short, long)]
         refresh: bool,
     },
+    /// Load previous local agent sessions into Kaizen stores.
+    Load {
+        /// workspace root; omit to load all registered workspaces
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
+        /// Emit JSON load summary.
+        #[arg(long)]
+        json: bool,
+    },
     /// Show full details for a session.
     Show {
         id: String,
@@ -980,6 +1005,17 @@ fn main() -> anyhow::Result<()> {
         }
         Command::Sessions {
             subcmd:
+                SessionsCommand::Load {
+                    workspace,
+                    project,
+                    json,
+                },
+        } => {
+            let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+            kaizen::shell::load::cmd_load(ws.as_deref(), json)
+        }
+        Command::Sessions {
+            subcmd:
                 SessionsCommand::Show {
                     id,
                     workspace,
@@ -1091,6 +1127,14 @@ fn main() -> anyhow::Result<()> {
                 std::process::exit(code);
             }
             Ok(())
+        }
+        Command::Load {
+            workspace,
+            project,
+            json,
+        } => {
+            let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+            kaizen::shell::load::cmd_load(ws.as_deref(), json)
         }
         Command::Gc {
             workspace,

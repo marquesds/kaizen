@@ -134,20 +134,9 @@ pub fn parse_claude_line(
 }
 
 fn line_ts_ms(obj: &serde_json::Map<String, Value>) -> Option<u64> {
-    if let Some(t) = ["timestamp_ms", "ts_ms", "created_at_ms"]
+    ["timestamp_ms", "ts_ms", "created_at_ms", "timestamp"]
         .iter()
-        .find_map(|k| obj.get(*k).and_then(|v| v.as_u64()))
-    {
-        return Some(t);
-    }
-    if let Some(t) = obj.get("timestamp").and_then(|v| v.as_u64()) {
-        return Some(if t < 1_000_000_000_000 {
-            t.saturating_mul(1000)
-        } else {
-            t
-        });
-    }
-    None
+        .find_map(|k| obj.get(*k).and_then(crate::collect::tail::value_ts_ms))
 }
 
 /// Walk all `.jsonl` files under `dir`; return inferred `SessionRecord` + events.
