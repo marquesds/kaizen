@@ -24,13 +24,14 @@ kaizen/
 ├── src/
 │   ├── main.rs          # binary entry point
 │   ├── collect/         # transcript tail, hooks, parsers
+│   ├── bin_kaizen/      # binary-only CLI schema + dispatch
 │   ├── core/            # config, shared types
 │   ├── mcp/              # stdio MCP server (see `docs/mcp.md`)
 │   ├── proxy/            # local LLM API forwarder + `EventSource::Proxy` (`docs/llm-proxy.md`)
 │   ├── telemetry/        # optional exporter fan-out
 │   ├── metrics/         # repo indexing + smart metric report
 │   ├── shell/           # CLI command implementations
-│   ├── store/            # SQLite
+│   ├── store/            # SQLite facade, schema, query/write modules
 │   ├── sync/            # outbox + HTTP flush
 │   ├── ui/              # TUI
 │   └── retro/           # heuristic report engine
