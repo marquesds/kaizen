@@ -116,6 +116,11 @@ Set any value to `false` to skip that agent’s local scan (useful if a VS Code 
 | `kaizen_sessions_list` | `kaizen sessions list` | Optional `json: true`, `refresh: true` (full transcript rescan; matches `--refresh`), `all_workspaces: true`, `limit` (cap rows, newest first). |
 | `kaizen_session_show` | `kaizen sessions show` | `id` + optional `workspace`. |
 | `mcp/search_sessions` | `kaizen sessions search` | Structured BM25 event search. Args: `query`, optional `since`, `agent`, `kind`, `limit`, `workspace`. Returns `hits[]` with session id, seq, ts, score, snippet, paths, skills, and `tokens_total`. |
+| `kaizen_query` | `kaizen query` | Structured trace query. |
+| `kaizen_cases_mine` / `kaizen_cases_create` / `kaizen_cases_list` / `kaizen_cases_show` / `kaizen_cases_archive` | `kaizen cases ...` | Local regression cases from evals, feedback, or manual session references. |
+| `kaizen_rules_create` / `kaizen_rules_list` / `kaizen_rules_run` / `kaizen_rules_enable` / `kaizen_rules_disable` | `kaizen rules ...` | Local-only rule actions: create case, queue review, emit alert. |
+| `kaizen_alerts_check` | `kaizen alerts check` | Built-in local health alerts. |
+| `kaizen_review_list` / `kaizen_review_show` / `kaizen_review_resolve` / `kaizen_review_dismiss` | `kaizen review ...` | Local review queue. |
 | `kaizen_annotate_session` | `kaizen sessions annotate` | `session_id`, optional `score` (1–5), `label`, `note`, optional `workspace`. |
 | `get_session_span_tree` | `kaizen sessions tree` | `id` + optional `workspace`, `json: true` returns `SpanNode[]` JSON; default returns ASCII tree with subtree-cost flags. **Depth:** unlike CLI `sessions tree --depth`, MCP always requests a large fixed depth (full tree in practice). |
 | `kaizen_summary` | `kaizen summary` | Optional `json: true`, `refresh: true`, `all_workspaces: true`. With `json: true`, response may include optional `cost_note` when sessions exist but cost rollup is zero (no `cost_usd_e6` on events); same as CLI. |
