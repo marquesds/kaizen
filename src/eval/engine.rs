@@ -37,6 +37,19 @@ pub fn run_evals(
     Ok(results)
 }
 
+pub fn dry_run_candidates(
+    store: &Store,
+    cfg: &EvalConfig,
+    since_ms: u64,
+) -> Result<Vec<SessionRecord>> {
+    if !cfg.enabled {
+        return Ok(vec![]);
+    }
+    store
+        .list_sessions_for_eval(since_ms, cfg.min_cost_usd)
+        .map(|rows| rows.into_iter().take(cfg.batch_size).collect())
+}
+
 fn eval_one(
     store: &Store,
     client: &reqwest::blocking::Client,

@@ -79,7 +79,8 @@ pub fn ingest_hook_text(
     };
     let mut event = event;
     event.ts_ms = ts;
-    let ev = collect::hooks::normalize::hook_to_event(&event, 0);
+    let seq = store.next_event_seq(&event.session_id)?;
+    let ev = collect::hooks::normalize::hook_to_event(&event, seq);
     if let Some(status) = collect::hooks::normalize::hook_to_status(&event.kind) {
         if matches!(event.kind, collect::hooks::EventKind::SessionStart) {
             let snap = prompt::snapshot::capture(&ws, now_ms).ok();

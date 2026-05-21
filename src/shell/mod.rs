@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+pub mod alerts;
+pub mod cases;
 pub mod cli;
+pub mod core_query;
 pub mod doctor;
 pub mod eval;
 pub mod exp;
@@ -22,6 +25,8 @@ pub mod proxy;
 pub mod remote_observe;
 pub mod remote_pull;
 pub mod retro;
+pub mod review;
+pub mod rules;
 pub mod sampler_cmd;
 pub mod scope;
 pub mod search;

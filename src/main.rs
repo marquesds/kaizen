@@ -50,6 +50,21 @@ enum Command {
         #[command(subcommand)]
         subcmd: SearchCommand,
     },
+    /// Structured trace query over local session events.
+    #[command(next_help_heading = "Trust & observe")]
+    Query {
+        expr: String,
+        #[arg(long)]
+        since: Option<String>,
+        #[arg(long, default_value_t = 50)]
+        limit: usize,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
+    },
     /// Aggregate session + cost stats across all agents.
     #[command(next_help_heading = "Trust & observe")]
     Summary {
@@ -245,6 +260,30 @@ enum Command {
         #[command(subcommand)]
         subcmd: ExpCommand,
     },
+    /// Mine and manage local regression cases.
+    #[command(next_help_heading = "Improve")]
+    Cases {
+        #[command(subcommand)]
+        subcmd: CasesCommand,
+    },
+    /// Local automation rules over trace queries.
+    #[command(next_help_heading = "Improve")]
+    Rules {
+        #[command(subcommand)]
+        subcmd: RulesCommand,
+    },
+    /// Built-in local health alerts.
+    #[command(next_help_heading = "Improve")]
+    Alerts {
+        #[command(subcommand)]
+        subcmd: AlertsCommand,
+    },
+    /// Local review queue from rules and cases.
+    #[command(next_help_heading = "Improve")]
+    Review {
+        #[command(subcommand)]
+        subcmd: ReviewCommand,
+    },
     /// Weekly-style heuristic retro report.
     #[command(next_help_heading = "Improve")]
     Retro {
@@ -352,6 +391,9 @@ enum EvalCommand {
         /// Print what would be evaluated without calling the judge.
         #[arg(long)]
         dry_run: bool,
+        /// Emit JSON array.
+        #[arg(long)]
+        json: bool,
     },
     /// List stored eval results.
     List {
@@ -388,6 +430,146 @@ enum EvalCommand {
 enum ProjectsCommand {
     /// List registered workspaces.
     List,
+}
+
+#[derive(Subcommand)]
+enum CasesCommand {
+    /// Mine cases from low evals and bad feedback.
+    Mine(SharedSinceJson),
+    /// Create one case for a session.
+    Create {
+        #[arg(long)]
+        session: String,
+        #[arg(long)]
+        reason: String,
+        #[arg(long)]
+        label: Option<String>,
+        #[arg(long)]
+        json: bool,
+        #[command(flatten)]
+        ws: WorkspaceFlags,
+    },
+    /// List cases.
+    List {
+        #[arg(long)]
+        status: Option<String>,
+        #[arg(long)]
+        json: bool,
+        #[command(flatten)]
+        ws: WorkspaceFlags,
+    },
+    /// Show one case.
+    Show(IdJson),
+    /// Archive one case.
+    Archive(IdOnly),
+}
+
+#[derive(Subcommand)]
+enum RulesCommand {
+    /// Create local rule.
+    Create {
+        #[arg(long)]
+        name: String,
+        #[arg(long)]
+        filter: String,
+        #[arg(long)]
+        action: String,
+        #[arg(long)]
+        message: Option<String>,
+        #[command(flatten)]
+        ws: WorkspaceFlags,
+    },
+    /// List rules.
+    List(JsonOnly),
+    /// Run enabled rules.
+    Run {
+        #[arg(long)]
+        since: Option<String>,
+        #[arg(long)]
+        dry_run: bool,
+        #[arg(long)]
+        json: bool,
+        #[command(flatten)]
+        ws: WorkspaceFlags,
+    },
+    /// Enable a rule.
+    Enable(IdOnly),
+    /// Disable a rule.
+    Disable(IdOnly),
+}
+
+#[derive(Subcommand)]
+enum AlertsCommand {
+    /// Check built-in alert conditions.
+    Check {
+        #[arg(long, default_value_t = 7)]
+        days: u64,
+        #[arg(long)]
+        json: bool,
+        #[command(flatten)]
+        ws: WorkspaceFlags,
+    },
+}
+
+#[derive(Subcommand)]
+enum ReviewCommand {
+    /// List review items.
+    List {
+        #[arg(long)]
+        status: Option<String>,
+        #[arg(long)]
+        json: bool,
+        #[command(flatten)]
+        ws: WorkspaceFlags,
+    },
+    /// Show one review item.
+    Show(IdJson),
+    /// Mark review item resolved.
+    Resolve(IdOnly),
+    /// Mark review item dismissed.
+    Dismiss(IdOnly),
+}
+
+#[derive(clap::Args)]
+struct WorkspaceFlags {
+    #[arg(long)]
+    workspace: Option<PathBuf>,
+    #[arg(long, conflicts_with = "workspace")]
+    project: Option<String>,
+}
+
+#[derive(clap::Args)]
+struct SharedSinceJson {
+    #[arg(long)]
+    since: Option<String>,
+    #[arg(long)]
+    json: bool,
+    #[command(flatten)]
+    ws: WorkspaceFlags,
+}
+
+#[derive(clap::Args)]
+struct IdJson {
+    id: String,
+    #[arg(long)]
+    json: bool,
+    #[command(flatten)]
+    ws: WorkspaceFlags,
+}
+
+#[derive(clap::Args)]
+struct IdOnly {
+    id: String,
+    #[command(flatten)]
+    ws: WorkspaceFlags,
+}
+
+#[derive(clap::Args)]
+struct JsonOnly {
+    #[arg(long)]
+    json: bool,
+    #[command(flatten)]
+    ws: WorkspaceFlags,
 }
 
 #[derive(Subcommand)]
@@ -1140,6 +1322,23 @@ fn main() -> anyhow::Result<()> {
             let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
             kaizen::shell::search::cmd_search_reindex(ws.as_deref())
         }
+        Command::Query {
+            expr,
+            since,
+            limit,
+            json,
+            workspace,
+            project,
+        } => {
+            let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+            kaizen::shell::core_query::cmd_query(
+                ws.as_deref(),
+                &expr,
+                since.as_deref(),
+                limit,
+                json,
+            )
+        }
         Command::Feedback {
             subcmd:
                 FeedbackCommand::List {
@@ -1440,6 +1639,10 @@ fn main() -> anyhow::Result<()> {
             ProjectsCommand::List => kaizen::shell::projects::cmd_projects_list(),
         },
         Command::Exp { subcmd } => dispatch_exp(subcmd),
+        Command::Cases { subcmd } => dispatch_cases(subcmd),
+        Command::Rules { subcmd } => dispatch_rules(subcmd),
+        Command::Alerts { subcmd } => dispatch_alerts(subcmd),
+        Command::Review { subcmd } => dispatch_review(subcmd),
         Command::Upgrade { from_source } => kaizen::shell::upgrade::cmd_upgrade(from_source),
         Command::Mcp => {
             // Requires multi-threaded runtime (rmcp + spawn_blocking in tools)
@@ -1467,9 +1670,10 @@ fn main() -> anyhow::Result<()> {
                 project,
                 since_days,
                 dry_run,
+                json,
             } => {
                 let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
-                kaizen::shell::eval::cmd_eval_run(ws.as_deref(), since_days, dry_run)
+                kaizen::shell::eval::cmd_eval_run(ws.as_deref(), since_days, dry_run, json)
             }
             EvalCommand::List {
                 workspace,
@@ -1592,6 +1796,104 @@ fn dispatch_daemon(cmd: DaemonCommand) -> anyhow::Result<()> {
                 }
             }
             Ok(())
+        }
+    }
+}
+
+fn ws(flags: &WorkspaceFlags) -> anyhow::Result<Option<PathBuf>> {
+    resolve_ws(flags.workspace.as_deref(), flags.project.as_deref())
+}
+
+fn dispatch_cases(cmd: CasesCommand) -> anyhow::Result<()> {
+    match cmd {
+        CasesCommand::Mine(a) => {
+            kaizen::shell::cases::cmd_cases_mine(ws(&a.ws)?.as_deref(), a.since.as_deref(), a.json)
+        }
+        CasesCommand::Create {
+            session,
+            reason,
+            label,
+            json,
+            ws: f,
+        } => kaizen::shell::cases::cmd_cases_create(
+            ws(&f)?.as_deref(),
+            &session,
+            &reason,
+            label,
+            json,
+        ),
+        CasesCommand::List {
+            status,
+            json,
+            ws: f,
+        } => kaizen::shell::cases::cmd_cases_list(ws(&f)?.as_deref(), status, json),
+        CasesCommand::Show(a) => {
+            kaizen::shell::cases::cmd_cases_show(ws(&a.ws)?.as_deref(), &a.id, a.json)
+        }
+        CasesCommand::Archive(a) => {
+            kaizen::shell::cases::cmd_cases_archive(ws(&a.ws)?.as_deref(), &a.id)
+        }
+    }
+}
+
+fn dispatch_rules(cmd: RulesCommand) -> anyhow::Result<()> {
+    match cmd {
+        RulesCommand::Create {
+            name,
+            filter,
+            action,
+            message,
+            ws: f,
+        } => kaizen::shell::rules::cmd_rules_create(
+            ws(&f)?.as_deref(),
+            &name,
+            &filter,
+            &action,
+            message,
+        ),
+        RulesCommand::List(a) => {
+            kaizen::shell::rules::cmd_rules_list(ws(&a.ws)?.as_deref(), a.json)
+        }
+        RulesCommand::Run {
+            since,
+            dry_run,
+            json,
+            ws: f,
+        } => {
+            kaizen::shell::rules::cmd_rules_run(ws(&f)?.as_deref(), since.as_deref(), dry_run, json)
+        }
+        RulesCommand::Enable(a) => {
+            kaizen::shell::rules::cmd_rules_enable(ws(&a.ws)?.as_deref(), &a.id, true)
+        }
+        RulesCommand::Disable(a) => {
+            kaizen::shell::rules::cmd_rules_enable(ws(&a.ws)?.as_deref(), &a.id, false)
+        }
+    }
+}
+
+fn dispatch_alerts(cmd: AlertsCommand) -> anyhow::Result<()> {
+    match cmd {
+        AlertsCommand::Check { days, json, ws: f } => {
+            kaizen::shell::alerts::cmd_alerts_check(ws(&f)?.as_deref(), days, json)
+        }
+    }
+}
+
+fn dispatch_review(cmd: ReviewCommand) -> anyhow::Result<()> {
+    match cmd {
+        ReviewCommand::List {
+            status,
+            json,
+            ws: f,
+        } => kaizen::shell::review::cmd_review_list(ws(&f)?.as_deref(), status, json),
+        ReviewCommand::Show(a) => {
+            kaizen::shell::review::cmd_review_show(ws(&a.ws)?.as_deref(), &a.id, a.json)
+        }
+        ReviewCommand::Resolve(a) => {
+            kaizen::shell::review::cmd_review_resolve(ws(&a.ws)?.as_deref(), &a.id)
+        }
+        ReviewCommand::Dismiss(a) => {
+            kaizen::shell::review::cmd_review_dismiss(ws(&a.ws)?.as_deref(), &a.id)
         }
     }
 }
