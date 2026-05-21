@@ -1,8 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use itf::value::Value;
 use kaizen::core::event::SessionStatus;
+use kaizen::shell::ingest::{IngestSource, ingest_hook_text};
+use kaizen::store::Store;
 use quint_connect::*;
 use serde::Deserialize;
+use std::sync::Mutex;
+use tempfile::TempDir;
+
+static ENV_LOCK: Mutex<()> = Mutex::new(());
 
 // --- State (mirrors `specs/hook-ingest.qnt` vars) ---
 
@@ -115,4 +121,31 @@ impl Driver for HookDriver {
 #[quint_run(spec = "specs/hook-ingest.qnt", max_samples = 20, max_steps = 6)]
 fn hook_ingest_run() -> impl Driver {
     HookDriver::default()
+}
+
+#[test]
+fn hook_ingest_appends_events_without_replacing_prior_rows() {
+    let _guard = ENV_LOCK.lock().unwrap();
+    let home = TempDir::new().unwrap();
+    let ws = TempDir::new().unwrap();
+    unsafe { std::env::set_var("KAIZEN_HOME", home.path()) };
+    ingest_hook_text(
+        IngestSource::Claude,
+        start_payload(),
+        Some(ws.path().into()),
+    )
+    .unwrap();
+    ingest_hook_text(IngestSource::Claude, stop_payload(), Some(ws.path().into())).unwrap();
+    let db = Store::open(&kaizen::core::workspace::db_path(ws.path()).unwrap()).unwrap();
+    let events = db.list_events_for_session("s-seq").unwrap();
+    unsafe { std::env::remove_var("KAIZEN_HOME") };
+    assert_eq!(events.iter().map(|e| e.seq).collect::<Vec<_>>(), vec![0, 1]);
+}
+
+fn start_payload() -> &'static str {
+    r#"{"hook_event_name":"SessionStart","session_id":"s-seq","timestamp_ms":1}"#
+}
+
+fn stop_payload() -> &'static str {
+    r#"{"hook_event_name":"Stop","session_id":"s-seq","timestamp_ms":2}"#
 }

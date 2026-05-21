@@ -15,6 +15,7 @@
 
 pub mod collect;
 pub mod core;
+pub mod core_loop;
 pub mod daemon;
 pub mod eval;
 pub mod feedback;
