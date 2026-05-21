@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Daemon server loop and single request worker.
 
+use super::supervisor::Supervisor;
 use super::worker::{Job, spawn_worker};
 use super::{RuntimePaths, runtime_paths};
 use crate::ipc::{
@@ -22,6 +23,7 @@ struct ServerState {
     started: Instant,
     queue_depth: Arc<AtomicUsize>,
     last_error: Arc<Mutex<Option<String>>>,
+    supervisor: Supervisor,
     tx: mpsc::Sender<Job>,
 }
 
@@ -38,6 +40,7 @@ pub async fn run_server() -> Result<()> {
         started: Instant::now(),
         queue_depth: Arc::new(AtomicUsize::new(0)),
         last_error: Arc::new(Mutex::new(None)),
+        supervisor: Supervisor::default(),
         tx,
     };
     spawn_worker(rx, state.queue_depth.clone(), state.last_error.clone());
@@ -109,6 +112,22 @@ async fn handle_client(mut stream: UnixStream, state: ServerState) -> Result<()>
                 .collect(),
         }),
         DaemonRequest::Status => DaemonResponse::Status(status(&state)),
+        DaemonRequest::EnsureWorkspaceCapture { workspace, deep } => DaemonResponse::CaptureStatus(
+            Box::new(state.supervisor.ensure_capture(workspace, deep).await),
+        ),
+        DaemonRequest::EnsureProxy {
+            workspace,
+            provider,
+        } => supervisor_result(
+            &state,
+            state.supervisor.ensure_proxy(workspace, provider).await,
+            DaemonResponse::ProxyEndpoint,
+        ),
+        DaemonRequest::BeginObservedSession { workspace, agent } => supervisor_result(
+            &state,
+            state.supervisor.begin_session(workspace, agent).await,
+            DaemonResponse::ObservedSession,
+        ),
         request => run_job(&state, request).await?,
     };
     let stop = matches!(response, DaemonResponse::Ack { ref message } if message == "stopping");
@@ -125,6 +144,30 @@ fn status(state: &ServerState) -> DaemonStatus {
         uptime_ms: state.started.elapsed().as_millis() as u64,
         queue_depth: state.queue_depth.load(Ordering::Relaxed),
         last_error: state.last_error.lock().ok().and_then(|e| e.clone()),
+        capture: state.supervisor.statuses(),
+    }
+}
+
+fn supervisor_result<T>(
+    state: &ServerState,
+    result: Result<T>,
+    ok: impl FnOnce(T) -> DaemonResponse,
+) -> DaemonResponse {
+    match result {
+        Ok(value) => ok(value),
+        Err(err) => error_response(state, err),
+    }
+}
+
+fn error_response(state: &ServerState, err: anyhow::Error) -> DaemonResponse {
+    let message = format!("{err:#}");
+    if let Ok(mut slot) = state.last_error.lock() {
+        *slot = Some(message.clone());
+    }
+    DaemonResponse::Error {
+        message,
+        supported_min: None,
+        supported_max: None,
     }
 }
 

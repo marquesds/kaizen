@@ -11,29 +11,32 @@ pub fn hook_to_event(h: &HookEvent, seq: u64) -> Event {
         .get("total_cost_usd")
         .and_then(|v| v.as_f64())
         .map(|f| (f * 1_000_000.0) as i64);
+    let lifecycle = lifecycle_type(&h.kind);
     Event {
         session_id: h.session_id.clone(),
         seq,
         ts_ms: h.ts_ms,
         ts_exact: true,
-        kind: EventKind::Hook,
+        kind: lifecycle.map_or(EventKind::Hook, |_| EventKind::Lifecycle),
         source: EventSource::Hook,
         tool: None,
         tool_call_id: hook_tool_id(&h.payload),
-        tokens_in: None,
-        tokens_out: None,
-        reasoning_tokens: None,
+        tokens_in: u32_field(&h.payload, "input_tokens"),
+        tokens_out: u32_field(&h.payload, "output_tokens"),
+        reasoning_tokens: u32_field(&h.payload, "reasoning_tokens"),
         cost_usd_e6,
-        stop_reason: None,
-        latency_ms: None,
+        stop_reason: text_field(&h.payload, "stop_reason"),
+        latency_ms: u32_field(&h.payload, "latency_ms")
+            .or_else(|| u32_field(&h.payload, "duration_ms"))
+            .or_else(|| u32_field(&h.payload, "permission_wait_ms")),
         ttft_ms: None,
         retry_count: None,
-        context_used_tokens: None,
-        context_max_tokens: None,
-        cache_creation_tokens: None,
-        cache_read_tokens: None,
-        system_prompt_tokens: None,
-        payload: h.payload.clone(),
+        context_used_tokens: u32_field(&h.payload, "context_used_tokens"),
+        context_max_tokens: u32_field(&h.payload, "context_max_tokens"),
+        cache_creation_tokens: u32_field(&h.payload, "cache_creation_tokens"),
+        cache_read_tokens: u32_field(&h.payload, "cache_read_tokens"),
+        system_prompt_tokens: u32_field(&h.payload, "system_prompt_tokens"),
+        payload: payload_with_lifecycle(h, lifecycle),
     }
 }
 
@@ -41,6 +44,41 @@ fn hook_tool_id(payload: &serde_json::Value) -> Option<String> {
     ["tool_call_id", "tool_use_id", "call_id", "id"]
         .iter()
         .find_map(|k| payload.get(k).and_then(|v| v.as_str()))
+        .map(ToOwned::to_owned)
+}
+
+fn lifecycle_type(kind: &HookKind) -> Option<&'static str> {
+    match kind {
+        HookKind::PermissionRequest => Some("permission_request"),
+        HookKind::UserPromptSubmit => Some("user_prompt_submit"),
+        HookKind::Notification => Some("notification"),
+        HookKind::SubagentStart => Some("subagent_start"),
+        HookKind::SubagentStop => Some("subagent_stop"),
+        HookKind::Interrupt => Some("interrupt"),
+        HookKind::ModeTransition => Some("mode_transition"),
+        _ => None,
+    }
+}
+
+fn payload_with_lifecycle(h: &HookEvent, typ: Option<&str>) -> serde_json::Value {
+    let mut payload = h.payload.clone();
+    if let Some(typ) = typ {
+        payload["type"] = serde_json::json!(typ);
+    }
+    payload
+}
+
+fn u32_field(payload: &serde_json::Value, key: &str) -> Option<u32> {
+    payload
+        .get(key)?
+        .as_u64()
+        .and_then(|n| u32::try_from(n).ok())
+}
+
+fn text_field(payload: &serde_json::Value, key: &str) -> Option<String> {
+    payload
+        .get(key)
+        .and_then(|v| v.as_str())
         .map(ToOwned::to_owned)
 }
 
@@ -53,6 +91,13 @@ pub fn hook_to_status(kind: &HookKind) -> Option<SessionStatus> {
         HookKind::PostToolUse => Some(SessionStatus::Running),
         HookKind::Stop => Some(SessionStatus::Done),
         HookKind::SessionStart => Some(SessionStatus::Running),
+        HookKind::PermissionRequest => Some(SessionStatus::Waiting),
+        HookKind::UserPromptSubmit => Some(SessionStatus::Running),
+        HookKind::Notification
+        | HookKind::SubagentStart
+        | HookKind::SubagentStop
+        | HookKind::Interrupt
+        | HookKind::ModeTransition => None,
         HookKind::Unknown(_) => None,
     }
 }
@@ -125,5 +170,23 @@ mod tests {
         };
         let ev = hook_to_event(&h, 0);
         assert_eq!(ev.cost_usd_e6, Some(42_000));
+    }
+
+    #[test]
+    fn permission_request_maps_lifecycle_wait() {
+        let h = HookEvent {
+            kind: HookKind::PermissionRequest,
+            session_id: "s1".to_string(),
+            ts_ms: 1000,
+            payload: json!({"permission_wait_ms": 250}),
+        };
+        let ev = hook_to_event(&h, 0);
+        assert_eq!(ev.kind, EventKind::Lifecycle);
+        assert_eq!(ev.latency_ms, Some(250));
+        assert_eq!(ev.payload["type"], "permission_request");
+        assert_eq!(
+            hook_to_status(&HookKind::PermissionRequest),
+            Some(SessionStatus::Waiting)
+        );
     }
 }

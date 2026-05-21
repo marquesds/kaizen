@@ -14,6 +14,7 @@ pub mod kaizen_child;
 pub mod load;
 pub mod metrics;
 pub mod migrate;
+pub mod observe;
 pub mod outcomes_cmd;
 pub mod projects;
 pub mod prompt;

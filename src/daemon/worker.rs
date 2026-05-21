@@ -81,7 +81,11 @@ fn handle_request(request: DaemonRequest) -> Result<DaemonResponse> {
                 message: "ingested".to_string(),
             })
         }
-        DaemonRequest::Hello(_) | DaemonRequest::Status => unreachable!(),
+        DaemonRequest::Hello(_)
+        | DaemonRequest::Status
+        | DaemonRequest::EnsureWorkspaceCapture { .. }
+        | DaemonRequest::EnsureProxy { .. }
+        | DaemonRequest::BeginObservedSession { .. } => unreachable!(),
     }
 }
 
