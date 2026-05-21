@@ -341,7 +341,53 @@ const MIGRATIONS: &[&str] = &[
         rss_bytes INTEGER,
         PRIMARY KEY (session_id, ts_ms, pid)
     )",
+    "CREATE TABLE IF NOT EXISTS cases (
+        id TEXT PRIMARY KEY,
+        source_key TEXT NOT NULL UNIQUE,
+        session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        reason TEXT NOT NULL,
+        label TEXT,
+        status TEXT NOT NULL CHECK(status IN ('open','archived')),
+        prompt_fingerprint TEXT,
+        metadata_json TEXT NOT NULL,
+        created_at_ms INTEGER NOT NULL
+    )",
+    "CREATE TABLE IF NOT EXISTS case_refs (
+        case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+        ref_kind TEXT NOT NULL,
+        ref_key TEXT NOT NULL,
+        PRIMARY KEY (case_id, ref_kind, ref_key)
+    )",
+    "CREATE TABLE IF NOT EXISTS rules (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        filter TEXT NOT NULL,
+        action_json TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        created_at_ms INTEGER NOT NULL
+    )",
+    "CREATE TABLE IF NOT EXISTS review_items (
+        id TEXT PRIMARY KEY,
+        source_key TEXT NOT NULL UNIQUE,
+        session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        status TEXT NOT NULL CHECK(status IN ('open','resolved','dismissed')),
+        created_at_ms INTEGER NOT NULL,
+        resolved_at_ms INTEGER
+    )",
+    "CREATE TABLE IF NOT EXISTS alert_events (
+        id TEXT PRIMARY KEY,
+        source_key TEXT NOT NULL UNIQUE,
+        name TEXT NOT NULL,
+        severity TEXT NOT NULL CHECK(severity IN ('info','warning','critical')),
+        message TEXT NOT NULL,
+        session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+        created_at_ms INTEGER NOT NULL
+    )",
     "CREATE INDEX IF NOT EXISTS session_samples_session_idx ON session_samples(session_id)",
+    "CREATE INDEX IF NOT EXISTS cases_status_idx ON cases(status, created_at_ms)",
+    "CREATE INDEX IF NOT EXISTS review_items_status_idx ON review_items(status, created_at_ms)",
+    "CREATE INDEX IF NOT EXISTS alert_events_name_idx ON alert_events(name, created_at_ms)",
     "CREATE INDEX IF NOT EXISTS tool_spans_session_idx ON tool_spans(session_id)",
     "CREATE INDEX IF NOT EXISTS tool_spans_started_idx ON tool_spans(started_at_ms)",
     "CREATE INDEX IF NOT EXISTS tool_spans_ended_idx ON tool_spans(ended_at_ms)",

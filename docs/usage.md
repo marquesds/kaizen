@@ -121,6 +121,21 @@ kaizen sessions search 'skill:caveman AND tokens_total:>5000'
 kaizen search reindex
 ```
 
+Structured expressions with known fields (`tool:bash`, `tokens_total:>5000`,
+`feedback_label:bad`, etc.) are routed through the local trace query engine
+instead of BM25.
+
+## `kaizen query`
+
+Structured trace query over local events. Version 1 supports `AND` terms and
+fields: `agent`, `model`, `kind`, `tool`, `path`, `skill`, `tokens_total`,
+`cost_usd`, `eval_score`, `feedback_label`, `prompt`, `status`, `span_kind`.
+
+```bash
+kaizen query 'tool:bash AND tokens_total:>5000'
+kaizen query 'feedback_label:bad' --since 30d --json
+```
+
 ## `kaizen summary`
 
 Roll-up of count, total USD, by-agent, by-model across all ingested
@@ -360,6 +375,35 @@ Metrics: `tokens_per_session`, `cost_per_session`, `success_rate`, `tool_loops`,
 `duration_minutes`, `files_per_session`, `success_rate_by_prompt`, `cost_by_prompt`.
 Details: [experiments.md](experiments.md).
 
+## `kaizen cases`, `kaizen rules`, `kaizen alerts`, `kaizen review`
+
+Local trace-to-case loop inspired by LangWatch/LangSmith patterns. Automation
+is local-only: rules create cases, queue review items, or emit local alerts.
+
+```bash
+kaizen cases mine --since 14d
+kaizen cases create --session <id> --reason "bad tool loop" --label regression
+kaizen cases list --json
+kaizen cases show <case-id>
+kaizen cases archive <case-id>
+
+kaizen rules create --name shell-loops --filter 'tool:bash' \
+  --action queue_review --message "review shell-heavy session"
+kaizen rules run --since 7d
+kaizen rules disable <rule-id>
+kaizen rules enable <rule-id>
+
+kaizen alerts check --days 7 --json
+
+kaizen review list
+kaizen review show <review-id>
+kaizen review resolve <review-id>
+kaizen review dismiss <review-id>
+```
+
+Built-in alerts cover cost spikes, eval regression, bad feedback, error-rate
+spikes, context pressure, retry cascades, and max-token truncation rate.
+
 ## `kaizen eval`
 
 LLM-as-a-Judge evaluations. Requires `[eval].enabled = true` in config and either
@@ -369,6 +413,7 @@ LLM-as-a-Judge evaluations. Requires `[eval].enabled = true` in config and eithe
 kaizen eval run                       # evaluate unevaluated sessions (last 7 days, cost >= $0.01)
 kaizen eval run --since-days 14       # extend the lookback window
 kaizen eval run --dry-run             # print which sessions would be evaluated without calling the judge
+kaizen eval run --dry-run --json      # machine-readable candidate sessions
 kaizen eval list                      # list all stored eval results
 kaizen eval list --min-score 0        # include all sessions (default: 0.0 = show all)
 kaizen eval list --json               # emit JSON array of EvalRow objects
