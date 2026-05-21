@@ -23,6 +23,13 @@ pub enum EventKind {
     PostToolUse,
     Stop,
     SessionStart,
+    PermissionRequest,
+    UserPromptSubmit,
+    Notification,
+    SubagentStart,
+    SubagentStop,
+    Interrupt,
+    ModeTransition,
     Unknown(String),
 }
 
@@ -33,6 +40,13 @@ impl EventKind {
             "PostToolUse" | "post_tool_use" => Self::PostToolUse,
             "Stop" | "stop" => Self::Stop,
             "SessionStart" | "session_start" => Self::SessionStart,
+            "PermissionRequest" | "permission_request" => Self::PermissionRequest,
+            "UserPromptSubmit" | "user_prompt_submit" => Self::UserPromptSubmit,
+            "Notification" | "notification" => Self::Notification,
+            "SubagentStart" | "subagent_start" => Self::SubagentStart,
+            "SubagentStop" | "subagent_stop" => Self::SubagentStop,
+            "Interrupt" | "interrupt" => Self::Interrupt,
+            "ModeTransition" | "mode_transition" => Self::ModeTransition,
             other => Self::Unknown(other.to_string()),
         }
     }

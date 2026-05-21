@@ -1,13 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Local daemon client/lifecycle API.
 
+mod capture_status;
+mod proxy_task;
+mod scanner_task;
 mod server;
+mod supervisor;
 mod worker;
 
 use crate::core::paths::kaizen_dir;
 use crate::ipc::{
-    ClientHello, ClientKind, DaemonRequest, DaemonResponse, DaemonStatus, PROTO_VERSION,
-    ServerHello, read_frame, write_frame,
+    CaptureStatus, ClientHello, ClientKind, DaemonRequest, DaemonResponse, DaemonStatus,
+    ObservedSession, PROTO_VERSION, ProxyEndpoint, ServerHello, read_frame, write_frame,
 };
 use anyhow::{Context, Result, anyhow};
 use std::path::PathBuf;
@@ -170,6 +174,36 @@ pub fn hello_blocking(client: ClientKind, workspace: Option<String>) -> Result<S
         DaemonResponse::Hello(hello) => Ok(hello),
         DaemonResponse::Error { message, .. } => Err(anyhow!(message)),
         _ => Err(anyhow!("unexpected daemon hello response")),
+    }
+}
+
+pub fn ensure_capture_blocking(workspace: String, deep: bool) -> Result<CaptureStatus> {
+    match request_blocking(DaemonRequest::EnsureWorkspaceCapture { workspace, deep })? {
+        DaemonResponse::CaptureStatus(status) => Ok(*status),
+        DaemonResponse::Error { message, .. } => Err(anyhow!(message)),
+        _ => Err(anyhow!("unexpected daemon capture response")),
+    }
+}
+
+pub fn ensure_proxy_blocking(workspace: String, provider: String) -> Result<ProxyEndpoint> {
+    match request_blocking(DaemonRequest::EnsureProxy {
+        workspace,
+        provider,
+    })? {
+        DaemonResponse::ProxyEndpoint(endpoint) => Ok(endpoint),
+        DaemonResponse::Error { message, .. } => Err(anyhow!(message)),
+        _ => Err(anyhow!("unexpected daemon proxy response")),
+    }
+}
+
+pub fn begin_observed_session_blocking(
+    workspace: String,
+    agent: String,
+) -> Result<ObservedSession> {
+    match request_blocking(DaemonRequest::BeginObservedSession { workspace, agent })? {
+        DaemonResponse::ObservedSession(session) => Ok(session),
+        DaemonResponse::Error { message, .. } => Err(anyhow!(message)),
+        _ => Err(anyhow!("unexpected daemon observe response")),
     }
 }
 

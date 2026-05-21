@@ -220,6 +220,14 @@ name = "prompt_tracking_spec"
 path = "tests/spec/prompt_tracking_spec.rs"
 
 [[test]]
+name = "datadog_grade_telemetry"
+path = "tests/spec/datadog_grade_telemetry.rs"
+
+[[test]]
+name = "daemon_capture"
+path = "tests/spec/daemon_capture.rs"
+
+[[test]]
 name = "session_feedback_spec"
 path = "tests/spec/session_feedback_spec.rs"
 

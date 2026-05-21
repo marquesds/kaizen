@@ -17,6 +17,9 @@ fn scans_modern_codex_file() {
     assert!(events.iter().any(|e| e.kind == EventKind::ToolResult));
     assert!(events.iter().any(|e| e.kind == EventKind::Cost));
     assert!(events.iter().any(|e| e.cost_usd_e6.is_some_and(|c| c > 0)));
+    let cost = events.iter().find(|e| e.kind == EventKind::Cost).unwrap();
+    assert_eq!(cost.context_used_tokens, Some(1600));
+    assert_eq!(cost.context_max_tokens, Some(128000));
 }
 
 #[test]

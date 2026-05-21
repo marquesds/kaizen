@@ -3,6 +3,7 @@ pub mod config;
 pub mod cost;
 pub mod data_source;
 pub mod identity;
+pub mod trace_span;
 
 pub use data_source::DataSource;
 pub use identity::ActorIdentity;

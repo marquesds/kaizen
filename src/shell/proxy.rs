@@ -12,6 +12,7 @@ pub fn cmd_proxy_run(
     workspace: Option<&Path>,
     listen: Option<String>,
     upstream: Option<String>,
+    provider: Option<String>,
 ) -> Result<()> {
     let dir = workspace
         .map(std::path::Path::to_path_buf)
@@ -19,7 +20,7 @@ pub fn cmd_proxy_run(
     let dir = std::fs::canonicalize(&dir).unwrap_or(dir);
     let cfg = config::load(&dir)?;
     let o = Arc::new(ProxyRunOptions::from_config_with_overrides(
-        &cfg, listen, upstream,
+        &cfg, listen, upstream, provider,
     ));
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()

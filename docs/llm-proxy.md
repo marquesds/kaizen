@@ -1,8 +1,8 @@
-# LLM HTTP proxy (Anthropic)
+# LLM HTTP proxy
 
-Run Kaizen in front of the Anthropic Messages API (and paths that use the same base URL and
-headers) so every model call is logged locally with `EventSource::Proxy` events
-and can sync to your ingest outbox with the same redaction as hooks.
+Run Kaizen in front of Anthropic-style or OpenAI-compatible model APIs so every model
+call is logged locally with `EventSource::Proxy` events and Datadog-style `llm`
+trace spans. Exports use the same redaction path as hooks.
 
 ## Security
 
@@ -11,7 +11,19 @@ and can sync to your ingest outbox with the same redaction as hooks.
 - The proxy forwards the client’s `x-api-key` to the real API. Do not point untrusted clients at
   this process.
 
-## How to run
+## Daemon-owned proxy
+
+After `kaizen init`, the daemon owns capture for the workspace. Run
+`kaizen init --deep` to have the daemon start loopback proxy tasks and report
+which providers are ready. This does not silently rewrite agent provider config
+unless Kaizen can verify a supported setting; unsupported agents stay on
+hook/transcript capture and are reported as partial deep capture.
+
+`kaizen observe --agent <claude|codex|cursor|auto> -- <cmd>` is a manual wrapper
+around the same daemon proxy endpoints. It injects `KAIZEN_SESSION_KEY`,
+`X_KAIZEN_SESSION`, and the provider base URL env vars into the child command.
+
+## Manual proxy
 
 1. Start the proxy in a workspace (creates/uses `.kaizen/kaizen.db` there):
 
@@ -24,6 +36,14 @@ and can sync to your ingest outbox with the same redaction as hooks.
    ```bash
    export ANTHROPIC_BASE_URL="http://127.0.0.1:3847"
    # ANTHROPIC_API_KEY unchanged
+   ```
+
+   For Codex/OpenAI-compatible clients:
+
+   ```bash
+   kaizen proxy run --provider openai
+   export OPENAI_BASE_URL="http://127.0.0.1:3847/v1"
+   # OPENAI_API_KEY unchanged
    ```
 
 3. Optional: tie multiple requests to one Kaizen `session` row:
@@ -44,6 +64,7 @@ support:
 |-----|---------|--------|
 | `listen` | `127.0.0.1:3847` | `--listen` overrides |
 | `upstream` | `https://api.anthropic.com` | No trailing slash; `--upstream` overrides |
+| `provider` | `anthropic` | `anthropic`, `openai`, or `auto`; `openai` changes the default upstream to `https://api.openai.com` |
 | `compress_transport` | `true` | `no_gzip` on the HTTP client when `false` (see [reqwest](https://docs.rs/reqwest)) |
 | `minify_json` | `true` | Re-encode JSON bodies to compact `serde_json` (whitespace only) |
 | `max_response_body_mb` | `256` | Single-response buffer cap; raise if the proxy returns 502 from slurping a larger body |
@@ -75,9 +96,11 @@ context_policy = { type = "none" }
 
 ## What gets stored
 
-- One `Cost` event per successful HTTP completion with optional `input_tokens` / `output_tokens`
-  parsed from JSON or `text/event-stream` bodies, plus `path`, `method`, and HTTP status in the
-  payload. Raw prompts are not written into `payload` fields.
+- One `Cost` event per successful HTTP completion with optional Anthropic or OpenAI
+  token fields parsed from JSON or `text/event-stream` bodies, plus path, method,
+  status, latency, cache tokens, stop reason, and context usage where available.
+- One `llm` trace span per proxied round trip, with redacted metadata only. Raw
+  prompts and raw model responses are not written into `payload` fields.
 - `Error` when the proxy cannot talk to the upstream, read the body, or when you exceed
   `max_response_body_mb`.
 

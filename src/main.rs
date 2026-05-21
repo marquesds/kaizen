@@ -91,6 +91,9 @@ enum Command {
         /// project name shorthand for --workspace (mutually exclusive)
         #[arg(long, conflicts_with = "workspace")]
         project: Option<String>,
+        /// Start proxy tasks and report deep model-call capture readiness.
+        #[arg(long)]
+        deep: bool,
     },
     /// Verify config, store, and hook wiring for this workspace.
     #[command(next_help_heading = "Trust & observe")]
@@ -207,6 +210,22 @@ enum Command {
         /// `local` | `provider` | `mixed`; `--refresh` can call remote APIs.
         #[arg(long, value_enum, default_value_t = DataSource::Local)]
         source: DataSource,
+    },
+    /// Run an agent command with Kaizen proxy/session env.
+    #[command(next_help_heading = "Trust & observe", trailing_var_arg = true)]
+    Observe {
+        /// Agent profile: claude, codex, cursor, or auto.
+        #[arg(long, default_value = "auto")]
+        agent: String,
+        /// workspace root (default: cwd)
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
+        /// Command and arguments to run.
+        #[arg(required = true, num_args = 1.., allow_hyphen_values = true)]
+        command: Vec<String>,
     },
     /// Flush local outbox to the configured ingest endpoint.
     #[command(next_help_heading = "Operate")]
@@ -431,6 +450,9 @@ enum ProxyCommand {
         /// Upstream base URL, e.g. https://api.anthropic.com (no trailing slash).
         #[arg(long)]
         upstream: Option<String>,
+        /// Provider defaults and hints: anthropic, openai, or auto.
+        #[arg(long)]
+        provider: Option<String>,
         /// workspace root (default: cwd)
         #[arg(long)]
         workspace: Option<PathBuf>,
@@ -763,6 +785,21 @@ enum MetricsCommand {
         #[arg(long)]
         force: bool,
     },
+    /// Field coverage and trace-correlation health.
+    Quality {
+        /// workspace root (default: cwd)
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
+        /// Trailing window in days.
+        #[arg(long, default_value_t = 7)]
+        days: u32,
+        /// Emit JSON report.
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -846,6 +883,17 @@ enum SessionsCommand {
         id: String,
         #[arg(long, default_value = "999")]
         depth: u32,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
+    },
+    /// Render Datadog-style trace spans for a session.
+    Trace {
+        id: String,
         #[arg(long)]
         json: bool,
         #[arg(long)]
@@ -1054,6 +1102,18 @@ fn main() -> anyhow::Result<()> {
         }
         Command::Sessions {
             subcmd:
+                SessionsCommand::Trace {
+                    id,
+                    json,
+                    workspace,
+                    project,
+                },
+        } => {
+            let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+            kaizen::shell::cli::cmd_sessions_trace(&id, json, ws.as_deref())
+        }
+        Command::Sessions {
+            subcmd:
                 SessionsCommand::Search {
                     query,
                     since,
@@ -1115,9 +1175,13 @@ fn main() -> anyhow::Result<()> {
             rt.shutdown_timeout(std::time::Duration::from_millis(500));
             result
         }
-        Command::Init { workspace, project } => {
+        Command::Init {
+            workspace,
+            project,
+            deep,
+        } => {
             let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
-            kaizen::shell::cli::cmd_init(ws.as_deref())
+            kaizen::shell::cli::cmd_init(ws.as_deref(), deep)
         }
         Command::Doctor { workspace, project } => {
             let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
@@ -1207,6 +1271,15 @@ fn main() -> anyhow::Result<()> {
                 let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
                 kaizen::shell::metrics::cmd_metrics_index(ws.as_deref(), force)
             }
+            Some(MetricsCommand::Quality {
+                workspace,
+                project,
+                days,
+                json,
+            }) => {
+                let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+                kaizen::shell::metrics::cmd_metrics_quality(ws.as_deref(), days, json)
+            }
             None => {
                 let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
                 kaizen::shell::metrics::cmd_metrics(
@@ -1220,6 +1293,15 @@ fn main() -> anyhow::Result<()> {
                 )
             }
         },
+        Command::Observe {
+            agent,
+            workspace,
+            project,
+            command,
+        } => {
+            let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+            kaizen::shell::observe::cmd_observe(ws.as_deref(), &agent, &command)
+        }
         Command::Sync {
             subcmd:
                 SyncCommand::Run {
@@ -1371,12 +1453,13 @@ fn main() -> anyhow::Result<()> {
                 ProxyCommand::Run {
                     listen,
                     upstream,
+                    provider,
                     workspace,
                     project,
                 },
         } => {
             let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
-            kaizen::shell::proxy::cmd_proxy_run(ws.as_deref(), listen, upstream)
+            kaizen::shell::proxy::cmd_proxy_run(ws.as_deref(), listen, upstream, provider)
         }
         Command::Eval { subcmd } => match subcmd {
             EvalCommand::Run {
@@ -1492,6 +1575,16 @@ fn dispatch_daemon(cmd: DaemonCommand) -> anyhow::Result<()> {
                         "last_error: {}",
                         st.last_error.unwrap_or_else(|| "-".to_string())
                     );
+                    for capture in st.capture {
+                        println!("capture: {}", capture.workspace);
+                        println!("  deep: {}", capture.deep);
+                        println!("  hooks: {}", capture.hooks.len());
+                        println!("  watchers: {}", capture.watchers.len());
+                        println!("  proxies: {}", capture.proxies.len());
+                        if !capture.errors.is_empty() {
+                            println!("  errors: {}", capture.errors.join("; "));
+                        }
+                    }
                 }
                 kaizen::daemon::DaemonStatusOutcome::Stopped { socket } => {
                     println!("status: stopped");

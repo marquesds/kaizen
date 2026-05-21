@@ -100,6 +100,45 @@ pub fn cmd_metrics_index(workspace: Option<&Path>, force: bool) -> Result<()> {
     Ok(())
 }
 
+pub fn metrics_quality_text(workspace: Option<&Path>, days: u32, json: bool) -> Result<String> {
+    let ws = workspace_path(workspace)?;
+    let store = open_workspace_read_store(&ws, false)?;
+    let end = now_ms();
+    let start = end.saturating_sub(days as u64 * 86_400_000);
+    let ws_str = ws.to_string_lossy().to_string();
+    let report = crate::metrics::quality::build_quality_report(&store, &ws_str, start, end)?;
+    if json {
+        return Ok(format!("{}\n", serde_json::to_string_pretty(&report)?));
+    }
+    Ok(format_quality(&report))
+}
+
+pub fn cmd_metrics_quality(workspace: Option<&Path>, days: u32, json: bool) -> Result<()> {
+    print!("{}", metrics_quality_text(workspace, days, json)?);
+    Ok(())
+}
+
+fn format_quality(report: &crate::metrics::quality::CaptureQualityReport) -> String {
+    format!(
+        "Capture quality\n  events: {}\n  proxy_events: {}\n  trace_spans: {}\n  token_coverage: {}%\n  latency_coverage: {}%\n  context_coverage: {}%\n  proxy_correlation: {}%\n  orphan_spans: {}\n",
+        report.events_total,
+        report.proxy_events,
+        report.trace_spans_total,
+        report.token_coverage_pct,
+        report.latency_coverage_pct,
+        report.context_coverage_pct,
+        report.proxy_correlation_pct,
+        report.orphan_span_count,
+    )
+}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
 fn decorate_metrics(
     workspace: &Path,
     mut metrics: crate::metrics::types::MetricsReport,

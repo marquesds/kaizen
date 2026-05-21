@@ -4,9 +4,10 @@ CLI reference. All commands accept `--workspace <path>` or `--project <name>` to
 
 Run `kaizen --help` for grouped subcommands (Trust & observe, Operate, Improve, Integrations, Shell).
 
-**Daemon mode:** Kaizen starts a local daemon for supported read/write paths.
-Use `kaizen daemon status`, `kaizen daemon stop`, or `--no-daemon` /
-`KAIZEN_DAEMON=0` for direct SQLite mode. See [daemon.md](daemon.md).
+**Daemon mode:** `kaizen init` starts a local daemon for capture and supported
+read/write paths. Use `kaizen daemon status`, `kaizen daemon stop`, or
+`--no-daemon` / `KAIZEN_DAEMON=0` for direct SQLite mode. See
+[daemon.md](daemon.md).
 
 **Cache-first reads:** `sessions list`, `summary`, `insights`, `guidance`, `metrics`, `retro`, **`exp report`**, and **`exp power`** read the local workspace database first and avoid transcript scans. Pass **`--refresh`** (`-r`) when that read should rescan external agent transcripts before rendering. Use **`kaizen load`** when you want an explicit backfill of previous sessions without coupling it to a report. Both can take a while on large workspaces; with `--source provider|mixed`, `--refresh` can also refresh remote provider cache. See [config.md](config.md).
 
@@ -44,6 +45,20 @@ Idempotent workspace setup. Typical effects:
 | `~/.kaizen/projects/<slug>/backup/*.bak` | Timestamped copy before patching an existing hooks/settings file. |
 
 Re-running is safe. Codex, Goose, OpenCode, Copilot, and OpenClaw sessions are ingested via **transcript tail** and hooks; `init` patches **Cursor**, **Claude Code**, and **OpenClaw** hook files (writes `~/.openclaw/hooks/kaizen-events/handler.ts`).
+
+`init` also asks the daemon to start workspace capture. The daemon keeps a
+periodic transcript scanner alive for the workspace, so normal use does not
+require `kaizen observe`.
+
+```bash
+kaizen init          # hooks + daemon scanner capture
+kaizen init --deep   # also start daemon proxy tasks and report deep-capture readiness
+```
+
+`--deep` is opt-in. It starts loopback proxy endpoints where possible, but does
+not silently rewrite agent model-provider config when Kaizen cannot verify a
+supported setting. In that case init reports partial deep capture and hooks/tail
+capture remain active.
 
 ## `kaizen projects`
 
@@ -230,14 +245,23 @@ Heuristics: see [retro.md](retro.md). Tuning: see
 
 ## `kaizen proxy run`
 
-Local HTTP forwarder for Anthropic-style APIs. Records [`EventSource::Proxy` events](concepts.md)
+Local HTTP forwarder for Anthropic-style and OpenAI-compatible APIs. Records [`EventSource::Proxy` events](concepts.md)
 in `~/.kaizen/projects/<slug>/kaizen.db` and honors `[proxy]` in config (see [config](config.md), [llm-proxy](llm-proxy.md)).
 
 ```bash
 kaizen proxy run
 kaizen proxy run --listen 127.0.0.1:9000
 kaizen proxy run --upstream https://api.anthropic.com
+kaizen proxy run --provider openai
+kaizen observe --agent codex -- codex
 ```
+
+For normal collection, prefer `kaizen init`. `kaizen observe` is a daemon-backed
+debug/manual wrapper that injects session and proxy env into one child command.
+
+Use `kaizen sessions trace <id>` for proxy-backed LLM spans, and
+`kaizen metrics quality --json` to inspect field coverage and trace-correlation
+health.
 
 ## `kaizen ingest hook`
 

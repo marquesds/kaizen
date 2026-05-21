@@ -495,6 +495,55 @@ pub fn cmd_sessions_tree(id: &str, depth: u32, json: bool, workspace: Option<&Pa
     Ok(())
 }
 
+pub fn sessions_trace_text(id: &str, json: bool, workspace: Option<&Path>) -> Result<String> {
+    let ws = workspace_path(workspace)?;
+    let store = open_workspace_read_store(&ws, false)?;
+    let spans = store.trace_spans_for_session(id)?;
+    if json {
+        return Ok(format!("{}\n", serde_json::to_string_pretty(&spans)?));
+    }
+    if spans.is_empty() {
+        if store.get_session(id)?.is_none() {
+            anyhow::bail!("session not found: {id}");
+        }
+        return Ok(format!("(no trace spans for session {id})\n"));
+    }
+    Ok(format_trace_spans(&spans))
+}
+
+fn format_trace_spans(spans: &[crate::core::trace_span::TraceSpanRecord]) -> String {
+    use std::fmt::Write;
+    let mut out = String::new();
+    writeln!(
+        &mut out,
+        "{:<10} {:<18} {:<8} DURATION",
+        "KIND", "NAME", "STATUS"
+    )
+    .unwrap();
+    writeln!(&mut out, "{}", "-".repeat(64)).unwrap();
+    for span in spans {
+        let ms = span
+            .duration_ms
+            .map(|v| v.to_string())
+            .unwrap_or("-".into());
+        writeln!(
+            &mut out,
+            "{:<10} {:<18} {:<8} {}ms",
+            span.kind.as_str(),
+            span.name,
+            span.status,
+            ms
+        )
+        .unwrap();
+    }
+    out
+}
+
+pub fn cmd_sessions_trace(id: &str, json: bool, workspace: Option<&Path>) -> Result<()> {
+    print!("{}", sessions_trace_text(id, json, workspace)?);
+    Ok(())
+}
+
 /// `kaizen summary` — same output as CLI stdout.
 pub fn summary_text(
     workspace: Option<&Path>,

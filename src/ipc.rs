@@ -36,6 +36,50 @@ pub struct DaemonStatus {
     pub uptime_ms: u64,
     pub queue_depth: usize,
     pub last_error: Option<String>,
+    #[serde(default)]
+    pub capture: Vec<CaptureStatus>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CaptureComponentStatus {
+    Ready,
+    Partial,
+    Unsupported,
+    Error,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+pub struct CaptureComponent {
+    pub name: String,
+    pub status: CaptureComponentStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ProxyEndpoint {
+    pub provider: String,
+    pub listen: String,
+    pub base_url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub v1_base_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+pub struct CaptureStatus {
+    pub workspace: String,
+    pub deep: bool,
+    pub hooks: Vec<CaptureComponent>,
+    pub watchers: Vec<CaptureComponent>,
+    pub proxies: Vec<ProxyEndpoint>,
+    pub errors: Vec<String>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ObservedSession {
+    pub session: String,
+    pub proxies: Vec<ProxyEndpoint>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -66,6 +110,18 @@ pub enum DaemonRequest {
         payload: String,
         workspace: Option<String>,
     },
+    EnsureWorkspaceCapture {
+        workspace: String,
+        deep: bool,
+    },
+    EnsureProxy {
+        workspace: String,
+        provider: String,
+    },
+    BeginObservedSession {
+        workspace: String,
+        agent: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -78,6 +134,9 @@ pub enum DaemonResponse {
     Ack {
         message: String,
     },
+    CaptureStatus(Box<CaptureStatus>),
+    ProxyEndpoint(ProxyEndpoint),
+    ObservedSession(ObservedSession),
     Error {
         message: String,
         supported_min: Option<u32>,

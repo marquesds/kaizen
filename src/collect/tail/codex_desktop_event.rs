@@ -67,6 +67,7 @@ fn token_count(
     event.tokens_out = u32_field(usage, "output_tokens");
     event.reasoning_tokens = u32_field(usage, "reasoning_output_tokens");
     event.cache_read_tokens = u32_field(usage, "cached_input_tokens");
+    event.context_used_tokens = u32_field(usage, "total_tokens").or_else(|| sum_tokens(&event));
     event.context_max_tokens = payload
         .pointer("/info/model_context_window")
         .and_then(as_u32);
@@ -147,4 +148,13 @@ fn u32_field(v: &Value, key: &str) -> Option<u32> {
 
 fn as_u32(v: &Value) -> Option<u32> {
     v.as_u64().and_then(|n| u32::try_from(n).ok())
+}
+
+fn sum_tokens(event: &Event) -> Option<u32> {
+    let total = event
+        .tokens_in
+        .unwrap_or(0)
+        .saturating_add(event.tokens_out.unwrap_or(0))
+        .saturating_add(event.reasoning_tokens.unwrap_or(0));
+    (total > 0).then_some(total)
 }
