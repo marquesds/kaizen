@@ -3,6 +3,7 @@
 
 use crate::core::config::try_team_salt;
 use crate::core::event::{Event, EventKind, EventSource, SessionRecord, SessionStatus};
+use crate::core::trace_span::{TraceSpanKind, TraceSpanRecord};
 use crate::metrics::types::{
     FileFact, RankedFile, RankedTool, RepoEdge, RepoSnapshotRecord, ToolSpanView,
 };
@@ -162,6 +163,30 @@ const MIGRATIONS: &[&str] = &[
         path TEXT NOT NULL,
         PRIMARY KEY (span_id, path)
     )",
+    "CREATE TABLE IF NOT EXISTS trace_spans (
+        span_id TEXT PRIMARY KEY,
+        trace_id TEXT NOT NULL,
+        parent_span_id TEXT,
+        session_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        name TEXT NOT NULL,
+        status TEXT NOT NULL,
+        started_at_ms INTEGER,
+        ended_at_ms INTEGER,
+        duration_ms INTEGER,
+        model TEXT,
+        tool TEXT,
+        tokens_in INTEGER,
+        tokens_out INTEGER,
+        reasoning_tokens INTEGER,
+        cost_usd_e6 INTEGER,
+        context_used_tokens INTEGER,
+        context_max_tokens INTEGER,
+        payload TEXT NOT NULL DEFAULT '{}'
+    )",
+    "CREATE INDEX IF NOT EXISTS trace_spans_session_idx ON trace_spans(session_id)",
+    "CREATE INDEX IF NOT EXISTS trace_spans_trace_idx ON trace_spans(trace_id)",
+    "CREATE INDEX IF NOT EXISTS trace_spans_started_idx ON trace_spans(started_at_ms)",
     "CREATE TABLE IF NOT EXISTS session_repo_binding (
         session_id TEXT PRIMARY KEY,
         start_commit TEXT,
@@ -316,7 +341,53 @@ const MIGRATIONS: &[&str] = &[
         rss_bytes INTEGER,
         PRIMARY KEY (session_id, ts_ms, pid)
     )",
+    "CREATE TABLE IF NOT EXISTS cases (
+        id TEXT PRIMARY KEY,
+        source_key TEXT NOT NULL UNIQUE,
+        session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        reason TEXT NOT NULL,
+        label TEXT,
+        status TEXT NOT NULL CHECK(status IN ('open','archived')),
+        prompt_fingerprint TEXT,
+        metadata_json TEXT NOT NULL,
+        created_at_ms INTEGER NOT NULL
+    )",
+    "CREATE TABLE IF NOT EXISTS case_refs (
+        case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+        ref_kind TEXT NOT NULL,
+        ref_key TEXT NOT NULL,
+        PRIMARY KEY (case_id, ref_kind, ref_key)
+    )",
+    "CREATE TABLE IF NOT EXISTS rules (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        filter TEXT NOT NULL,
+        action_json TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        created_at_ms INTEGER NOT NULL
+    )",
+    "CREATE TABLE IF NOT EXISTS review_items (
+        id TEXT PRIMARY KEY,
+        source_key TEXT NOT NULL UNIQUE,
+        session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        status TEXT NOT NULL CHECK(status IN ('open','resolved','dismissed')),
+        created_at_ms INTEGER NOT NULL,
+        resolved_at_ms INTEGER
+    )",
+    "CREATE TABLE IF NOT EXISTS alert_events (
+        id TEXT PRIMARY KEY,
+        source_key TEXT NOT NULL UNIQUE,
+        name TEXT NOT NULL,
+        severity TEXT NOT NULL CHECK(severity IN ('info','warning','critical')),
+        message TEXT NOT NULL,
+        session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+        created_at_ms INTEGER NOT NULL
+    )",
     "CREATE INDEX IF NOT EXISTS session_samples_session_idx ON session_samples(session_id)",
+    "CREATE INDEX IF NOT EXISTS cases_status_idx ON cases(status, created_at_ms)",
+    "CREATE INDEX IF NOT EXISTS review_items_status_idx ON review_items(status, created_at_ms)",
+    "CREATE INDEX IF NOT EXISTS alert_events_name_idx ON alert_events(name, created_at_ms)",
     "CREATE INDEX IF NOT EXISTS tool_spans_session_idx ON tool_spans(session_id)",
     "CREATE INDEX IF NOT EXISTS tool_spans_started_idx ON tool_spans(started_at_ms)",
     "CREATE INDEX IF NOT EXISTS tool_spans_ended_idx ON tool_spans(ended_at_ms)",
@@ -448,6 +519,18 @@ pub struct ToolSpanSyncRow {
     pub reasoning_tokens: Option<u32>,
     pub cost_usd_e6: Option<i64>,
     pub paths: Vec<String>,
+}
+
+pub(crate) struct CaptureQualityRow {
+    pub source: String,
+    pub has_tokens: bool,
+    pub has_latency: bool,
+    pub has_context: bool,
+}
+
+pub(crate) struct TraceSpanQualityRow {
+    pub kind: String,
+    pub is_orphan: bool,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -2523,6 +2606,112 @@ impl Store {
         Ok(rows.filter_map(|row| row.ok()).collect())
     }
 
+    pub fn upsert_trace_span(&self, span: &TraceSpanRecord) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO trace_spans (
+                span_id, trace_id, parent_span_id, session_id, kind, name, status,
+                started_at_ms, ended_at_ms, duration_ms, model, tool, tokens_in, tokens_out,
+                reasoning_tokens, cost_usd_e6, context_used_tokens, context_max_tokens, payload
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)
+             ON CONFLICT(span_id) DO UPDATE SET
+                trace_id=excluded.trace_id, parent_span_id=excluded.parent_span_id,
+                session_id=excluded.session_id, kind=excluded.kind, name=excluded.name,
+                status=excluded.status, started_at_ms=excluded.started_at_ms,
+                ended_at_ms=excluded.ended_at_ms, duration_ms=excluded.duration_ms,
+                model=excluded.model, tool=excluded.tool, tokens_in=excluded.tokens_in,
+                tokens_out=excluded.tokens_out, reasoning_tokens=excluded.reasoning_tokens,
+                cost_usd_e6=excluded.cost_usd_e6,
+                context_used_tokens=excluded.context_used_tokens,
+                context_max_tokens=excluded.context_max_tokens, payload=excluded.payload",
+            params![
+                span.span_id.as_str(),
+                span.trace_id.as_str(),
+                span.parent_span_id.as_deref(),
+                span.session_id.as_str(),
+                span.kind.as_str(),
+                span.name.as_str(),
+                span.status.as_str(),
+                span.started_at_ms.map(|v| v as i64),
+                span.ended_at_ms.map(|v| v as i64),
+                span.duration_ms.map(|v| v as i64),
+                span.model.as_deref(),
+                span.tool.as_deref(),
+                span.tokens_in.map(|v| v as i64),
+                span.tokens_out.map(|v| v as i64),
+                span.reasoning_tokens.map(|v| v as i64),
+                span.cost_usd_e6,
+                span.context_used_tokens.map(|v| v as i64),
+                span.context_max_tokens.map(|v| v as i64),
+                serde_json::to_string(&span.payload)?,
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn trace_spans_for_session(&self, session_id: &str) -> Result<Vec<TraceSpanRecord>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT span_id, trace_id, parent_span_id, session_id, kind, name, status,
+                    started_at_ms, ended_at_ms, duration_ms, model, tool, tokens_in, tokens_out,
+                    reasoning_tokens, cost_usd_e6, context_used_tokens, context_max_tokens, payload
+             FROM trace_spans WHERE session_id = ?1
+             ORDER BY COALESCE(started_at_ms, ended_at_ms, 0), span_id",
+        )?;
+        let rows = stmt.query_map(params![session_id], trace_span_from_row)?;
+        Ok(rows.filter_map(|row| row.ok()).collect())
+    }
+
+    pub(crate) fn capture_quality_rows(
+        &self,
+        workspace: &str,
+        start_ms: u64,
+        end_ms: u64,
+    ) -> Result<Vec<CaptureQualityRow>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT e.source,
+                    e.tokens_in IS NOT NULL OR e.tokens_out IS NOT NULL OR e.reasoning_tokens IS NOT NULL,
+                    e.latency_ms IS NOT NULL OR e.ttft_ms IS NOT NULL,
+                    e.context_used_tokens IS NOT NULL AND e.context_max_tokens IS NOT NULL
+             FROM events e JOIN sessions s ON s.id = e.session_id
+             WHERE s.workspace = ?1 AND e.ts_ms >= ?2 AND e.ts_ms <= ?3",
+        )?;
+        let rows = stmt.query_map(params![workspace, start_ms as i64, end_ms as i64], |row| {
+            Ok(CaptureQualityRow {
+                source: row.get(0)?,
+                has_tokens: row.get::<_, i64>(1)? != 0,
+                has_latency: row.get::<_, i64>(2)? != 0,
+                has_context: row.get::<_, i64>(3)? != 0,
+            })
+        })?;
+        Ok(rows.filter_map(|row| row.ok()).collect())
+    }
+
+    pub(crate) fn trace_span_quality_rows(
+        &self,
+        workspace: &str,
+        start_ms: u64,
+        end_ms: u64,
+    ) -> Result<Vec<TraceSpanQualityRow>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT ts.kind,
+                    ts.parent_span_id IS NOT NULL
+                    AND parent.span_id IS NULL
+                    AND ts.kind NOT IN ('session', 'agent')
+             FROM trace_spans ts
+             JOIN sessions s ON s.id = ts.session_id
+             LEFT JOIN trace_spans parent ON parent.span_id = ts.parent_span_id
+             WHERE s.workspace = ?1
+               AND COALESCE(ts.started_at_ms, ts.ended_at_ms, 0) >= ?2
+               AND COALESCE(ts.started_at_ms, ts.ended_at_ms, 0) <= ?3",
+        )?;
+        let rows = stmt.query_map(params![workspace, start_ms as i64, end_ms as i64], |row| {
+            Ok(TraceSpanQualityRow {
+                kind: row.get(0)?,
+                is_orphan: row.get::<_, i64>(1)? != 0,
+            })
+        })?;
+        Ok(rows.filter_map(|row| row.ok()).collect())
+    }
+
     pub fn upsert_eval(&self, eval: &crate::eval::types::EvalRow) -> rusqlite::Result<()> {
         self.conn.execute(
             "INSERT OR REPLACE INTO session_evals
@@ -3236,6 +3425,32 @@ fn top_tools_5(conn: &Connection, workspace: &str) -> Result<Vec<(String, u64)>>
     Ok(out)
 }
 
+fn trace_span_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<TraceSpanRecord> {
+    let kind: String = row.get(4)?;
+    let payload: String = row.get(18)?;
+    Ok(TraceSpanRecord {
+        span_id: row.get(0)?,
+        trace_id: row.get(1)?,
+        parent_span_id: row.get(2)?,
+        session_id: row.get(3)?,
+        kind: TraceSpanKind::parse(&kind),
+        name: row.get(5)?,
+        status: row.get(6)?,
+        started_at_ms: row.get::<_, Option<i64>>(7)?.map(|v| v as u64),
+        ended_at_ms: row.get::<_, Option<i64>>(8)?.map(|v| v as u64),
+        duration_ms: row.get::<_, Option<i64>>(9)?.map(|v| v as u32),
+        model: row.get(10)?,
+        tool: row.get(11)?,
+        tokens_in: row.get::<_, Option<i64>>(12)?.map(|v| v as u32),
+        tokens_out: row.get::<_, Option<i64>>(13)?.map(|v| v as u32),
+        reasoning_tokens: row.get::<_, Option<i64>>(14)?.map(|v| v as u32),
+        cost_usd_e6: row.get(15)?,
+        context_used_tokens: row.get::<_, Option<i64>>(16)?.map(|v| v as u32),
+        context_max_tokens: row.get::<_, Option<i64>>(17)?.map(|v| v as u32),
+        payload: serde_json::from_str(&payload).unwrap_or_default(),
+    })
+}
+
 fn status_from_str(s: &str) -> SessionStatus {
     match s {
         "Running" => SessionStatus::Running,
@@ -3340,17 +3555,38 @@ fn ensure_column(conn: &Connection, table: &str, column: &str, sql_type: &str) -
     if has_column(conn, table, column)? {
         return Ok(());
     }
-    conn.execute(
-        &format!("ALTER TABLE {table} ADD COLUMN {column} {sql_type}"),
-        [],
-    )?;
-    Ok(())
+    let sql = format!("ALTER TABLE {table} ADD COLUMN {column} {sql_type}");
+    match conn.execute(&sql, []) {
+        Ok(_) => Ok(()),
+        Err(err) if column_was_added_by_race(conn, table, column, &err)? => Ok(()),
+        Err(err) => Err(err.into()),
+    }
 }
 
 fn has_column(conn: &Connection, table: &str, column: &str) -> Result<bool> {
     let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})"))?;
     let rows = stmt.query_map([], |row| row.get::<_, String>(1))?;
     Ok(rows.filter_map(|r| r.ok()).any(|name| name == column))
+}
+
+fn column_was_added_by_race(
+    conn: &Connection,
+    table: &str,
+    column: &str,
+    err: &rusqlite::Error,
+) -> Result<bool> {
+    if !is_duplicate_column_error(err) {
+        return Ok(false);
+    }
+    has_column(conn, table, column)
+}
+
+fn is_duplicate_column_error(err: &rusqlite::Error) -> bool {
+    matches!(
+        err,
+        rusqlite::Error::SqliteFailure(_, Some(message))
+            if message.contains("duplicate column name")
+    )
 }
 
 fn bool_to_i64(v: bool) -> i64 {
@@ -3461,6 +3697,17 @@ mod tests {
         assert_eq!(temp_store, 2);
         assert_eq!(wal_autocheckpoint, 1_000);
         assert_eq!(mmap_size_bytes_from_mb(Some("64")), 67_108_864);
+    }
+
+    #[test]
+    fn ensure_column_tolerates_duplicate_from_race() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("CREATE TABLE sessions (id TEXT, start_commit TEXT)")
+            .unwrap();
+        let err = conn
+            .execute("ALTER TABLE sessions ADD COLUMN start_commit TEXT", [])
+            .unwrap_err();
+        assert!(column_was_added_by_race(&conn, "sessions", "start_commit", &err).unwrap());
     }
 
     #[test]

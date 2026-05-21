@@ -1,19 +1,34 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use crate::core::config;
-use crate::eval::engine::run_evals;
+use crate::eval::engine::{dry_run_candidates, run_evals};
 use crate::store::sqlite::Store;
 use anyhow::Result;
 use std::path::{Path, PathBuf};
 
-pub fn cmd_eval_run(workspace: Option<&Path>, since_days: u64, dry_run: bool) -> Result<()> {
+pub fn cmd_eval_run(
+    workspace: Option<&Path>,
+    since_days: u64,
+    dry_run: bool,
+    json: bool,
+) -> Result<()> {
     let ws = resolve_ws(workspace)?;
     let cfg = config::load(&ws)?;
     let store = open_store(&ws)?;
     let since_ms = since_ms_from_days(since_days);
-    let rows = run_evals(&store, &cfg.eval, &ws, since_ms, dry_run)?;
     if dry_run {
-        println!("dry-run: {} sessions would be evaluated", rows.len());
+        let rows = dry_run_candidates(&store, &cfg.eval, since_ms)?;
+        if json {
+            println!("{}", serde_json::to_string_pretty(&rows)?);
+        } else {
+            println!("dry-run: {} sessions would be evaluated", rows.len());
+            rows.iter().for_each(|s| println!("  {}", s.id));
+        }
     } else {
+        let rows = run_evals(&store, &cfg.eval, &ws, since_ms, false)?;
+        if json {
+            println!("{}", serde_json::to_string_pretty(&rows)?);
+            return Ok(());
+        }
         println!("evaluated {} session(s)", rows.len());
         for r in &rows {
             println!(

@@ -46,6 +46,23 @@ pub async fn run(
     workspace: PathBuf,
     config: crate::core::config::Config,
 ) -> Result<(), anyhow::Error> {
+    let addr: SocketAddr = options
+        .listen
+        .parse()
+        .map_err(|e: std::net::AddrParseError| {
+            anyhow::anyhow!(r#"bad --listen (expected e.g. "127.0.0.1:3847"): {e}"#)
+        })?;
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+    run_with_listener(options, workspace, config, listener).await
+}
+
+/// Serve on a pre-bound listener so daemon supervisor can publish the chosen endpoint.
+pub async fn run_with_listener(
+    options: Arc<ProxyRunOptions>,
+    workspace: PathBuf,
+    config: crate::core::config::Config,
+    listener: tokio::net::TcpListener,
+) -> Result<(), anyhow::Error> {
     let store_path = crate::core::workspace::db_path(&workspace)?;
     let client = build_client(&options)?;
     let st = Arc::new(ProxyState {
@@ -60,15 +77,12 @@ pub async fn run(
         .route("/{*path}", any(handle))
         .layer(DefaultBodyLimit::max(limit))
         .with_state(st);
-    let addr: SocketAddr = options
-        .listen
-        .parse()
-        .map_err(|e: std::net::AddrParseError| {
-            anyhow::anyhow!(r#"bad --listen (expected e.g. "127.0.0.1:3847"): {e}"#)
-        })?;
-    let listener = tokio::net::TcpListener::bind(addr).await?;
     let seen = listener.local_addr()?;
-    tracing::info!(addr = %seen, "kaizen LLM proxy listening (set ANTHROPIC_BASE_URL to this /)");
+    tracing::info!(
+        addr = %seen,
+        provider = %options.provider,
+        "kaizen LLM proxy listening"
+    );
     axum::serve(listener, app).await?;
     Ok(())
 }

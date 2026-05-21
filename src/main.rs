@@ -50,6 +50,21 @@ enum Command {
         #[command(subcommand)]
         subcmd: SearchCommand,
     },
+    /// Structured trace query over local session events.
+    #[command(next_help_heading = "Trust & observe")]
+    Query {
+        expr: String,
+        #[arg(long)]
+        since: Option<String>,
+        #[arg(long, default_value_t = 50)]
+        limit: usize,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
+    },
     /// Aggregate session + cost stats across all agents.
     #[command(next_help_heading = "Trust & observe")]
     Summary {
@@ -91,6 +106,9 @@ enum Command {
         /// project name shorthand for --workspace (mutually exclusive)
         #[arg(long, conflicts_with = "workspace")]
         project: Option<String>,
+        /// Start proxy tasks and report deep model-call capture readiness.
+        #[arg(long)]
+        deep: bool,
     },
     /// Verify config, store, and hook wiring for this workspace.
     #[command(next_help_heading = "Trust & observe")]
@@ -101,6 +119,19 @@ enum Command {
         /// project name shorthand for --workspace (mutually exclusive)
         #[arg(long, conflicts_with = "workspace")]
         project: Option<String>,
+    },
+    /// Load previous local agent sessions into Kaizen stores.
+    #[command(next_help_heading = "Trust & observe")]
+    Load {
+        /// workspace root; omit to load all registered workspaces
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
+        /// Emit JSON load summary.
+        #[arg(long)]
+        json: bool,
     },
     /// Prune local sessions older than retention window (see `[retention].hot_days` or `--days`).
     #[command(next_help_heading = "Operate")]
@@ -195,6 +226,22 @@ enum Command {
         #[arg(long, value_enum, default_value_t = DataSource::Local)]
         source: DataSource,
     },
+    /// Run an agent command with Kaizen proxy/session env.
+    #[command(next_help_heading = "Trust & observe", trailing_var_arg = true)]
+    Observe {
+        /// Agent profile: claude, codex, cursor, or auto.
+        #[arg(long, default_value = "auto")]
+        agent: String,
+        /// workspace root (default: cwd)
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
+        /// Command and arguments to run.
+        #[arg(required = true, num_args = 1.., allow_hyphen_values = true)]
+        command: Vec<String>,
+    },
     /// Flush local outbox to the configured ingest endpoint.
     #[command(next_help_heading = "Operate")]
     Sync {
@@ -212,6 +259,30 @@ enum Command {
     Exp {
         #[command(subcommand)]
         subcmd: ExpCommand,
+    },
+    /// Mine and manage local regression cases.
+    #[command(next_help_heading = "Improve")]
+    Cases {
+        #[command(subcommand)]
+        subcmd: CasesCommand,
+    },
+    /// Local automation rules over trace queries.
+    #[command(next_help_heading = "Improve")]
+    Rules {
+        #[command(subcommand)]
+        subcmd: RulesCommand,
+    },
+    /// Built-in local health alerts.
+    #[command(next_help_heading = "Improve")]
+    Alerts {
+        #[command(subcommand)]
+        subcmd: AlertsCommand,
+    },
+    /// Local review queue from rules and cases.
+    #[command(next_help_heading = "Improve")]
+    Review {
+        #[command(subcommand)]
+        subcmd: ReviewCommand,
     },
     /// Weekly-style heuristic retro report.
     #[command(next_help_heading = "Improve")]
@@ -251,7 +322,11 @@ enum Command {
     Mcp,
     /// Upgrade kaizen to the latest release.
     #[command(next_help_heading = "Operate")]
-    Upgrade,
+    Upgrade {
+        /// Build from crates.io instead of installing a release binary.
+        #[arg(long)]
+        from_source: bool,
+    },
     /// Print shell completion script to stdout; redirect or eval to install.
     #[command(next_help_heading = "Shell")]
     Completions {
@@ -316,6 +391,9 @@ enum EvalCommand {
         /// Print what would be evaluated without calling the judge.
         #[arg(long)]
         dry_run: bool,
+        /// Emit JSON array.
+        #[arg(long)]
+        json: bool,
     },
     /// List stored eval results.
     List {
@@ -352,6 +430,146 @@ enum EvalCommand {
 enum ProjectsCommand {
     /// List registered workspaces.
     List,
+}
+
+#[derive(Subcommand)]
+enum CasesCommand {
+    /// Mine cases from low evals and bad feedback.
+    Mine(SharedSinceJson),
+    /// Create one case for a session.
+    Create {
+        #[arg(long)]
+        session: String,
+        #[arg(long)]
+        reason: String,
+        #[arg(long)]
+        label: Option<String>,
+        #[arg(long)]
+        json: bool,
+        #[command(flatten)]
+        ws: WorkspaceFlags,
+    },
+    /// List cases.
+    List {
+        #[arg(long)]
+        status: Option<String>,
+        #[arg(long)]
+        json: bool,
+        #[command(flatten)]
+        ws: WorkspaceFlags,
+    },
+    /// Show one case.
+    Show(IdJson),
+    /// Archive one case.
+    Archive(IdOnly),
+}
+
+#[derive(Subcommand)]
+enum RulesCommand {
+    /// Create local rule.
+    Create {
+        #[arg(long)]
+        name: String,
+        #[arg(long)]
+        filter: String,
+        #[arg(long)]
+        action: String,
+        #[arg(long)]
+        message: Option<String>,
+        #[command(flatten)]
+        ws: WorkspaceFlags,
+    },
+    /// List rules.
+    List(JsonOnly),
+    /// Run enabled rules.
+    Run {
+        #[arg(long)]
+        since: Option<String>,
+        #[arg(long)]
+        dry_run: bool,
+        #[arg(long)]
+        json: bool,
+        #[command(flatten)]
+        ws: WorkspaceFlags,
+    },
+    /// Enable a rule.
+    Enable(IdOnly),
+    /// Disable a rule.
+    Disable(IdOnly),
+}
+
+#[derive(Subcommand)]
+enum AlertsCommand {
+    /// Check built-in alert conditions.
+    Check {
+        #[arg(long, default_value_t = 7)]
+        days: u64,
+        #[arg(long)]
+        json: bool,
+        #[command(flatten)]
+        ws: WorkspaceFlags,
+    },
+}
+
+#[derive(Subcommand)]
+enum ReviewCommand {
+    /// List review items.
+    List {
+        #[arg(long)]
+        status: Option<String>,
+        #[arg(long)]
+        json: bool,
+        #[command(flatten)]
+        ws: WorkspaceFlags,
+    },
+    /// Show one review item.
+    Show(IdJson),
+    /// Mark review item resolved.
+    Resolve(IdOnly),
+    /// Mark review item dismissed.
+    Dismiss(IdOnly),
+}
+
+#[derive(clap::Args)]
+struct WorkspaceFlags {
+    #[arg(long)]
+    workspace: Option<PathBuf>,
+    #[arg(long, conflicts_with = "workspace")]
+    project: Option<String>,
+}
+
+#[derive(clap::Args)]
+struct SharedSinceJson {
+    #[arg(long)]
+    since: Option<String>,
+    #[arg(long)]
+    json: bool,
+    #[command(flatten)]
+    ws: WorkspaceFlags,
+}
+
+#[derive(clap::Args)]
+struct IdJson {
+    id: String,
+    #[arg(long)]
+    json: bool,
+    #[command(flatten)]
+    ws: WorkspaceFlags,
+}
+
+#[derive(clap::Args)]
+struct IdOnly {
+    id: String,
+    #[command(flatten)]
+    ws: WorkspaceFlags,
+}
+
+#[derive(clap::Args)]
+struct JsonOnly {
+    #[arg(long)]
+    json: bool,
+    #[command(flatten)]
+    ws: WorkspaceFlags,
 }
 
 #[derive(Subcommand)]
@@ -414,6 +632,9 @@ enum ProxyCommand {
         /// Upstream base URL, e.g. https://api.anthropic.com (no trailing slash).
         #[arg(long)]
         upstream: Option<String>,
+        /// Provider defaults and hints: anthropic, openai, or auto.
+        #[arg(long)]
+        provider: Option<String>,
         /// workspace root (default: cwd)
         #[arg(long)]
         workspace: Option<PathBuf>,
@@ -746,6 +967,21 @@ enum MetricsCommand {
         #[arg(long)]
         force: bool,
     },
+    /// Field coverage and trace-correlation health.
+    Quality {
+        /// workspace root (default: cwd)
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
+        /// Trailing window in days.
+        #[arg(long, default_value_t = 7)]
+        days: u32,
+        /// Emit JSON report.
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -787,6 +1023,18 @@ enum SessionsCommand {
         #[arg(short, long)]
         refresh: bool,
     },
+    /// Load previous local agent sessions into Kaizen stores.
+    Load {
+        /// workspace root; omit to load all registered workspaces
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
+        /// Emit JSON load summary.
+        #[arg(long)]
+        json: bool,
+    },
     /// Show full details for a session.
     Show {
         id: String,
@@ -817,6 +1065,17 @@ enum SessionsCommand {
         id: String,
         #[arg(long, default_value = "999")]
         depth: u32,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
+    },
+    /// Render Datadog-style trace spans for a session.
+    Trace {
+        id: String,
         #[arg(long)]
         json: bool,
         #[arg(long)]
@@ -976,6 +1235,17 @@ fn main() -> anyhow::Result<()> {
         }
         Command::Sessions {
             subcmd:
+                SessionsCommand::Load {
+                    workspace,
+                    project,
+                    json,
+                },
+        } => {
+            let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+            kaizen::shell::load::cmd_load(ws.as_deref(), json)
+        }
+        Command::Sessions {
+            subcmd:
                 SessionsCommand::Show {
                     id,
                     workspace,
@@ -1014,6 +1284,18 @@ fn main() -> anyhow::Result<()> {
         }
         Command::Sessions {
             subcmd:
+                SessionsCommand::Trace {
+                    id,
+                    json,
+                    workspace,
+                    project,
+                },
+        } => {
+            let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+            kaizen::shell::cli::cmd_sessions_trace(&id, json, ws.as_deref())
+        }
+        Command::Sessions {
+            subcmd:
                 SessionsCommand::Search {
                     query,
                     since,
@@ -1039,6 +1321,23 @@ fn main() -> anyhow::Result<()> {
         } => {
             let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
             kaizen::shell::search::cmd_search_reindex(ws.as_deref())
+        }
+        Command::Query {
+            expr,
+            since,
+            limit,
+            json,
+            workspace,
+            project,
+        } => {
+            let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+            kaizen::shell::core_query::cmd_query(
+                ws.as_deref(),
+                &expr,
+                since.as_deref(),
+                limit,
+                json,
+            )
         }
         Command::Feedback {
             subcmd:
@@ -1075,9 +1374,13 @@ fn main() -> anyhow::Result<()> {
             rt.shutdown_timeout(std::time::Duration::from_millis(500));
             result
         }
-        Command::Init { workspace, project } => {
+        Command::Init {
+            workspace,
+            project,
+            deep,
+        } => {
             let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
-            kaizen::shell::cli::cmd_init(ws.as_deref())
+            kaizen::shell::cli::cmd_init(ws.as_deref(), deep)
         }
         Command::Doctor { workspace, project } => {
             let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
@@ -1087,6 +1390,14 @@ fn main() -> anyhow::Result<()> {
                 std::process::exit(code);
             }
             Ok(())
+        }
+        Command::Load {
+            workspace,
+            project,
+            json,
+        } => {
+            let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+            kaizen::shell::load::cmd_load(ws.as_deref(), json)
         }
         Command::Gc {
             workspace,
@@ -1159,6 +1470,15 @@ fn main() -> anyhow::Result<()> {
                 let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
                 kaizen::shell::metrics::cmd_metrics_index(ws.as_deref(), force)
             }
+            Some(MetricsCommand::Quality {
+                workspace,
+                project,
+                days,
+                json,
+            }) => {
+                let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+                kaizen::shell::metrics::cmd_metrics_quality(ws.as_deref(), days, json)
+            }
             None => {
                 let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
                 kaizen::shell::metrics::cmd_metrics(
@@ -1172,6 +1492,15 @@ fn main() -> anyhow::Result<()> {
                 )
             }
         },
+        Command::Observe {
+            agent,
+            workspace,
+            project,
+            command,
+        } => {
+            let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+            kaizen::shell::observe::cmd_observe(ws.as_deref(), &agent, &command)
+        }
         Command::Sync {
             subcmd:
                 SyncCommand::Run {
@@ -1310,7 +1639,11 @@ fn main() -> anyhow::Result<()> {
             ProjectsCommand::List => kaizen::shell::projects::cmd_projects_list(),
         },
         Command::Exp { subcmd } => dispatch_exp(subcmd),
-        Command::Upgrade => kaizen::shell::upgrade::cmd_upgrade(),
+        Command::Cases { subcmd } => dispatch_cases(subcmd),
+        Command::Rules { subcmd } => dispatch_rules(subcmd),
+        Command::Alerts { subcmd } => dispatch_alerts(subcmd),
+        Command::Review { subcmd } => dispatch_review(subcmd),
+        Command::Upgrade { from_source } => kaizen::shell::upgrade::cmd_upgrade(from_source),
         Command::Mcp => {
             // Requires multi-threaded runtime (rmcp + spawn_blocking in tools)
             let rt = tokio::runtime::Builder::new_multi_thread()
@@ -1323,12 +1656,13 @@ fn main() -> anyhow::Result<()> {
                 ProxyCommand::Run {
                     listen,
                     upstream,
+                    provider,
                     workspace,
                     project,
                 },
         } => {
             let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
-            kaizen::shell::proxy::cmd_proxy_run(ws.as_deref(), listen, upstream)
+            kaizen::shell::proxy::cmd_proxy_run(ws.as_deref(), listen, upstream, provider)
         }
         Command::Eval { subcmd } => match subcmd {
             EvalCommand::Run {
@@ -1336,9 +1670,10 @@ fn main() -> anyhow::Result<()> {
                 project,
                 since_days,
                 dry_run,
+                json,
             } => {
                 let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
-                kaizen::shell::eval::cmd_eval_run(ws.as_deref(), since_days, dry_run)
+                kaizen::shell::eval::cmd_eval_run(ws.as_deref(), since_days, dry_run, json)
             }
             EvalCommand::List {
                 workspace,
@@ -1444,6 +1779,16 @@ fn dispatch_daemon(cmd: DaemonCommand) -> anyhow::Result<()> {
                         "last_error: {}",
                         st.last_error.unwrap_or_else(|| "-".to_string())
                     );
+                    for capture in st.capture {
+                        println!("capture: {}", capture.workspace);
+                        println!("  deep: {}", capture.deep);
+                        println!("  hooks: {}", capture.hooks.len());
+                        println!("  watchers: {}", capture.watchers.len());
+                        println!("  proxies: {}", capture.proxies.len());
+                        if !capture.errors.is_empty() {
+                            println!("  errors: {}", capture.errors.join("; "));
+                        }
+                    }
                 }
                 kaizen::daemon::DaemonStatusOutcome::Stopped { socket } => {
                     println!("status: stopped");
@@ -1451,6 +1796,104 @@ fn dispatch_daemon(cmd: DaemonCommand) -> anyhow::Result<()> {
                 }
             }
             Ok(())
+        }
+    }
+}
+
+fn ws(flags: &WorkspaceFlags) -> anyhow::Result<Option<PathBuf>> {
+    resolve_ws(flags.workspace.as_deref(), flags.project.as_deref())
+}
+
+fn dispatch_cases(cmd: CasesCommand) -> anyhow::Result<()> {
+    match cmd {
+        CasesCommand::Mine(a) => {
+            kaizen::shell::cases::cmd_cases_mine(ws(&a.ws)?.as_deref(), a.since.as_deref(), a.json)
+        }
+        CasesCommand::Create {
+            session,
+            reason,
+            label,
+            json,
+            ws: f,
+        } => kaizen::shell::cases::cmd_cases_create(
+            ws(&f)?.as_deref(),
+            &session,
+            &reason,
+            label,
+            json,
+        ),
+        CasesCommand::List {
+            status,
+            json,
+            ws: f,
+        } => kaizen::shell::cases::cmd_cases_list(ws(&f)?.as_deref(), status, json),
+        CasesCommand::Show(a) => {
+            kaizen::shell::cases::cmd_cases_show(ws(&a.ws)?.as_deref(), &a.id, a.json)
+        }
+        CasesCommand::Archive(a) => {
+            kaizen::shell::cases::cmd_cases_archive(ws(&a.ws)?.as_deref(), &a.id)
+        }
+    }
+}
+
+fn dispatch_rules(cmd: RulesCommand) -> anyhow::Result<()> {
+    match cmd {
+        RulesCommand::Create {
+            name,
+            filter,
+            action,
+            message,
+            ws: f,
+        } => kaizen::shell::rules::cmd_rules_create(
+            ws(&f)?.as_deref(),
+            &name,
+            &filter,
+            &action,
+            message,
+        ),
+        RulesCommand::List(a) => {
+            kaizen::shell::rules::cmd_rules_list(ws(&a.ws)?.as_deref(), a.json)
+        }
+        RulesCommand::Run {
+            since,
+            dry_run,
+            json,
+            ws: f,
+        } => {
+            kaizen::shell::rules::cmd_rules_run(ws(&f)?.as_deref(), since.as_deref(), dry_run, json)
+        }
+        RulesCommand::Enable(a) => {
+            kaizen::shell::rules::cmd_rules_enable(ws(&a.ws)?.as_deref(), &a.id, true)
+        }
+        RulesCommand::Disable(a) => {
+            kaizen::shell::rules::cmd_rules_enable(ws(&a.ws)?.as_deref(), &a.id, false)
+        }
+    }
+}
+
+fn dispatch_alerts(cmd: AlertsCommand) -> anyhow::Result<()> {
+    match cmd {
+        AlertsCommand::Check { days, json, ws: f } => {
+            kaizen::shell::alerts::cmd_alerts_check(ws(&f)?.as_deref(), days, json)
+        }
+    }
+}
+
+fn dispatch_review(cmd: ReviewCommand) -> anyhow::Result<()> {
+    match cmd {
+        ReviewCommand::List {
+            status,
+            json,
+            ws: f,
+        } => kaizen::shell::review::cmd_review_list(ws(&f)?.as_deref(), status, json),
+        ReviewCommand::Show(a) => {
+            kaizen::shell::review::cmd_review_show(ws(&a.ws)?.as_deref(), &a.id, a.json)
+        }
+        ReviewCommand::Resolve(a) => {
+            kaizen::shell::review::cmd_review_resolve(ws(&a.ws)?.as_deref(), &a.id)
+        }
+        ReviewCommand::Dismiss(a) => {
+            kaizen::shell::review::cmd_review_dismiss(ws(&a.ws)?.as_deref(), &a.id)
         }
     }
 }

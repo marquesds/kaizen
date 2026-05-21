@@ -12,4 +12,5 @@ mod transform;
 
 pub use opts::ProxyRunOptions;
 pub use server::run;
+pub use server::run_with_listener;
 pub use state::ProxyState;

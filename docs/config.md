@@ -46,7 +46,7 @@ When you pass **`--all-workspaces`** (or MCP `all_workspaces: true`), Kaizen loa
 | Key | Default | Purpose |
 |-----|---------|--------|
 | `roots` | `["~/.cursor/projects"]` | Transcript index roots (Cursor projects layout) |
-| `min_rescan_seconds` | `300` | Minimum seconds between full transcript rescans when a command is already in refresh mode (`--refresh` on the CLI or `refresh=true` over MCP) |
+| `min_rescan_seconds` | `300` | Minimum seconds between full transcript rescans when a command is already in refresh mode (`--refresh` on the CLI or `refresh=true` over MCP). The daemon uses the same value for its workspace scanner loop after `kaizen init`. |
 
 ## `[retention]`
 
@@ -93,7 +93,10 @@ Tiered storage keeps recent rows in a hot append log, analytical history in Parq
 
 ## `[proxy]`
 
-Local HTTP forwarder for Anthropic-style APIs. Full key list, defaults, and `context_policy` examples: [llm-proxy.md](llm-proxy.md).
+Local HTTP forwarder for Anthropic-style and OpenAI-compatible APIs. `kaizen init --deep`
+starts daemon-owned loopback proxy tasks where possible; `kaizen proxy run`
+still starts a foreground manual proxy for debugging. Full key list, defaults,
+provider selection, and `context_policy` examples: [llm-proxy.md](llm-proxy.md).
 
 ## `[telemetry]`
 

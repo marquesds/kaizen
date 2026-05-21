@@ -35,8 +35,40 @@ pub fn sessions_search_text(
     kind: Option<&str>,
     limit: usize,
 ) -> Result<String> {
+    if crate::core_loop::query::is_structured(query) {
+        return structured_search_text(workspace, query, since, limit);
+    }
     let (hits, fallback) = sessions_search_hits(workspace, query, since, agent, kind, limit)?;
     render_hits(&hits, fallback)
+}
+
+fn structured_search_text(
+    workspace: Option<&Path>,
+    query: &str,
+    since: Option<&str>,
+    limit: usize,
+) -> Result<String> {
+    let ws = workspace_path(workspace)?;
+    let store = open_workspace_read_store(&ws, false)?;
+    let start = since
+        .map(|s| crate::core_loop::time::parse_window(Some(s), 7))
+        .transpose()?
+        .unwrap_or(0);
+    let hits = crate::core_loop::query::run(&store, &ws.to_string_lossy(), query, start, limit)?;
+    let mut out = String::new();
+    use std::fmt::Write;
+    writeln!(out, "{:<40} {:>6} {:<12} SUMMARY", "SESSION", "SEQ", "KIND")?;
+    for h in hits {
+        writeln!(
+            out,
+            "{:<40} {:>6} {:<12} {}",
+            h.session_id,
+            h.seq.map(|s| s.to_string()).unwrap_or_else(|| "-".into()),
+            h.kind,
+            h.summary
+        )?;
+    }
+    Ok(out)
 }
 
 pub fn sessions_search_hits(

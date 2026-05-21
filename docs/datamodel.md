@@ -24,6 +24,11 @@
 - `tool_spans`
   derived per-tool spans. One row per closed or orphaned correlated tool
   execution. Open spans live in the incremental projector until close/flush.
+- `trace_spans`
+  additive Datadog-style timeline rows for `session|agent|step|llm|tool|permission`
+  spans. Proxy-backed LLM calls write `llm` spans with trace/span identifiers,
+  timing, tokens, cost, context usage, and redacted metadata. Existing
+  `tool_spans` remain the compatibility surface for older reports and sync.
 - `repo_snapshots`
   commit-pinned code fact snapshot for one workspace fingerprint.
 - `file_facts`
@@ -36,10 +41,20 @@
 - `session_samples` (opt-in)
   per-PID time series while the hook-provided process is live: `ts_ms`, `cpu_percent`, `rss_bytes`.
   Stops when a workspace stop file appears, cap reached, or process exits.
+- `cases` / `case_refs`
+  local regression cases mined from evals, feedback, or manual commands. Cases
+  store stable references to sessions/events/spans rather than raw prompt text.
+- `rules`
+  local automation rules: query filter plus one local-only action
+  (`create_case`, `queue_review`, `emit_alert`).
+- `review_items` / `alert_events`
+  local queues produced by rules and built-in alert checks.
 
 ## Invariants
 
 - Raw `events` append-only. Derived tables can rebuild from them.
+- Rule actions are idempotent by `source_key`; rerunning a rule does not create
+  duplicate cases, reviews, or alerts for the same hit.
 - During tiered migration, `Event` remains the source of truth across SQLite,
   the hot log, and Parquet writers.
 - Incremental projector owns hot derived writes for `tool_spans`, `files_touched`,
@@ -70,6 +85,7 @@
 
 - `sessions 1:N events`
 - `sessions 1:N tool_spans`
+- `sessions 1:N trace_spans`
 - `sessions 1:1 session_repo_binding`
 - `repo_snapshots 1:N file_facts`
 - `repo_snapshots 1:N repo_edges`

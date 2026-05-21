@@ -11,8 +11,8 @@ Please read the [Code of Conduct](CODE_OF_CONDUCT.md) before engaging.
 ```bash
 git clone https://github.com/marquesds/kaizen
 cd kaizen
-cargo build
-cargo test
+make check
+make test
 ```
 
 Install the binary from your working tree into `~/.cargo/bin` (handy after local changes):
@@ -38,11 +38,15 @@ cargo install --locked cargo-audit cargo-deny cargo-edit cross
 Every PR must pass:
 
 ```bash
-cargo fmt --all -- --check
-cargo clippy --all-targets -- -D warnings
-cargo test --all
+make fmt-check
+make check
+make test
 cargo deny --manifest-path Cargo.toml check --config .cargo/deny.toml
 ```
+
+`make check` and `make test` use the fast contributor feature set, which skips
+DuckDB. Run `make test-full` when you touch cold analytics, release packaging,
+or feature wiring.
 
 After changing `specs/*.qnt`, run (same checks CI runs once Quint is installed):
 

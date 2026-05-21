@@ -4,11 +4,12 @@ CLI reference. All commands accept `--workspace <path>` or `--project <name>` to
 
 Run `kaizen --help` for grouped subcommands (Trust & observe, Operate, Improve, Integrations, Shell).
 
-**Daemon mode:** Kaizen starts a local daemon for supported read/write paths.
-Use `kaizen daemon status`, `kaizen daemon stop`, or `--no-daemon` /
-`KAIZEN_DAEMON=0` for direct SQLite mode. See [daemon.md](daemon.md).
+**Daemon mode:** `kaizen init` starts a local daemon for capture and supported
+read/write paths. Use `kaizen daemon status`, `kaizen daemon stop`, or
+`--no-daemon` / `KAIZEN_DAEMON=0` for direct SQLite mode. See
+[daemon.md](daemon.md).
 
-**Cache-first reads:** `sessions list`, `summary`, `insights`, `guidance`, `metrics`, `retro`, **`exp report`**, and **`exp power`** read the local workspace database first and avoid transcript scans. Pass **`--refresh`** (`-r`) only when you want Kaizen to rescan external agent transcripts before rendering. That can take a while on large workspaces; with `--source provider|mixed`, it can also refresh remote provider cache. See [config.md](config.md).
+**Cache-first reads:** `sessions list`, `summary`, `insights`, `guidance`, `metrics`, `retro`, **`exp report`**, and **`exp power`** read the local workspace database first and avoid transcript scans. Pass **`--refresh`** (`-r`) when that read should rescan external agent transcripts before rendering. Use **`kaizen load`** when you want an explicit backfill of previous sessions without coupling it to a report. Both can take a while on large workspaces; with `--source provider|mixed`, `--refresh` can also refresh remote provider cache. See [config.md](config.md).
 
 ## Selecting a project
 
@@ -22,7 +23,7 @@ Every command resolves a workspace through one of three mechanisms, applied in o
 
 `--project` and `--workspace` are mutually exclusive; passing both is an error.
 
-**Machine-wide aggregation:** `sessions list`, `summary`, `insights`, and `metrics` accept **`--all-workspaces`**. Kaizen records each workspace path you use (canonicalized) in a machine-local JSON list, then opens each repo’s `.kaizen/kaizen.db` and merges results in memory. Details: [config.md#machine-local-registry](config.md#machine-local-registry).
+**Machine-wide aggregation:** `sessions list`, `summary`, `insights`, and `metrics` accept **`--all-workspaces`**. `kaizen load` defaults to all registered workspaces. Kaizen records each workspace path you use (canonicalized) in a machine-local registry, then opens each repo’s local store and merges or loads results. Details: [config.md#machine-local-registry](config.md#machine-local-registry).
 
 **Auto-prune:** After a **full transcript rescan** (your command used `--refresh` / MCP `refresh: true`, or the scan throttle allowed a rescan), Kaizen may delete sessions older than `[retention].hot_days` — **at most once per 24 hours**. `hot_days = 0` disables that automatic pass; use `kaizen gc` for explicit pruning. See [`[retention]` in config.md](config.md#retention).
 
@@ -45,6 +46,20 @@ Idempotent workspace setup. Typical effects:
 
 Re-running is safe. Codex, Goose, OpenCode, Copilot, and OpenClaw sessions are ingested via **transcript tail** and hooks; `init` patches **Cursor**, **Claude Code**, and **OpenClaw** hook files (writes `~/.openclaw/hooks/kaizen-events/handler.ts`).
 
+`init` also asks the daemon to start workspace capture. The daemon keeps a
+periodic transcript scanner alive for the workspace, so normal use does not
+require `kaizen observe`.
+
+```bash
+kaizen init          # hooks + daemon scanner capture
+kaizen init --deep   # also start daemon proxy tasks and report deep-capture readiness
+```
+
+`--deep` is opt-in. It starts loopback proxy endpoints where possible, but does
+not silently rewrite agent model-provider config when Kaizen cannot verify a
+supported setting. In that case init reports partial deep capture and hooks/tail
+capture remain active.
+
 ## `kaizen projects`
 
 Manage the registry of workspaces known to Kaizen.
@@ -55,6 +70,19 @@ kaizen projects list --json   # machine-readable
 ```
 
 `kaizen projects list` shows each workspace's short name (usable with `--project`), its slug, and the canonical path. A workspace is registered automatically the first time `kaizen init` or any workspace-scoped command runs against it.
+
+## `kaizen load`
+
+Explicitly loads previous local agent sessions from machine transcript stores into Kaizen. It scans registered workspace roots by default and keeps sessions repo-scoped by transcript `cwd` metadata where the agent provides it.
+
+```bash
+kaizen load                         # load all registered workspaces
+kaizen load --workspace /repo --json
+kaizen load --project kaizen
+kaizen sessions load --json         # alias under sessions
+```
+
+Use `load` after installing or upgrading Kaizen when existing Codex, Claude Code, Cursor, OpenClaw, Goose, OpenCode, or Copilot sessions should appear in reports. Use `sessions list --refresh` when you want one read command to rescan before rendering.
 
 ## `kaizen outcomes`
 
@@ -73,6 +101,7 @@ kaizen sessions list --limit 20        # cap rows after sort (newest first)
 kaizen sessions list --limit 0         # full output; not part of the fast-read budget
 kaizen sessions list --refresh
 kaizen sessions list --all-workspaces
+kaizen sessions load --json            # alias for `kaizen load --json`
 kaizen sessions show <id>               # session metadata (id, agent, model, times, status, trace_path)
 kaizen sessions tree <id>               # ASCII nested tool-span tree
 kaizen sessions tree <id> --depth 3     # limit display depth
@@ -90,6 +119,21 @@ kaizen sessions search 'skill:caveman AND tokens_total:>5000'
 
 ```bash
 kaizen search reindex
+```
+
+Structured expressions with known fields (`tool:bash`, `tokens_total:>5000`,
+`feedback_label:bad`, etc.) are routed through the local trace query engine
+instead of BM25.
+
+## `kaizen query`
+
+Structured trace query over local events. Version 1 supports `AND` terms and
+fields: `agent`, `model`, `kind`, `tool`, `path`, `skill`, `tokens_total`,
+`cost_usd`, `eval_score`, `feedback_label`, `prompt`, `status`, `span_kind`.
+
+```bash
+kaizen query 'tool:bash AND tokens_total:>5000'
+kaizen query 'feedback_label:bad' --since 30d --json
 ```
 
 ## `kaizen summary`
@@ -115,18 +159,19 @@ If **`kaizen summary`** shows **$0.00** but session count is above zero, events 
 
 ## `kaizen upgrade`
 
-Upgrade kaizen to the latest release. Detects the install method from the running binary path and delegates to the right tool — no flags required.
+Upgrade kaizen to the latest release. Detects the install method from the running binary path. Non-Homebrew installs download the GitHub release binary and verify its `.sha256` asset so upgrades do not compile DuckDB locally.
 
 | Install method | Command run |
 |---|---|
 | Homebrew (`/Cellar/kaizen-cli`, `/opt/homebrew/`, `/usr/local/Cellar/`) | `brew upgrade kaizen-cli` |
-| Cargo (default) | `cargo install kaizen-cli --locked --force` |
+| Release / Cargo-path binary (default) | Download, verify, and replace with the latest GitHub release binary |
+| Source fallback | `kaizen upgrade --from-source` runs `cargo install kaizen-cli --locked --force` |
 
 ```bash
 kaizen upgrade
 ```
 
-Subprocess output streams directly to the terminal. Exits non-zero if the underlying tool fails.
+Homebrew and source fallback subprocess output streams directly to the terminal. Exits non-zero if download, checksum verification, binary replacement, or the fallback subprocess fails.
 
 ## `kaizen gc`
 
@@ -215,14 +260,23 @@ Heuristics: see [retro.md](retro.md). Tuning: see
 
 ## `kaizen proxy run`
 
-Local HTTP forwarder for Anthropic-style APIs. Records [`EventSource::Proxy` events](concepts.md)
+Local HTTP forwarder for Anthropic-style and OpenAI-compatible APIs. Records [`EventSource::Proxy` events](concepts.md)
 in `~/.kaizen/projects/<slug>/kaizen.db` and honors `[proxy]` in config (see [config](config.md), [llm-proxy](llm-proxy.md)).
 
 ```bash
 kaizen proxy run
 kaizen proxy run --listen 127.0.0.1:9000
 kaizen proxy run --upstream https://api.anthropic.com
+kaizen proxy run --provider openai
+kaizen observe --agent codex -- codex
 ```
+
+For normal collection, prefer `kaizen init`. `kaizen observe` is a daemon-backed
+debug/manual wrapper that injects session and proxy env into one child command.
+
+Use `kaizen sessions trace <id>` for proxy-backed LLM spans, and
+`kaizen metrics quality --json` to inspect field coverage and trace-correlation
+health.
 
 ## `kaizen ingest hook`
 
@@ -321,6 +375,35 @@ Metrics: `tokens_per_session`, `cost_per_session`, `success_rate`, `tool_loops`,
 `duration_minutes`, `files_per_session`, `success_rate_by_prompt`, `cost_by_prompt`.
 Details: [experiments.md](experiments.md).
 
+## `kaizen cases`, `kaizen rules`, `kaizen alerts`, `kaizen review`
+
+Local trace-to-case loop inspired by LangWatch/LangSmith patterns. Automation
+is local-only: rules create cases, queue review items, or emit local alerts.
+
+```bash
+kaizen cases mine --since 14d
+kaizen cases create --session <id> --reason "bad tool loop" --label regression
+kaizen cases list --json
+kaizen cases show <case-id>
+kaizen cases archive <case-id>
+
+kaizen rules create --name shell-loops --filter 'tool:bash' \
+  --action queue_review --message "review shell-heavy session"
+kaizen rules run --since 7d
+kaizen rules disable <rule-id>
+kaizen rules enable <rule-id>
+
+kaizen alerts check --days 7 --json
+
+kaizen review list
+kaizen review show <review-id>
+kaizen review resolve <review-id>
+kaizen review dismiss <review-id>
+```
+
+Built-in alerts cover cost spikes, eval regression, bad feedback, error-rate
+spikes, context pressure, retry cascades, and max-token truncation rate.
+
 ## `kaizen eval`
 
 LLM-as-a-Judge evaluations. Requires `[eval].enabled = true` in config and either
@@ -330,6 +413,7 @@ LLM-as-a-Judge evaluations. Requires `[eval].enabled = true` in config and eithe
 kaizen eval run                       # evaluate unevaluated sessions (last 7 days, cost >= $0.01)
 kaizen eval run --since-days 14       # extend the lookback window
 kaizen eval run --dry-run             # print which sessions would be evaluated without calling the judge
+kaizen eval run --dry-run --json      # machine-readable candidate sessions
 kaizen eval list                      # list all stored eval results
 kaizen eval list --min-score 0        # include all sessions (default: 0.0 = show all)
 kaizen eval list --json               # emit JSON array of EvalRow objects
