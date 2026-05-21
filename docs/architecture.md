@@ -16,6 +16,9 @@
   (PostHog, Datadog, OTLP) when configured.
 - `mcp` is the stdio MCP server; tools delegate to the same `shell` commands as
   the CLI (see [mcp.md](mcp.md)).
+- `bin_kaizen` owns binary-only CLI parsing and dispatch. It keeps the runtime
+  entrypoint thin while routing commands to the same `shell`, `mcp`, `daemon`,
+  and `ui` surfaces.
 
 ## Data Flow
 
@@ -52,4 +55,8 @@ requested with `KAIZEN_PROJECTOR=legacy`.
 
 ## Entry Points
 
-- `src/main.rs` — CLI, `kaizen mcp` (async server), and `kaizen tui` / sync loops
+- `src/main.rs` — thin binary entrypoint.
+- `src/bin_kaizen/` — CLI schema, workspace resolution, and feature-grouped
+  command dispatch.
+- `src/store/sqlite/` — SQLite facade, schema, row mappers, sessions, events,
+  sync outbox, reports, metrics, feedback, and prompt/eval persistence.
