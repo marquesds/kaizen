@@ -70,7 +70,8 @@ fn prepare_workspace() -> anyhow::Result<(tempfile::TempDir, tempfile::TempDir)>
     init_text(Some(ws))?;
     let store = Store::open(&kaizen::core::workspace::db_path(ws)?)?;
     let sid = "sess-mcp-1";
-    let wstr = ws.to_string_lossy();
+    let canonical = kaizen::core::workspace::canonical(ws);
+    let wstr = canonical.to_string_lossy();
     let session = SessionRecord {
         id: sid.into(),
         agent: "cursor".into(),
@@ -257,6 +258,98 @@ async fn every_mcp_tool_runs() -> anyhow::Result<()> {
             "label": "good",
             "note": "smoke"
         }),
+    )
+    .await?;
+    tcall(
+        &client,
+        "kaizen_query",
+        json!({ "workspace": ws, "expr": "tool:bash", "since": "99999d" }),
+    )
+    .await?;
+    tcall(
+        &client,
+        "kaizen_cases_create",
+        json!({
+            "workspace": ws,
+            "session_id": sid,
+            "reason": "smoke",
+            "label": "manual"
+        }),
+    )
+    .await?;
+    tcall(&client, "kaizen_cases_mine", json!({ "workspace": ws })).await?;
+    tcall(&client, "kaizen_cases_list", json!({ "workspace": ws })).await?;
+    let store = Store::open(&kaizen::core::workspace::db_path(w)?)?;
+    let case_id = kaizen::core_loop::cases::list(&store, None)?[0].id.clone();
+    tcall(
+        &client,
+        "kaizen_cases_show",
+        json!({ "workspace": ws, "id": case_id }),
+    )
+    .await?;
+    tcall(
+        &client,
+        "kaizen_cases_archive",
+        json!({ "workspace": ws, "id": case_id }),
+    )
+    .await?;
+    tcall(
+        &client,
+        "kaizen_rules_create",
+        json!({
+            "workspace": ws,
+            "name": "smoke-review",
+            "filter": "tool:bash",
+            "action": "queue_review",
+            "message": "review smoke"
+        }),
+    )
+    .await?;
+    tcall(&client, "kaizen_rules_list", json!({ "workspace": ws })).await?;
+    let rule_id = kaizen::core_loop::rules::list(&store)?[0].id.clone();
+    tcall(
+        &client,
+        "kaizen_rules_disable",
+        json!({ "workspace": ws, "id": rule_id }),
+    )
+    .await?;
+    tcall(
+        &client,
+        "kaizen_rules_enable",
+        json!({ "workspace": ws, "id": rule_id }),
+    )
+    .await?;
+    tcall(
+        &client,
+        "kaizen_rules_run",
+        json!({ "workspace": ws, "since": "99999d" }),
+    )
+    .await?;
+    tcall(&client, "kaizen_alerts_check", json!({ "workspace": ws })).await?;
+    tcall(&client, "kaizen_review_list", json!({ "workspace": ws })).await?;
+    let reviews = kaizen::core_loop::review::list(&store, None)?;
+    let review_id = match reviews.first() {
+        Some(row) => row.id.clone(),
+        None => {
+            kaizen::core_loop::review::create(&store, "smoke-review", sid, "review smoke", 1)?.id
+        }
+    };
+    tcall(
+        &client,
+        "kaizen_review_show",
+        json!({ "workspace": ws, "id": review_id }),
+    )
+    .await?;
+    tcall(
+        &client,
+        "kaizen_review_resolve",
+        json!({ "workspace": ws, "id": review_id }),
+    )
+    .await?;
+    tcall(
+        &client,
+        "kaizen_review_dismiss",
+        json!({ "workspace": ws, "id": review_id }),
     )
     .await?;
 

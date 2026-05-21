@@ -264,6 +264,10 @@ name = "search"
 path = "tests/spec/search.rs"
 
 [[test]]
+name = "core_loop"
+path = "tests/spec/core_loop.rs"
+
+[[test]]
 name = "daemon_lifecycle"
 path = "tests/spec/daemon_lifecycle.rs"
 
@@ -331,7 +335,7 @@ blake3 = "1"
 aho-corasick = "1"
 regex = "1"
 hex = "0.4"
-sha2 = "0.10"
+sha2 = "0.11"
 time = { version = "0.3", features = ["formatting", "macros", "local-offset", "parsing"] }
 fs4 = { version = "1.0", features = ["sync"] }
 graphqlite = "0.4"
@@ -346,7 +350,7 @@ rmcp = { version = "1", features = ["server", "transport-io", "schemars", "macro
 axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio", "matched-path"] }
 tower = { version = "0.5", features = ["util"] }
 tower-http = { version = "0.6", features = ["limit", "set-header"] }
-sysinfo = { version = "0.38.4", default-features = false, features = ["system"] }
+sysinfo = { version = "0.39.1", default-features = false, features = ["system"] }
 redb = "4.1"
 rkyv = "0.8"
 crc32fast = "1.5"

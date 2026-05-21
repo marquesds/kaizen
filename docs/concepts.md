@@ -130,3 +130,13 @@ At `SessionStart`, Kaizen computes a Blake3 fingerprint over the sorted contents
 At `SessionStop`, the prompt files are re-captured. If the fingerprint changed during the session, a `prompt_changed` event is appended with `{from_fingerprint, to_fingerprint}`.
 
 This lets `kaizen retro` compare session outcomes (cost, error rate) across prompt versions via heuristic **H16**. See `kaizen prompt --help` and [usage.md#kaizen-prompt](usage.md#kaizen-prompt).
+
+## Core Loop Cases And Rules
+
+`kaizen query` provides structured local trace filters. `kaizen cases mine`
+turns low evals and bad/regression feedback into reusable cases. `kaizen rules`
+evaluates saved filters and performs local-only actions: create a case, queue a
+review item, or emit a local alert. `kaizen alerts check` adds built-in health
+checks for cost, errors, context pressure, retries, truncation, evals, and
+feedback. This keeps the LangWatch/LangSmith-style trace → case → rule →
+review loop local-first and auditable.

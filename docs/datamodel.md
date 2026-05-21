@@ -41,10 +41,20 @@
 - `session_samples` (opt-in)
   per-PID time series while the hook-provided process is live: `ts_ms`, `cpu_percent`, `rss_bytes`.
   Stops when a workspace stop file appears, cap reached, or process exits.
+- `cases` / `case_refs`
+  local regression cases mined from evals, feedback, or manual commands. Cases
+  store stable references to sessions/events/spans rather than raw prompt text.
+- `rules`
+  local automation rules: query filter plus one local-only action
+  (`create_case`, `queue_review`, `emit_alert`).
+- `review_items` / `alert_events`
+  local queues produced by rules and built-in alert checks.
 
 ## Invariants
 
 - Raw `events` append-only. Derived tables can rebuild from them.
+- Rule actions are idempotent by `source_key`; rerunning a rule does not create
+  duplicate cases, reviews, or alerts for the same hit.
 - During tiered migration, `Event` remains the source of truth across SQLite,
   the hot log, and Parquet writers.
 - Incremental projector owns hot derived writes for `tool_spans`, `files_touched`,
