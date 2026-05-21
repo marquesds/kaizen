@@ -22,6 +22,7 @@ const MCP_CAPABILITIES: &str = r#"Kaizen MCP exposes most `kaizen` CLI workflows
 - kaizen_sessions_list / kaizen_session_show — Session list and one session metadata. Optional json on list; optional `limit` caps rows (newest first). `kaizen_exp_report` supports `refresh: true` for a full transcript rescan before computing the report (matches CLI `kaizen exp report --refresh`).
 - mcp/search_sessions — BM25 event search over current workspace. Supports since, agent, kind, limit.
 - kaizen_insights — Activity dashboard (7d). kaizen_retro — weekly bets. kaizen_exp_* — experiments.
+- kaizen_query / kaizen_cases_* / kaizen_rules_* / kaizen_alerts_check / kaizen_review_* — local trace-to-case automation loop.
 - List/summary/insights/metrics/retro are cache-first; set refresh=true to force a full transcript rescan (matches CLI --refresh).
 - sessions_list/summary/insights/metrics also accept all_workspaces=true to aggregate across registered workspace-local DBs.
 - kaizen_ingest_hook — same as `kaizen ingest hook` (rare; hooks call this).
@@ -280,6 +281,83 @@ struct AnnotateSessionArg {
     ws: WorkspaceArg,
 }
 
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct QueryToolArg {
+    #[serde(flatten)]
+    ws: WorkspaceArg,
+    expr: String,
+    #[serde(default)]
+    since: Option<String>,
+    #[serde(default = "default_search_limit")]
+    limit: usize,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct CaseCreateArg {
+    #[serde(flatten)]
+    ws: WorkspaceArg,
+    session_id: String,
+    reason: String,
+    #[serde(default)]
+    label: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct SinceArg {
+    #[serde(flatten)]
+    ws: WorkspaceArg,
+    #[serde(default)]
+    since: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct StatusListArg {
+    #[serde(flatten)]
+    ws: WorkspaceArg,
+    #[serde(default)]
+    status: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct IdToolArg {
+    #[serde(flatten)]
+    ws: WorkspaceArg,
+    id: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct RuleCreateArg {
+    #[serde(flatten)]
+    ws: WorkspaceArg,
+    name: String,
+    filter: String,
+    action: String,
+    #[serde(default)]
+    message: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct RuleRunArg {
+    #[serde(flatten)]
+    ws: WorkspaceArg,
+    #[serde(default)]
+    since: Option<String>,
+    #[serde(default)]
+    dry_run: bool,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct AlertCheckArg {
+    #[serde(flatten)]
+    ws: WorkspaceArg,
+    #[serde(default = "default_alert_days")]
+    days: u64,
+}
+
+fn default_alert_days() -> u64 {
+    7
+}
+
 #[derive(Clone, Debug)]
 pub struct KaizenMcp;
 
@@ -367,6 +445,11 @@ impl KaizenMcp {
         }): Parameters<SearchSessionsArg>,
     ) -> Result<CallToolResult, ErrorData> {
         let w = resolve_ws(&ws)?;
+        if crate::core_loop::query::is_structured(&query) {
+            let value =
+                run_blocking(move || query_value(w, &query, since.as_deref(), limit)).await?;
+            return Ok(CallToolResult::structured(value));
+        }
         let (hits, fallback) = run_blocking(move || {
             crate::shell::search::sessions_search_hits(
                 w.as_deref(),
@@ -383,6 +466,212 @@ impl KaizenMcp {
             "count": hits.len(),
             "hits": hits,
         })))
+    }
+
+    #[tool(
+        name = "kaizen_query",
+        description = "Structured trace query. Args: expr, since, limit, workspace."
+    )]
+    async fn kaizen_query(
+        &self,
+        Parameters(QueryToolArg {
+            ws,
+            expr,
+            since,
+            limit,
+        }): Parameters<QueryToolArg>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let w = resolve_ws(&ws)?;
+        let value = run_blocking(move || query_value(w, &expr, since.as_deref(), limit)).await?;
+        Ok(CallToolResult::structured(value))
+    }
+
+    #[tool(
+        name = "kaizen_cases_mine",
+        description = "Mine cases from low evals and bad feedback."
+    )]
+    async fn kaizen_cases_mine(
+        &self,
+        Parameters(SinceArg { ws, since }): Parameters<SinceArg>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let w = resolve_ws(&ws)?;
+        let value = run_blocking(move || cases_mine_value(w, since.as_deref())).await?;
+        Ok(CallToolResult::structured(value))
+    }
+
+    #[tool(
+        name = "kaizen_cases_create",
+        description = "Create one case for a session."
+    )]
+    async fn kaizen_cases_create(
+        &self,
+        Parameters(CaseCreateArg {
+            ws,
+            session_id,
+            reason,
+            label,
+        }): Parameters<CaseCreateArg>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let w = resolve_ws(&ws)?;
+        let value =
+            run_blocking(move || cases_create_value(w, &session_id, &reason, label)).await?;
+        Ok(CallToolResult::structured(value))
+    }
+
+    #[tool(name = "kaizen_cases_list", description = "List local cases.")]
+    async fn kaizen_cases_list(
+        &self,
+        Parameters(StatusListArg { ws, status }): Parameters<StatusListArg>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let w = resolve_ws(&ws)?;
+        let value = run_blocking(move || cases_list_value(w, status.as_deref())).await?;
+        Ok(CallToolResult::structured(value))
+    }
+
+    #[tool(name = "kaizen_cases_show", description = "Show one local case.")]
+    async fn kaizen_cases_show(
+        &self,
+        Parameters(IdToolArg { ws, id }): Parameters<IdToolArg>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let w = resolve_ws(&ws)?;
+        let value = run_blocking(move || case_show_value(w, &id)).await?;
+        Ok(CallToolResult::structured(value))
+    }
+
+    #[tool(name = "kaizen_cases_archive", description = "Archive one local case.")]
+    async fn kaizen_cases_archive(
+        &self,
+        Parameters(IdToolArg { ws, id }): Parameters<IdToolArg>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let w = resolve_ws(&ws)?;
+        run_blocking(move || case_archive_value(w, &id)).await?;
+        ok_str("archived".into())
+    }
+
+    #[tool(
+        name = "kaizen_rules_create",
+        description = "Create local rule: action=create_case|queue_review|emit_alert."
+    )]
+    async fn kaizen_rules_create(
+        &self,
+        Parameters(RuleCreateArg {
+            ws,
+            name,
+            filter,
+            action,
+            message,
+        }): Parameters<RuleCreateArg>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let w = resolve_ws(&ws)?;
+        let value =
+            run_blocking(move || rule_create_value(w, &name, &filter, &action, message)).await?;
+        Ok(CallToolResult::structured(value))
+    }
+
+    #[tool(name = "kaizen_rules_list", description = "List local rules.")]
+    async fn kaizen_rules_list(
+        &self,
+        Parameters(ws): Parameters<WorkspaceArg>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let w = resolve_ws(&ws)?;
+        let value = run_blocking(move || rules_list_value(w)).await?;
+        Ok(CallToolResult::structured(value))
+    }
+
+    #[tool(name = "kaizen_rules_run", description = "Run enabled local rules.")]
+    async fn kaizen_rules_run(
+        &self,
+        Parameters(RuleRunArg { ws, since, dry_run }): Parameters<RuleRunArg>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let w = resolve_ws(&ws)?;
+        let value = run_blocking(move || rules_run_value(w, since.as_deref(), dry_run)).await?;
+        Ok(CallToolResult::structured(value))
+    }
+
+    #[tool(name = "kaizen_rules_enable", description = "Enable one local rule.")]
+    async fn kaizen_rules_enable(
+        &self,
+        Parameters(IdToolArg { ws, id }): Parameters<IdToolArg>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let w = resolve_ws(&ws)?;
+        run_blocking(move || rule_enable_value(w, &id, true)).await?;
+        ok_str("enabled".into())
+    }
+
+    #[tool(name = "kaizen_rules_disable", description = "Disable one local rule.")]
+    async fn kaizen_rules_disable(
+        &self,
+        Parameters(IdToolArg { ws, id }): Parameters<IdToolArg>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let w = resolve_ws(&ws)?;
+        run_blocking(move || rule_enable_value(w, &id, false)).await?;
+        ok_str("disabled".into())
+    }
+
+    #[tool(
+        name = "kaizen_alerts_check",
+        description = "Run built-in local alert checks."
+    )]
+    async fn kaizen_alerts_check(
+        &self,
+        Parameters(AlertCheckArg { ws, days }): Parameters<AlertCheckArg>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let w = resolve_ws(&ws)?;
+        let value = run_blocking(move || alerts_value(w, days)).await?;
+        Ok(CallToolResult::structured(value))
+    }
+
+    #[tool(
+        name = "kaizen_review_list",
+        description = "List local review queue items."
+    )]
+    async fn kaizen_review_list(
+        &self,
+        Parameters(StatusListArg { ws, status }): Parameters<StatusListArg>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let w = resolve_ws(&ws)?;
+        let value = run_blocking(move || review_list_value(w, status.as_deref())).await?;
+        Ok(CallToolResult::structured(value))
+    }
+
+    #[tool(name = "kaizen_review_show", description = "Show one review item.")]
+    async fn kaizen_review_show(
+        &self,
+        Parameters(IdToolArg { ws, id }): Parameters<IdToolArg>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let w = resolve_ws(&ws)?;
+        let value = run_blocking(move || review_show_value(w, &id)).await?;
+        Ok(CallToolResult::structured(value))
+    }
+
+    #[tool(
+        name = "kaizen_review_resolve",
+        description = "Resolve one review item."
+    )]
+    async fn kaizen_review_resolve(
+        &self,
+        Parameters(IdToolArg { ws, id }): Parameters<IdToolArg>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let w = resolve_ws(&ws)?;
+        run_blocking(move || review_status_value(w, &id, crate::core_loop::ReviewStatus::Resolved))
+            .await?;
+        ok_str("resolved".into())
+    }
+
+    #[tool(
+        name = "kaizen_review_dismiss",
+        description = "Dismiss one review item."
+    )]
+    async fn kaizen_review_dismiss(
+        &self,
+        Parameters(IdToolArg { ws, id }): Parameters<IdToolArg>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let w = resolve_ws(&ws)?;
+        run_blocking(move || {
+            review_status_value(w, &id, crate::core_loop::ReviewStatus::Dismissed)
+        })
+        .await?;
+        ok_str("dismissed".into())
     }
 
     #[tool(
@@ -766,6 +1055,191 @@ impl KaizenMcp {
         .await?;
         ok_str(t)
     }
+}
+
+fn workspace_store(
+    w: Option<std::path::PathBuf>,
+) -> anyhow::Result<(std::path::PathBuf, crate::store::Store)> {
+    let ws = crate::shell::cli::workspace_path(w.as_deref())?;
+    let store = crate::store::Store::open(&crate::core::workspace::db_path(&ws)?)?;
+    Ok((ws, store))
+}
+
+fn query_value(
+    w: Option<std::path::PathBuf>,
+    expr: &str,
+    since: Option<&str>,
+    limit: usize,
+) -> anyhow::Result<serde_json::Value> {
+    let (ws, store) = workspace_store(w)?;
+    let start = crate::core_loop::time::parse_window(since, 7)?;
+    let hits = crate::core_loop::query::run(&store, &ws.to_string_lossy(), expr, start, limit)?;
+    Ok(serde_json::json!({ "count": hits.len(), "hits": hits }))
+}
+
+fn cases_mine_value(
+    w: Option<std::path::PathBuf>,
+    since: Option<&str>,
+) -> anyhow::Result<serde_json::Value> {
+    let (_, store) = workspace_store(w)?;
+    let rows = crate::core_loop::cases::mine(
+        &store,
+        crate::core_loop::time::parse_window(since, 7)?,
+        crate::core_loop::time::now_ms(),
+    )?;
+    Ok(serde_json::json!({ "count": rows.len(), "cases": rows }))
+}
+
+fn cases_create_value(
+    w: Option<std::path::PathBuf>,
+    session_id: &str,
+    reason: &str,
+    label: Option<String>,
+) -> anyhow::Result<serde_json::Value> {
+    let (_, store) = workspace_store(w)?;
+    let session = store
+        .get_session(session_id)?
+        .ok_or_else(|| anyhow::anyhow!("session not found"))?;
+    let key = format!("manual:{session_id}:{reason}");
+    let row = crate::core_loop::cases::create_case(
+        &store,
+        &session,
+        &key,
+        reason,
+        label,
+        crate::core_loop::time::now_ms(),
+    )?;
+    Ok(serde_json::json!({ "case": row }))
+}
+
+fn cases_list_value(
+    w: Option<std::path::PathBuf>,
+    status: Option<&str>,
+) -> anyhow::Result<serde_json::Value> {
+    let (_, store) = workspace_store(w)?;
+    let rows = crate::core_loop::cases::list(&store, case_status(status))?;
+    Ok(serde_json::json!({ "count": rows.len(), "cases": rows }))
+}
+
+fn case_show_value(w: Option<std::path::PathBuf>, id: &str) -> anyhow::Result<serde_json::Value> {
+    let (_, store) = workspace_store(w)?;
+    let row = crate::core_loop::cases::get(&store, id)?;
+    let refs = crate::core_loop::cases::refs(&store, id)?;
+    Ok(serde_json::json!({ "case": row, "refs": refs }))
+}
+
+fn case_archive_value(w: Option<std::path::PathBuf>, id: &str) -> anyhow::Result<()> {
+    crate::core_loop::cases::archive(&workspace_store(w)?.1, id)
+}
+
+fn rule_create_value(
+    w: Option<std::path::PathBuf>,
+    name: &str,
+    filter: &str,
+    action: &str,
+    message: Option<String>,
+) -> anyhow::Result<serde_json::Value> {
+    let (_, store) = workspace_store(w)?;
+    let rule = crate::core_loop::rules::create(
+        &store,
+        name,
+        filter,
+        rule_action(action, message)?,
+        crate::core_loop::time::now_ms(),
+    )?;
+    Ok(serde_json::json!({ "rule": rule }))
+}
+
+fn rules_list_value(w: Option<std::path::PathBuf>) -> anyhow::Result<serde_json::Value> {
+    let rows = crate::core_loop::rules::list(&workspace_store(w)?.1)?;
+    Ok(serde_json::json!({ "count": rows.len(), "rules": rows }))
+}
+
+fn rules_run_value(
+    w: Option<std::path::PathBuf>,
+    since: Option<&str>,
+    dry_run: bool,
+) -> anyhow::Result<serde_json::Value> {
+    let (ws, store) = workspace_store(w)?;
+    let start = crate::core_loop::time::parse_window(since, 7)?;
+    let rows = crate::core_loop::rules::run_enabled(
+        &store,
+        &ws.to_string_lossy(),
+        start,
+        crate::core_loop::time::now_ms(),
+        dry_run,
+    )?;
+    Ok(serde_json::json!({ "count": rows.len(), "runs": rows }))
+}
+
+fn rule_enable_value(w: Option<std::path::PathBuf>, id: &str, enabled: bool) -> anyhow::Result<()> {
+    crate::core_loop::rules::set_enabled(&workspace_store(w)?.1, id, enabled)
+}
+
+fn alerts_value(w: Option<std::path::PathBuf>, days: u64) -> anyhow::Result<serde_json::Value> {
+    let (ws, store) = workspace_store(w)?;
+    let rows = crate::core_loop::alerts::check_builtin(
+        &store,
+        &ws.to_string_lossy(),
+        crate::core_loop::time::since_days(days),
+        crate::core_loop::time::now_ms(),
+    )?;
+    Ok(serde_json::json!({ "count": rows.len(), "alerts": rows }))
+}
+
+fn review_list_value(
+    w: Option<std::path::PathBuf>,
+    status: Option<&str>,
+) -> anyhow::Result<serde_json::Value> {
+    let rows = crate::core_loop::review::list(&workspace_store(w)?.1, review_status(status))?;
+    Ok(serde_json::json!({ "count": rows.len(), "items": rows }))
+}
+
+fn review_show_value(w: Option<std::path::PathBuf>, id: &str) -> anyhow::Result<serde_json::Value> {
+    let row = crate::core_loop::review::get(&workspace_store(w)?.1, id)?;
+    Ok(serde_json::json!({ "item": row }))
+}
+
+fn review_status_value(
+    w: Option<std::path::PathBuf>,
+    id: &str,
+    status: crate::core_loop::ReviewStatus,
+) -> anyhow::Result<()> {
+    crate::core_loop::review::set_status(
+        &workspace_store(w)?.1,
+        id,
+        status,
+        crate::core_loop::time::now_ms(),
+    )
+}
+
+fn case_status(raw: Option<&str>) -> Option<crate::core_loop::CaseStatus> {
+    raw.map(|s| {
+        if s == "archived" {
+            crate::core_loop::CaseStatus::Archived
+        } else {
+            crate::core_loop::CaseStatus::Open
+        }
+    })
+}
+
+fn review_status(raw: Option<&str>) -> Option<crate::core_loop::ReviewStatus> {
+    raw.map(|s| match s {
+        "resolved" => crate::core_loop::ReviewStatus::Resolved,
+        "dismissed" => crate::core_loop::ReviewStatus::Dismissed,
+        _ => crate::core_loop::ReviewStatus::Open,
+    })
+}
+
+fn rule_action(raw: &str, message: Option<String>) -> anyhow::Result<crate::core_loop::RuleAction> {
+    Ok(match raw {
+        "create_case" => crate::core_loop::RuleAction::CreateCase { label: message },
+        "queue_review" => crate::core_loop::RuleAction::QueueReview { title: message },
+        "emit_alert" => crate::core_loop::RuleAction::EmitAlert {
+            severity: crate::core_loop::AlertSeverity::Warning,
+        },
+        _ => anyhow::bail!("unknown rule action"),
+    })
 }
 
 #[tool_handler(
