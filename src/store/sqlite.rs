@@ -3509,17 +3509,38 @@ fn ensure_column(conn: &Connection, table: &str, column: &str, sql_type: &str) -
     if has_column(conn, table, column)? {
         return Ok(());
     }
-    conn.execute(
-        &format!("ALTER TABLE {table} ADD COLUMN {column} {sql_type}"),
-        [],
-    )?;
-    Ok(())
+    let sql = format!("ALTER TABLE {table} ADD COLUMN {column} {sql_type}");
+    match conn.execute(&sql, []) {
+        Ok(_) => Ok(()),
+        Err(err) if column_was_added_by_race(conn, table, column, &err)? => Ok(()),
+        Err(err) => Err(err.into()),
+    }
 }
 
 fn has_column(conn: &Connection, table: &str, column: &str) -> Result<bool> {
     let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})"))?;
     let rows = stmt.query_map([], |row| row.get::<_, String>(1))?;
     Ok(rows.filter_map(|r| r.ok()).any(|name| name == column))
+}
+
+fn column_was_added_by_race(
+    conn: &Connection,
+    table: &str,
+    column: &str,
+    err: &rusqlite::Error,
+) -> Result<bool> {
+    if !is_duplicate_column_error(err) {
+        return Ok(false);
+    }
+    has_column(conn, table, column)
+}
+
+fn is_duplicate_column_error(err: &rusqlite::Error) -> bool {
+    matches!(
+        err,
+        rusqlite::Error::SqliteFailure(_, Some(message))
+            if message.contains("duplicate column name")
+    )
 }
 
 fn bool_to_i64(v: bool) -> i64 {
@@ -3630,6 +3651,17 @@ mod tests {
         assert_eq!(temp_store, 2);
         assert_eq!(wal_autocheckpoint, 1_000);
         assert_eq!(mmap_size_bytes_from_mb(Some("64")), 67_108_864);
+    }
+
+    #[test]
+    fn ensure_column_tolerates_duplicate_from_race() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("CREATE TABLE sessions (id TEXT, start_commit TEXT)")
+            .unwrap();
+        let err = conn
+            .execute("ALTER TABLE sessions ADD COLUMN start_commit TEXT", [])
+            .unwrap_err();
+        assert!(column_was_added_by_race(&conn, "sessions", "start_commit", &err).unwrap());
     }
 
     #[test]

@@ -175,8 +175,7 @@ fn missing_session_tree_is_error() -> anyhow::Result<()> {
 }
 
 fn ingest_start(bin: &str, home: &Path, ws: &Path, id: &str) -> anyhow::Result<()> {
-    let payload =
-        format!(r#"{{"event":"SessionStart","session_id":"{id}","timestamp_ms":1714000000000}}"#);
+    let payload = hook_start_payload(id);
     let mut child = command(
         bin,
         home,
@@ -205,6 +204,20 @@ fn ingest_start(bin: &str, home: &Path, ws: &Path, id: &str) -> anyhow::Result<(
         String::from_utf8_lossy(&out.stderr)
     );
     Ok(())
+}
+
+fn hook_start_payload(id: &str) -> String {
+    format!(
+        r#"{{"event":"SessionStart","session_id":"{id}","timestamp_ms":{}}}"#,
+        now_ms()
+    )
+}
+
+fn now_ms() -> u128 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis()
 }
 
 fn run(bin: &str, home: &Path, cwd: &Path, args: &[&str]) -> anyhow::Result<()> {
