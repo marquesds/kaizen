@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pub mod claude;
+pub mod claude_code;
 pub mod codex;
+pub mod codex_desktop;
+mod codex_desktop_event;
 pub mod copilot_cli;
 pub mod copilot_vscode;
 pub mod cursor;
@@ -27,4 +30,23 @@ pub fn dir_mtime_ms(dir: &Path) -> u64 {
         })
         .min()
         .unwrap_or(0)
+}
+
+pub fn epoch_ms(t: u64) -> u64 {
+    if t < 1_000_000_000_000 {
+        t.saturating_mul(1000)
+    } else {
+        t
+    }
+}
+
+pub fn value_ts_ms(v: &serde_json::Value) -> Option<u64> {
+    v.as_u64()
+        .map(epoch_ms)
+        .or_else(|| v.as_str().and_then(rfc3339_ms))
+}
+
+fn rfc3339_ms(s: &str) -> Option<u64> {
+    let dt = time::OffsetDateTime::parse(s, &time::format_description::well_known::Rfc3339).ok()?;
+    u64::try_from(dt.unix_timestamp_nanos() / 1_000_000).ok()
 }

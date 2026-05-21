@@ -80,7 +80,13 @@ fn merge_usage_object(out: &mut UsageData, u: &Value) {
     if let Some(n) = key_u32(u, "input_tokens") {
         out.tokens_in = Some(n);
     }
+    if let Some(n) = key_u32(u, "prompt_tokens") {
+        out.tokens_in = Some(n);
+    }
     if let Some(n) = key_u32(u, "output_tokens") {
+        out.tokens_out = Some(n);
+    }
+    if let Some(n) = key_u32(u, "completion_tokens") {
         out.tokens_out = Some(n);
     }
     if let Some(n) = key_u32(u, "cache_creation_input_tokens") {
@@ -88,6 +94,24 @@ fn merge_usage_object(out: &mut UsageData, u: &Value) {
     }
     if let Some(n) = key_u32(u, "cache_read_input_tokens") {
         out.cache_read_tokens = Some(n);
+    }
+    merge_openai_details(out, u);
+}
+
+fn merge_openai_details(out: &mut UsageData, u: &Value) {
+    if let Some(n) = u
+        .get("input_tokens_details")
+        .or_else(|| u.get("prompt_tokens_details"))
+        .and_then(|d| key_u32(d, "cached_tokens"))
+    {
+        out.cache_read_tokens = Some(n);
+    }
+    if let Some(n) = u
+        .get("output_tokens_details")
+        .or_else(|| u.get("completion_tokens_details"))
+        .and_then(|d| key_u32(d, "reasoning_tokens"))
+    {
+        out.reasoning_tokens = Some(n);
     }
 }
 
@@ -105,7 +129,27 @@ fn merge_stop_reason(out: &mut UsageData, v: &Value) {
     }
     if let Some(sr) = v.get("stop_reason").and_then(|s| s.as_str()) {
         out.stop_reason = Some(sr.to_string());
+        return;
     }
+    if let Some(sr) = first_finish_reason(v) {
+        out.stop_reason = Some(sr.to_string());
+        return;
+    }
+    if v.get("status").and_then(|s| s.as_str()) == Some("incomplete")
+        && let Some(reason) = v
+            .get("incomplete_details")
+            .and_then(|d| d.get("reason"))
+            .and_then(|s| s.as_str())
+    {
+        out.stop_reason = Some(reason.to_string());
+    }
+}
+
+fn first_finish_reason(v: &Value) -> Option<&str> {
+    v.get("choices")?
+        .as_array()?
+        .iter()
+        .find_map(|c| c.get("finish_reason").and_then(|s| s.as_str()))
 }
 
 fn key_u32(u: &Value, k: &str) -> Option<u32> {
@@ -152,5 +196,31 @@ mod tests {
         let s = "data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"}}\n\n";
         let u = find_usage_in_body(s.as_bytes(), true);
         assert_eq!(u.stop_reason, Some("end_turn".to_string()));
+    }
+
+    #[test]
+    fn openai_responses_usage() {
+        let s = r#"{"usage":{"input_tokens":75,"output_tokens":1186,
+            "input_tokens_details":{"cached_tokens":5},
+            "output_tokens_details":{"reasoning_tokens":1024}}}"#;
+        let u = find_usage_in_body(s.as_bytes(), false);
+        assert_eq!(u.tokens_in, Some(75));
+        assert_eq!(u.tokens_out, Some(1186));
+        assert_eq!(u.reasoning_tokens, Some(1024));
+        assert_eq!(u.cache_read_tokens, Some(5));
+    }
+
+    #[test]
+    fn openai_chat_usage() {
+        let s = r#"{"choices":[{"finish_reason":"stop"}],"usage":{
+            "prompt_tokens":1117,"completion_tokens":46,
+            "prompt_tokens_details":{"cached_tokens":9},
+            "completion_tokens_details":{"reasoning_tokens":2}}}"#;
+        let u = find_usage_in_body(s.as_bytes(), false);
+        assert_eq!(u.tokens_in, Some(1117));
+        assert_eq!(u.tokens_out, Some(46));
+        assert_eq!(u.reasoning_tokens, Some(2));
+        assert_eq!(u.cache_read_tokens, Some(9));
+        assert_eq!(u.stop_reason, Some("stop".to_string()));
     }
 }

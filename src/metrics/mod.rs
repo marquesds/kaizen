@@ -3,5 +3,6 @@ pub mod analyze;
 pub mod codegraph;
 pub mod git;
 pub mod index;
+pub mod quality;
 pub mod report;
 pub mod types;

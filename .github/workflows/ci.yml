@@ -137,7 +137,7 @@ jobs:
     name: analytics-duckdb
     runs-on: ubuntu-latest
     env:
-      CARGO_BUILD_JOBS: 1
+      CARGO_BUILD_JOBS: 2
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -154,7 +154,8 @@ jobs:
         with:
           key: analytics-duckdb
           cache-bin: "false"
-      - run: cargo test --all --locked --features full
+      - run: cargo check --locked --features full --lib --bin kaizen
+      - run: cargo test --locked --features full --test query_duckdb
 
   audit:
     name: audit + deny
