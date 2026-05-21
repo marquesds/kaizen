@@ -1,0 +1,5 @@
+{"timestamp":"2026-05-15T20:47:40.597Z","type":"session_meta","payload":{"id":"codex-modern-1","timestamp":"2026-05-15T20:47:40.597Z","cwd":"/tmp/kaizen-modern","cli_version":"0.1.0"}}
+{"timestamp":"2026-05-15T20:47:40.598Z","type":"turn_context","payload":{"type":"turn_context","cwd":"/tmp/kaizen-modern","model":"gpt-4o"}}
+{"timestamp":"2026-05-15T20:47:41.000Z","type":"response_item","payload":{"type":"function_call","call_id":"call_1","name":"exec_command","arguments":"{\"cmd\":\"cargo test\"}"}}
+{"timestamp":"2026-05-15T20:47:42.000Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call_1","output":"ok"}}
+{"timestamp":"2026-05-15T20:47:43.000Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":1000,"cached_input_tokens":200,"output_tokens":500,"reasoning_output_tokens":100,"total_tokens":1600},"model_context_window":128000}}}

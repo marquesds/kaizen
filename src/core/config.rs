@@ -348,6 +348,9 @@ pub struct ProxyConfig {
     /// Base URL, no trailing slash, e.g. `https://api.anthropic.com`.
     #[serde(default = "default_proxy_upstream")]
     pub upstream: String,
+    /// `anthropic`, `openai`, or `auto`; controls launcher/env hints and default upstream.
+    #[serde(default = "default_proxy_provider")]
+    pub provider: String,
     /// Prefer `Accept-Encoding: gzip` to upstream (response bodies may be gzip).
     #[serde(default = "default_true")]
     pub compress_transport: bool,
@@ -373,6 +376,10 @@ fn default_proxy_upstream() -> String {
     "https://api.anthropic.com".to_string()
 }
 
+fn default_proxy_provider() -> String {
+    "anthropic".to_string()
+}
+
 fn default_proxy_max_body_mb() -> u32 {
     256
 }
@@ -386,6 +393,7 @@ impl Default for ProxyConfig {
         Self {
             listen: default_proxy_listen(),
             upstream: default_proxy_upstream(),
+            provider: default_proxy_provider(),
             compress_transport: true,
             minify_json: true,
             max_response_body_mb: default_proxy_max_body_mb(),
@@ -901,6 +909,11 @@ fn merge_proxy(base: ProxyConfig, user: ProxyConfig) -> ProxyConfig {
             user.upstream
         } else {
             base.upstream
+        },
+        provider: if user.provider != def.provider {
+            user.provider
+        } else {
+            base.provider
         },
         compress_transport: if user.compress_transport != def.compress_transport {
             user.compress_transport

@@ -24,6 +24,11 @@
 - `tool_spans`
   derived per-tool spans. One row per closed or orphaned correlated tool
   execution. Open spans live in the incremental projector until close/flush.
+- `trace_spans`
+  additive Datadog-style timeline rows for `session|agent|step|llm|tool|permission`
+  spans. Proxy-backed LLM calls write `llm` spans with trace/span identifiers,
+  timing, tokens, cost, context usage, and redacted metadata. Existing
+  `tool_spans` remain the compatibility surface for older reports and sync.
 - `repo_snapshots`
   commit-pinned code fact snapshot for one workspace fingerprint.
 - `file_facts`
@@ -70,6 +75,7 @@
 
 - `sessions 1:N events`
 - `sessions 1:N tool_spans`
+- `sessions 1:N trace_spans`
 - `sessions 1:1 session_repo_binding`
 - `repo_snapshots 1:N file_facts`
 - `repo_snapshots 1:N repo_edges`

@@ -4,6 +4,7 @@
 use crate::core::config::Config;
 use crate::core::cost::CostTable;
 use crate::core::event::{Event, EventKind, EventSource, SessionRecord, SessionStatus};
+use crate::core::trace_span::{TraceSpanKind, TraceSpanRecord, span_payload, trace_id_for_session};
 use crate::store::Store;
 use crate::sync::ingest_ctx;
 use anyhow::Context;
@@ -102,6 +103,7 @@ pub fn record_forward_outcome(
         }
         (EventKind::Cost, p)
     };
+    let cost_usd_e6 = proxy_event_cost_usd_e6(a);
     let e = Event {
         session_id: a.session_id.clone(),
         seq,
@@ -114,19 +116,20 @@ pub fn record_forward_outcome(
         tokens_in: a.tokens_in,
         tokens_out: a.tokens_out,
         reasoning_tokens: a.reasoning_tokens,
-        cost_usd_e6: proxy_event_cost_usd_e6(a),
+        cost_usd_e6,
         stop_reason: a.stop_reason.clone(),
         latency_ms: a.latency_ms,
         ttft_ms: a.ttft_ms,
         retry_count: a.retry_count,
-        context_used_tokens: None,
-        context_max_tokens: None,
+        context_used_tokens: a.tokens_in,
+        context_max_tokens: context_window_for_model(a.model.as_deref()),
         cache_creation_tokens: a.cache_creation_tokens,
         cache_read_tokens: a.cache_read_tokens,
         system_prompt_tokens: None,
         payload,
     };
     store.append_event_with_sync(&e, sync_c.as_ref())?;
+    store.upsert_trace_span(&trace_span(a, seq, now, cost_usd_e6))?;
     Ok(())
 }
 
@@ -155,6 +158,65 @@ fn now_ms() -> Result<u64, anyhow::Error> {
         .duration_since(UNIX_EPOCH)
         .map_err(|e| anyhow::anyhow!("{e}"))?;
     Ok(d.as_millis() as u64)
+}
+
+fn trace_span(a: &RecordArgs, seq: u64, now: u64, cost: Option<i64>) -> TraceSpanRecord {
+    let duration = a.latency_ms.unwrap_or(0);
+    TraceSpanRecord {
+        span_id: format!("llm-{}-{seq}", a.session_id),
+        trace_id: trace_id_for_session(&a.session_id),
+        parent_span_id: None,
+        session_id: a.session_id.clone(),
+        kind: TraceSpanKind::Llm,
+        name: format!("{}.{}", provider(a), trim_path(&a.path)),
+        status: if a.upstream_error.is_some() {
+            "error"
+        } else {
+            "ok"
+        }
+        .into(),
+        started_at_ms: Some(now.saturating_sub(duration as u64)),
+        ended_at_ms: Some(now),
+        duration_ms: a.latency_ms,
+        model: a.model.clone(),
+        tool: None,
+        tokens_in: a.tokens_in,
+        tokens_out: a.tokens_out,
+        reasoning_tokens: a.reasoning_tokens,
+        cost_usd_e6: cost,
+        context_used_tokens: a.tokens_in,
+        context_max_tokens: context_window_for_model(a.model.as_deref()),
+        payload: span_payload(provider(a), false, a.request_id.as_deref()),
+    }
+}
+
+fn provider(a: &RecordArgs) -> &'static str {
+    let model = a.model.as_deref().unwrap_or_default();
+    if a.path.contains("responses") || a.path.contains("chat/completions") {
+        return "openai";
+    }
+    if model.starts_with("gpt-") || model.starts_with('o') {
+        return "openai";
+    }
+    "anthropic"
+}
+
+fn trim_path(path: &str) -> &str {
+    path.trim_matches('/')
+        .rsplit('/')
+        .next()
+        .unwrap_or("request")
+}
+
+fn context_window_for_model(model: Option<&str>) -> Option<u32> {
+    let m = model?;
+    if m.contains("gpt-4.1") || m.contains("gpt-5") {
+        Some(1_000_000)
+    } else if m.contains("claude") || m.contains("gpt-4o") || m.starts_with('o') {
+        Some(200_000)
+    } else {
+        None
+    }
 }
 
 #[cfg(test)]
@@ -215,5 +277,22 @@ mod tests {
         a.tokens_in = Some(100);
         a.tokens_out = Some(50);
         assert!(proxy_event_cost_usd_e6(&a).is_some_and(|c| c > 0));
+    }
+
+    #[test]
+    fn recording_success_creates_llm_trace_span() {
+        let tmp = tempfile::tempdir().unwrap();
+        let db = tmp.path().join("kaizen.db");
+        let mut a = sample_args();
+        a.tokens_in = Some(10);
+        a.tokens_out = Some(20);
+        a.latency_ms = Some(30);
+        record_forward_outcome(&db, &Config::default(), tmp.path(), &a).unwrap();
+        let store = Store::open(&db).unwrap();
+        let spans = store.trace_spans_for_session("s").unwrap();
+        assert_eq!(spans.len(), 1);
+        assert_eq!(spans[0].kind, crate::core::trace_span::TraceSpanKind::Llm);
+        assert_eq!(spans[0].tokens_in, Some(10));
+        assert_eq!(spans[0].duration_ms, Some(30));
     }
 }

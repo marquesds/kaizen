@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! `kaizen init` — idempotent workspace setup.
 
+use crate::ipc::{CaptureComponentStatus, CaptureStatus};
 use anyhow::Result;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
@@ -23,6 +24,12 @@ const KAIZEN_EVAL_SKILL: &str = include_str!("../../assets/kaizen-eval-SKILL.md"
 
 const CURSOR_HOOK_EVENTS: &[&str] = &["SessionStart", "PreToolUse", "PostToolUse", "Stop"];
 const CLAUDE_HOOK_EVENTS: &[&str] = &["SessionStart", "PreToolUse", "PostToolUse", "Stop"];
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct InitOptions {
+    pub deep: bool,
+    pub start_capture: bool,
+}
 
 fn ts_ms() -> u64 {
     SystemTime::now()
@@ -467,6 +474,13 @@ fn openclaw_handler_contains_kaizen(raw: &str) -> bool {
 
 /// Text that `kaizen init` would print to stdout.
 pub fn init_text(workspace: Option<&std::path::Path>) -> Result<String> {
+    init_text_with_options(workspace, InitOptions::default())
+}
+
+pub fn init_text_with_options(
+    workspace: Option<&std::path::Path>,
+    options: InitOptions,
+) -> Result<String> {
     let ws = match workspace {
         Some(p) => p.to_path_buf(),
         None => std::env::current_dir()?,
@@ -497,6 +511,9 @@ pub fn init_text(workspace: Option<&std::path::Path>) -> Result<String> {
     let cws = crate::core::workspace::canonical(&ws);
     if let Err(e) = crate::core::machine_registry::record_init(&cws) {
         tracing::warn!("machine registry: {e:#}");
+    }
+    if options.start_capture {
+        append_capture_status(&mut out, &cws, options.deep);
     }
     writeln!(out).unwrap();
     writeln!(
@@ -531,8 +548,54 @@ pub fn init_text(workspace: Option<&std::path::Path>) -> Result<String> {
     Ok(out)
 }
 
+fn append_capture_status(out: &mut String, ws: &Path, deep: bool) {
+    if !crate::daemon::enabled() {
+        writeln!(out, "  skipped  daemon capture (KAIZEN_DAEMON=0)").unwrap();
+        return;
+    }
+    let workspace = ws.to_string_lossy().to_string();
+    match crate::daemon::ensure_capture_blocking(workspace, deep) {
+        Ok(status) => write_capture_status(out, &status),
+        Err(err) => writeln!(out, "  warning  daemon capture unavailable: {err:#}").unwrap(),
+    }
+}
+
+fn write_capture_status(out: &mut String, status: &CaptureStatus) {
+    writeln!(out, "  ready    daemon capture").unwrap();
+    writeln!(
+        out,
+        "  ready    {}",
+        status_line("watchers", &status.watchers)
+    )
+    .unwrap();
+    writeln!(out, "  ready    {}", status_line("hooks", &status.hooks)).unwrap();
+    if status.deep {
+        writeln!(out, "  partial  deep capture ({})", status.proxies.len()).unwrap();
+    }
+    for err in &status.errors {
+        writeln!(out, "  warning  {err}").unwrap();
+    }
+}
+
+fn status_line(label: &str, components: &[crate::ipc::CaptureComponent]) -> String {
+    let ready = components
+        .iter()
+        .filter(|c| c.status == CaptureComponentStatus::Ready)
+        .count();
+    format!("{label}: {ready}/{}", components.len())
+}
+
 /// Idempotent workspace setup.
-pub fn cmd_init(workspace: Option<&Path>) -> Result<()> {
-    print!("{}", init_text(workspace)?);
+pub fn cmd_init(workspace: Option<&Path>, deep: bool) -> Result<()> {
+    print!(
+        "{}",
+        init_text_with_options(
+            workspace,
+            InitOptions {
+                deep,
+                start_capture: true,
+            },
+        )?
+    );
     Ok(())
 }
