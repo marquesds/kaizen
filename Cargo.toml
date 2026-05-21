@@ -331,7 +331,7 @@ blake3 = "1"
 aho-corasick = "1"
 regex = "1"
 hex = "0.4"
-sha2 = "0.10"
+sha2 = "0.11"
 time = { version = "0.3", features = ["formatting", "macros", "local-offset", "parsing"] }
 fs4 = { version = "1.0", features = ["sync"] }
 graphqlite = "0.4"
