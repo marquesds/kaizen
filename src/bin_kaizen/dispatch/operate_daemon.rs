@@ -16,23 +16,31 @@ fn daemon_start(background: bool) -> anyhow::Result<()> {
         return kaizen::daemon::start_foreground();
     }
     let started = kaizen::daemon::start_background()?;
-    println!(
-        "daemon {}",
-        if started.already_running {
-            "already running"
-        } else {
-            "started"
-        }
-    );
-    println!("pid: {}", started.pid);
-    println!("socket: {}", started.paths.sock.display());
-    println!("log: {}", started.paths.log.display());
-    if let Ok(status) = kaizen::daemon::try_status()
-        && let Some(web) = status.web
-    {
-        println!("web: {}", web.url);
+    for line in background_start_lines(&started) {
+        println!("{line}");
     }
     Ok(())
+}
+
+fn background_start_lines(started: &kaizen::daemon::BackgroundStart) -> Vec<String> {
+    let lines = [
+        format!("daemon {}", background_state(started)),
+        format!("pid: {}", started.pid),
+        format!("socket: {}", started.paths.sock.display()),
+        format!("log: {}", started.paths.log.display()),
+    ];
+    lines.into_iter().chain(web_line(started)).collect()
+}
+
+fn background_state(started: &kaizen::daemon::BackgroundStart) -> &'static str {
+    match started.already_running {
+        true => "already running",
+        false => "started",
+    }
+}
+
+fn web_line(started: &kaizen::daemon::BackgroundStart) -> Option<String> {
+    started.web.as_ref().map(|web| format!("web: {}", web.url))
 }
 
 fn daemon_status() -> anyhow::Result<()> {
@@ -71,5 +79,45 @@ fn print_capture(capture: kaizen::ipc::CaptureStatus) {
     println!("  proxies: {}", capture.proxies.len());
     if !capture.errors.is_empty() {
         println!("  errors: {}", capture.errors.join("; "));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn background_start_output_includes_web_url() {
+        let started = background_start();
+        assert!(
+            background_start_lines(&started)
+                .contains(&"web: http://127.0.0.1:7878/?token=t".to_string())
+        );
+    }
+
+    fn background_start() -> kaizen::daemon::BackgroundStart {
+        kaizen::daemon::BackgroundStart {
+            pid: 42,
+            paths: runtime_paths(),
+            already_running: false,
+            web: Some(web_endpoint()),
+        }
+    }
+
+    fn web_endpoint() -> kaizen::ipc::WebEndpoint {
+        kaizen::ipc::WebEndpoint {
+            listen: "127.0.0.1:7878".to_string(),
+            url: "http://127.0.0.1:7878/?token=t".to_string(),
+            token: "t".to_string(),
+        }
+    }
+
+    fn runtime_paths() -> kaizen::daemon::RuntimePaths {
+        kaizen::daemon::RuntimePaths {
+            dir: "/tmp/k".into(),
+            pid: "/tmp/k/daemon.pid".into(),
+            sock: "/tmp/k/daemon.sock".into(),
+            log: "/tmp/k/daemon.log".into(),
+        }
     }
 }
