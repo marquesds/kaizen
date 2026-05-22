@@ -38,6 +38,8 @@ pub struct DaemonStatus {
     pub last_error: Option<String>,
     #[serde(default)]
     pub capture: Vec<CaptureStatus>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub web: Option<WebEndpoint>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
@@ -80,6 +82,13 @@ pub struct CaptureStatus {
 pub struct ObservedSession {
     pub session: String,
     pub proxies: Vec<ProxyEndpoint>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+pub struct WebEndpoint {
+    pub listen: String,
+    pub url: String,
+    pub token: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

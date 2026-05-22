@@ -136,6 +136,10 @@ name = "mcp_parity"
 path = "tests/mcp_parity.rs"
 
 [[test]]
+name = "web_parity"
+path = "tests/web_parity.rs"
+
+[[test]]
 name = "mcp_server"
 path = "tests/spec/mcp_server.rs"
 
@@ -272,6 +276,10 @@ name = "daemon_lifecycle"
 path = "tests/spec/daemon_lifecycle.rs"
 
 [[test]]
+name = "web_server"
+path = "tests/spec/web_server.rs"
+
+[[test]]
 name = "perf_phase0"
 path = "tests/perf/phase0.rs"
 
@@ -346,8 +354,8 @@ tree-sitter-typescript = "0.23"
 tree-sitter-python = "0.25"
 tree-sitter-go = "0.25"
 tree-sitter-java = "0.23"
-rmcp = { version = "1", features = ["server", "transport-io", "schemars", "macros"] }
-axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio", "matched-path"] }
+rmcp = { version = "1", features = ["server", "client", "transport-io", "schemars", "macros"] }
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio", "matched-path", "query", "ws"] }
 tower = { version = "0.5", features = ["util"] }
 tower-http = { version = "0.6", features = ["limit", "set-header"] }
 sysinfo = { version = "0.39.1", default-features = false, features = ["system"] }
@@ -367,6 +375,8 @@ itf = "0.4"
 proptest = "1"
 rmcp = { version = "1", features = ["server", "client", "transport-io", "schemars", "macros"] }
 tower = { version = "0.5", features = ["util"] }
+futures-util = "0.3"
+tokio-tungstenite = "0.29"
 
 [patch.crates-io]
 # Patched: `quint run` uses `--backend rust` (GHA `macos-latest` + TS sim exited 1, empty stderr).

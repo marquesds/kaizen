@@ -104,6 +104,15 @@ Browser testing → use `browser-use` subagent (has own MCP context). Re-enable 
 `AGENTS.md` is single source of truth. `CLAUDE.md` points to it.
 All agents (Cursor, Claude Code, Codex) read this file.
 
+## Web Tool Parity
+
+Every MCP tool must have web feature parity. Source of truth: `tests/mcp_tool_names.inc`.
+When adding, removing, or renaming MCP tool:
+1. Update web tool registry.
+2. Add real web UI/API feature.
+3. Do not add terminal-call shim.
+4. Update parity test.
+
 **Extended rules** in `.cursor/rules/*.mdc` — Cursor auto-loads; other agents read when relevant.
 
 When adding/changing rule/skill:

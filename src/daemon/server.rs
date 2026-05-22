@@ -5,8 +5,8 @@ use super::supervisor::Supervisor;
 use super::worker::{Job, spawn_worker};
 use super::{RuntimePaths, runtime_paths};
 use crate::ipc::{
-    DaemonRequest, DaemonResponse, DaemonStatus, PROTO_VERSION, ServerHello, read_frame,
-    write_frame,
+    DaemonRequest, DaemonResponse, DaemonStatus, PROTO_VERSION, ServerHello, WebEndpoint,
+    read_frame, write_frame,
 };
 use anyhow::{Context, Result, anyhow};
 use std::fs::{File, OpenOptions};
@@ -25,6 +25,7 @@ struct ServerState {
     last_error: Arc<Mutex<Option<String>>>,
     supervisor: Supervisor,
     tx: mpsc::Sender<Job>,
+    web: WebEndpoint,
 }
 
 pub async fn run_server() -> Result<()> {
@@ -35,6 +36,7 @@ pub async fn run_server() -> Result<()> {
     let listener = UnixListener::bind(&paths.sock)
         .with_context(|| format!("bind daemon socket: {}", paths.sock.display()))?;
     set_socket_private(&paths.sock)?;
+    let (web, _web_task) = crate::web::start().await?;
     let (tx, rx) = mpsc::channel(128);
     let state = ServerState {
         started: Instant::now(),
@@ -42,6 +44,7 @@ pub async fn run_server() -> Result<()> {
         last_error: Arc::new(Mutex::new(None)),
         supervisor: Supervisor::default(),
         tx,
+        web,
     };
     spawn_worker(rx, state.queue_depth.clone(), state.last_error.clone());
     loop {
@@ -145,6 +148,7 @@ fn status(state: &ServerState) -> DaemonStatus {
         queue_depth: state.queue_depth.load(Ordering::Relaxed),
         last_error: state.last_error.lock().ok().and_then(|e| e.clone()),
         capture: state.supervisor.statuses(),
+        web: Some(state.web.clone()),
     }
 }
 

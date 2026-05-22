@@ -27,6 +27,11 @@ fn daemon_start(background: bool) -> anyhow::Result<()> {
     println!("pid: {}", started.pid);
     println!("socket: {}", started.paths.sock.display());
     println!("log: {}", started.paths.log.display());
+    if let Ok(status) = kaizen::daemon::try_status()
+        && let Some(web) = status.web
+    {
+        println!("web: {}", web.url);
+    }
     Ok(())
 }
 
@@ -50,6 +55,9 @@ fn print_running_daemon(st: kaizen::ipc::DaemonStatus) {
         "last_error: {}",
         st.last_error.unwrap_or_else(|| "-".to_string())
     );
+    if let Some(web) = st.web {
+        println!("web: {}", web.url);
+    }
     for capture in st.capture {
         print_capture(capture);
     }

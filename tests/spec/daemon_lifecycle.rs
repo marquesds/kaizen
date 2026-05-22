@@ -154,9 +154,18 @@ fn daemon_spawn_ingest_query_stop() {
         "{}",
         String::from_utf8_lossy(&start.stderr)
     );
-    assert!(String::from_utf8_lossy(&start.stdout).contains("pid:"));
+    let start_stdout = String::from_utf8_lossy(&start.stdout);
+    assert!(start_stdout.contains("pid:"), "{start_stdout}");
+    assert!(
+        start_stdout.contains("web: http://127.0.0.1:"),
+        "{start_stdout}"
+    );
 
-    wait_ok(bin, &home, ["daemon", "status"]);
+    let status_stdout = wait_ok(bin, &home, ["daemon", "status"]);
+    assert!(
+        status_stdout.contains("web: http://127.0.0.1:"),
+        "{status_stdout}"
+    );
 
     let payload =
         r#"{"event":"SessionStart","session_id":"daemon-s1","timestamp_ms":1714000000000}"#;
@@ -276,7 +285,7 @@ fn init_starts_daemon_capture_status() {
         .output();
 }
 
-fn wait_ok<const N: usize>(bin: &str, home: &std::path::Path, args: [&str; N]) {
+fn wait_ok<const N: usize>(bin: &str, home: &std::path::Path, args: [&str; N]) -> String {
     let deadline = Instant::now() + Duration::from_secs(3);
     while Instant::now() < deadline {
         let output = Command::new(bin)
@@ -285,7 +294,7 @@ fn wait_ok<const N: usize>(bin: &str, home: &std::path::Path, args: [&str; N]) {
             .output()
             .unwrap();
         if output.status.success() {
-            return;
+            return String::from_utf8_lossy(&output.stdout).to_string();
         }
         thread::sleep(Duration::from_millis(25));
     }
