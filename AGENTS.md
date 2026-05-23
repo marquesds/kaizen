@@ -111,7 +111,8 @@ When adding, removing, or renaming MCP tool:
 1. Update web tool registry.
 2. Add real web UI/API feature.
 3. Do not add terminal-call shim.
-4. Update parity test.
+4. Do not seed mock/demo data or fake tool success.
+5. Update parity test.
 
 **Extended rules** in `.cursor/rules/*.mdc` — Cursor auto-loads; other agents read when relevant.
 

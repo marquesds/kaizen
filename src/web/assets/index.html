@@ -41,7 +41,7 @@
         <article class="card kpi span-3"><span>Sessions</span><strong id="metric-sessions">-</strong></article>
         <article class="card kpi span-3"><span>Total cost</span><strong id="metric-cost">-</strong></article>
         <article class="card kpi span-3"><span>Tokens</span><strong id="metric-tokens">-</strong></article>
-        <article class="card kpi span-3"><span>Tools</span><strong id="metric-tools">40</strong></article>
+        <article class="card kpi span-3"><span>Tools</span><strong id="metric-tools">-</strong></article>
         <article class="card span-8 stack">
           <div class="row"><h2>Live event stream</h2><button class="btn primary" data-tool="kaizen_summary">Refresh</button></div>
           <ul id="stream-feed" class="feed" aria-live="polite"></ul>
@@ -58,12 +58,13 @@
           <h2>Session browser</h2>
           <label>Session id<input class="input" name="id" required></label>
           <div class="row"><button class="btn primary" data-tool-submit="kaizen_session_show">Show</button><button class="btn" data-tool-submit="get_session_span_tree" data-extra='{"json":true}'>Tree</button></div>
-          <label>Search query<input class="input" name="query" value="tool:bash"></label>
+          <label>Search query<input class="input" name="query"></label>
           <button class="btn" data-tool-submit="mcp/search_sessions">Search</button>
           <button class="btn" data-tool-submit="kaizen_query">Structured query</button>
           <button class="btn" data-tool-submit="kaizen_tui">Live view</button>
-          <label>Feedback score<input class="input" name="score" value="3"></label>
-          <label>Feedback label<input class="input" name="label" value="good"></label>
+          <label>Feedback score<input class="input" name="score" type="number" min="1" max="5"></label>
+          <label>Feedback label<input class="input" name="label"></label>
+          <label>Feedback note<textarea class="input" name="note"></textarea></label>
           <button class="btn" data-tool-submit="kaizen_annotate_session" data-session="true">Annotate</button>
         </form>
         <article class="card stack"><h2>Result</h2><pre id="session-output" class="output"></pre></article>
@@ -72,10 +73,16 @@
       <section id="analysis" class="screen two-col" hidden>
         <form class="card stack" data-form="analysis">
           <h2>Analysis workbench</h2>
-          <label>Days<input class="input" name="days" value="7"></label>
+          <label>Days<input class="input" name="days" type="number" min="1" placeholder="7"></label>
           <label>Target id<input class="input" name="id"></label>
-          <label>Session id<input class="input" name="session"></label>
-          <label>Rule filter<input class="input" name="filter" value="tool:bash"></label>
+          <label>Session id<input class="input" name="session_id"></label>
+          <label>Case reason<input class="input" name="reason"></label>
+          <label>Case label<input class="input" name="label"></label>
+          <label>Rule name<input class="input" name="name"></label>
+          <label>Rule filter<input class="input" name="filter"></label>
+          <label>Rule action<select class="input" name="action"><option value="">Select action</option><option value="create_case">Create case</option><option value="queue_review">Queue review</option><option value="emit_alert">Emit alert</option></select></label>
+          <label>Rule message<input class="input" name="message"></label>
+          <label class="check"><input type="checkbox" name="dry_run"> Dry run</label>
           <button class="btn primary" data-tool-submit="kaizen_retro" data-extra='{"json":true}'>Retro</button>
           <button class="btn" data-tool-submit="kaizen_metrics_index">Index metrics</button>
           <button class="btn" data-tool-submit="kaizen_cases_mine">Mine cases</button>
@@ -100,14 +107,21 @@
       <section id="experiments" class="screen two-col" hidden>
         <form class="card stack" data-form="experiments">
           <h2>Experiments</h2>
-          <label>Name<input class="input" name="name" value="web-smoke"></label>
+          <label>Name<input class="input" name="name"></label>
+          <label>Hypothesis<input class="input" name="hypothesis"></label>
+          <label>Change<input class="input" name="change"></label>
+          <label>Metric<input class="input" name="metric"></label>
+          <label>Bind<select class="input" name="bind"><option value="">Default</option><option value="git">Git</option><option value="manual">Manual</option></select></label>
+          <label>Duration days<input class="input" name="duration_days" type="number" min="1"></label>
+          <label>Target percent<input class="input" name="target_pct" type="number" step="0.1"></label>
           <label>Experiment id<input class="input" name="id"></label>
           <label>Session id<input class="input" name="session"></label>
-          <button class="btn primary" data-tool-submit="kaizen_exp_new" data-extra='{"hypothesis":"h","change":"c","metric":"cost_per_session","bind":"manual"}'>Create</button>
+          <label>Variant<select class="input" name="variant"><option value="">Select variant</option><option value="control">Control</option><option value="treatment">Treatment</option><option value="excluded">Excluded</option></select></label>
+          <button class="btn primary" data-tool-submit="kaizen_exp_new">Create</button>
           <button class="btn" data-tool-submit="kaizen_exp_list">List</button>
           <button class="btn" data-tool-submit="kaizen_exp_status">Status</button>
           <button class="btn" data-tool-submit="kaizen_exp_start">Start</button>
-          <button class="btn" data-tool-submit="kaizen_exp_tag" data-extra='{"variant":"treatment"}'>Tag</button>
+          <button class="btn" data-tool-submit="kaizen_exp_tag">Tag</button>
           <button class="btn" data-tool-submit="kaizen_exp_report" data-extra='{"json":true}'>Report</button>
           <button class="btn" data-tool-submit="kaizen_exp_conclude">Conclude</button>
           <button class="btn" data-tool-submit="kaizen_exp_archive">Archive</button>
@@ -119,12 +133,13 @@
         <form class="card stack" data-form="settings">
           <h2>Settings</h2>
           <label>Workspace<input class="input" name="workspace" placeholder="/path/to/repo"></label>
-          <label>Hook payload<textarea name="payload" class="input">{"event":"Stop","session_id":"web"}</textarea></label>
+          <label>Hook source<select class="input" name="source"><option value="">Select source</option><option value="cursor">Cursor</option><option value="claude">Claude</option></select></label>
+          <label>Hook payload<textarea name="payload" class="input"></textarea></label>
           <button class="btn primary" data-tool-submit="kaizen_init">Init</button>
           <button class="btn" data-tool-submit="kaizen_sync_status">Sync status</button>
           <button class="btn" data-tool-submit="kaizen_sync_run" data-extra='{"once":true}'>Sync once</button>
           <button class="btn" data-tool-submit="kaizen_capabilities">Capabilities</button>
-          <button class="btn" data-tool-submit="kaizen_ingest_hook" data-extra='{"source":"cursor"}'>Ingest hook</button>
+          <button class="btn" data-tool-submit="kaizen_ingest_hook">Ingest hook</button>
         </form>
         <article class="card stack"><h2>Output</h2><pre id="settings-output" class="output"></pre></article>
       </section>

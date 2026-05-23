@@ -32,6 +32,7 @@ body {
 a { color: inherit; text-decoration: none; }
 button, input, select, textarea { font: inherit; }
 label { display: grid; gap: 8px; color: var(--muted); font-weight: 600; }
+.check { display: flex; align-items: center; gap: 10px; }
 :focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px; }
 .shell { min-height: 100dvh; }
 .topbar {

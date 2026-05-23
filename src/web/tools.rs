@@ -5,7 +5,7 @@ use crate::mcp::KaizenMcp;
 use rmcp::ServiceExt;
 use rmcp::model::{CallToolRequestParams, CallToolResult};
 use serde::Serialize;
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 
 pub const WEB_TOOL_NAMES: &[&str] = &[
     "get_session_span_tree",
@@ -60,12 +60,6 @@ pub enum ToolOutput {
 pub async fn call(name: &str, args: Value) -> Result<ToolOutput, String> {
     if !WEB_TOOL_NAMES.contains(&name) {
         return Err(format!("unknown web tool: {name}"));
-    }
-    if name == "kaizen_tui" {
-        return Ok(ToolOutput::Json(json!({
-            "available": true,
-            "feature": "browser_live_session_view"
-        })));
     }
     call_mcp(name, args_map(args)?).await.and_then(output)
 }

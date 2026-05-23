@@ -70,7 +70,10 @@ function call(tool, args, target) {
 }
 
 function receive(msg) {
-  if (msg.type === "status") return addFeed("status", "daemon", `${msg.tools.length} web tools available`);
+  if (msg.type === "status") {
+    updateToolCount(msg.tools);
+    return addFeed("status", "daemon", `${msg.tools.length} web tools available`);
+  }
   if (msg.type === "pong") return;
   busy(msg.tool, false);
   if (msg.type === "error") return showOutput(msg.id, `error: ${msg.error}`);
@@ -79,30 +82,53 @@ function receive(msg) {
 }
 
 function argsFor(form, btn) {
-  const data = Object.fromEntries(new FormData(form).entries());
-  const extra = json(btn.dataset.extra);
-  const tool = btn.dataset.toolSubmit;
-  if (tool === "kaizen_session_show" || tool === "get_session_span_tree") return { id: data.id, ...extra };
-  if (tool === "mcp/search_sessions") return { query: data.query || "tool:bash", limit: 20, ...extra };
-  if (tool === "kaizen_query") return { expr: data.query || "tool:bash", limit: 20, ...extra };
-  if (tool === "kaizen_annotate_session") return { session_id: data.id, score: Number(data.score), label: data.label, ...extra };
-  if (tool === "kaizen_retro" || tool === "kaizen_alerts_check") return { days: Number(data.days || 7), ...extra };
-  if (tool === "kaizen_cases_create") return { session_id: data.session || data.id, reason: data.reason || "web", label: "manual", ...extra };
-  if (tool === "kaizen_cases_show" || tool === "kaizen_cases_archive") return { id: data.id, ...extra };
-  if (tool.startsWith("kaizen_rules_")) return ruleArgs(tool, data, extra);
-  if (tool.startsWith("kaizen_review_")) return { id: data.id, ...extra };
-  if (tool === "kaizen_exp_new") return { name: data.name, ...extra };
-  if (tool === "kaizen_exp_tag") return { id: data.id, session: data.session, ...extra };
-  if (tool.startsWith("kaizen_exp_")) return { id: data.id, ...extra };
-  if (tool === "kaizen_ingest_hook") return { payload: data.payload, ...extra };
-  return extra;
+  return aliasArgs(btn.dataset.toolSubmit, {
+    ...formArgs(form),
+    ...json(btn.dataset.extra)
+  });
 }
 
-function ruleArgs(tool, data, extra) {
-  if (tool === "kaizen_rules_create") return { name: data.name || "web-rule", filter: data.filter, action: "queue_review", message: "web review", ...extra };
-  if (tool === "kaizen_rules_run") return { dry_run: true, ...extra };
-  if (tool === "kaizen_rules_enable" || tool === "kaizen_rules_disable") return { id: data.id, ...extra };
-  return extra;
+const numberFields = new Set(["days", "duration_days", "limit", "score", "target_pct"]);
+
+function formArgs(form) {
+  const pairs = [...new FormData(form).entries()].map(normalizedPair).filter(hasValue);
+  return checkedArgs(form, Object.fromEntries(pairs));
+}
+
+function normalizedPair([key, value]) {
+  return [key, normalizeValue(key, value)];
+}
+
+function hasValue([, value]) {
+  return value !== undefined;
+}
+
+function normalizeValue(key, value) {
+  const text = `${value}`.trim();
+  if (text === "") return undefined;
+  return numberFields.has(key) ? Number(text) : text;
+}
+
+function checkedArgs(form, args) {
+  $$("input[type=checkbox]", form).forEach(input => setCheckboxArg(args, input));
+  return args;
+}
+
+function setCheckboxArg(args, input) {
+  if (!input.name || !input.checked) delete args[input.name];
+  else args[input.name] = true;
+}
+
+function aliasArgs(tool, args) {
+  if (tool === "kaizen_query") return renameArg(args, "query", "expr");
+  if (tool === "kaizen_annotate_session") return renameArg(args, "id", "session_id");
+  return args;
+}
+
+function renameArg(args, from, to) {
+  if (args[from] === undefined || args[to] !== undefined) return args;
+  const { [from]: value, ...rest } = args;
+  return { ...rest, [to]: value };
 }
 
 function withWorkspace(args) {
@@ -136,6 +162,10 @@ function updateDashboard(tool, output) {
   $("#metric-cost").textContent = value.cost_usd == null ? "-" : `$${Number(value.cost_usd).toFixed(2)}`;
   $("#metric-tokens").textContent = value.stats?.tokens_total?.toLocaleString?.() ?? "-";
   addFeed("summary", "kaizen", "summary refreshed");
+}
+
+function updateToolCount(tools) {
+  $("#metric-tools").textContent = Array.isArray(tools) ? tools.length : "-";
 }
 
 function renderOutput(output) {

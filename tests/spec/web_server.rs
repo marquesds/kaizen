@@ -44,6 +44,12 @@ async fn websocket_auth_and_tool_calls() -> anyhow::Result<()> {
     assert_eq!(msg["type"], "result");
     assert_eq!(msg["output"]["kind"], "text");
 
+    ws.send(Message::Text(call("tui", "kaizen_tui", json!({})).into()))
+        .await?;
+    let msg = recv_json(&mut ws).await?;
+    assert_eq!(msg["type"], "error");
+    assert!(msg["error"].as_str().unwrap_or("").contains("interactive"));
+
     ws.send(Message::Text(
         call(
             "init",
