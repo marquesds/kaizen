@@ -1,13 +1,6 @@
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const state = { ws: null, seq: 0, route: routeName(), connected: false };
-const titles = {
-  dashboard: ["Live metrics", "Realtime session, tool, cost, token, eval, feedback, and review data."],
-  "session-detail": ["Session browser", "Live-tail session metadata, event search, span tree, and feedback."],
-  analysis: ["Analysis workbench", "Retro, metrics, cases, rules, alerts, and review queue controls."],
-  experiments: ["Experiments", "Create, run, tag, report, conclude, and archive local experiments."],
-  settings: ["Settings", "Workspace setup, sync, ingest, and tool capability checks."]
-};
 
 document.addEventListener("DOMContentLoaded", () => {
   bindRoutes();
@@ -140,8 +133,6 @@ function showRoute(route) {
   state.route = route;
   $$(".screen").forEach(screen => screen.hidden = screen.id !== route);
   $$("[data-route]").forEach(a => a.setAttribute("aria-current", a.dataset.route === route ? "page" : "false"));
-  $("#screen-title").textContent = titles[route][0];
-  $("#screen-copy").textContent = titles[route][1];
 }
 
 function outputFor(node) {
