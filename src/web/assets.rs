@@ -11,7 +11,15 @@ mod tests {
 
     #[test]
     fn web_assets_do_not_seed_fixture_values() {
-        let forbidden = ["web-smoke", "tool:bash", "web-rule", "web review", ">40<"];
+        let forbidden = [
+            "web-smoke",
+            "tool:bash",
+            "web-rule",
+            "web review",
+            ">40<",
+            "Capture pipeline",
+            "Transcript tail -> events",
+        ];
         for needle in forbidden {
             assert!(!INDEX.contains(needle), "index contains {needle}");
             assert!(!JS.contains(needle), "js contains {needle}");

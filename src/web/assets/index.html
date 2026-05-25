@@ -20,22 +20,11 @@
       <span id="socket-pill" class="pill warn">connecting</span>
     </header>
     <main class="main">
-      <section class="workbench">
-        <div class="panel stack">
-          <p class="eyebrow">Local daemon websocket</p>
-          <h1 id="screen-title">Live metrics</h1>
-          <p id="screen-copy">Realtime session, tool, cost, token, eval, feedback, and review data.</p>
-        </div>
-        <aside class="panel stack">
-          <h2>Capture pipeline</h2>
-          <div class="tree">
-            <span style="--depth:0">Transcript tail -> events</span>
-            <span style="--depth:1">Hooks -> tool spans</span>
-            <span style="--depth:1">Proxy -> cost</span>
-            <span style="--depth:2">Metrics -> repo facts</span>
-          </div>
-        </aside>
-      </section>
+      <header class="screen-heading">
+        <p class="eyebrow">Local daemon websocket</p>
+        <h1 id="screen-title">Live metrics</h1>
+        <p id="screen-copy">Realtime session, tool, cost, token, eval, feedback, and review data.</p>
+      </header>
 
       <section id="dashboard" class="screen grid">
         <article class="card kpi span-3"><span>Sessions</span><strong id="metric-sessions">-</strong></article>
