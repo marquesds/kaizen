@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Axum router for the local daemon web app.
 
-use super::{assets, tools};
+use super::{assets, features, tools};
 use axum::Router;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Query, State};
@@ -57,6 +57,7 @@ pub fn router(token: String) -> Router {
         .route("/settings", get(index))
         .route("/assets/kaizen.css", get(css))
         .route("/assets/kaizen.js", get(js))
+        .route("/assets/kaizen-render.js", get(render_js))
         .route("/ws", get(ws))
         .with_state(state)
 }
@@ -71,6 +72,13 @@ async fn css() -> impl IntoResponse {
 
 async fn js() -> impl IntoResponse {
     ([(CONTENT_TYPE, "application/javascript")], assets::JS)
+}
+
+async fn render_js() -> impl IntoResponse {
+    (
+        [(CONTENT_TYPE, "application/javascript")],
+        assets::RENDER_JS,
+    )
 }
 
 async fn ws(
@@ -145,6 +153,7 @@ fn status_msg(id: Option<&str>) -> Value {
         "id": id,
         "ts_ms": now_ms(),
         "tools": tools::WEB_TOOL_NAMES,
+        "features": features::all(),
     })
 }
 

@@ -67,6 +67,35 @@ async fn websocket_auth_and_tool_calls() -> anyhow::Result<()> {
             .unwrap_or("")
             .contains("kaizen init complete")
     );
+
+    ws.send(Message::Text(
+        call(
+            "sessions",
+            "kaizen_sessions_list",
+            json!({ "workspace": workspace.to_string_lossy(), "json": true }),
+        )
+        .into(),
+    ))
+    .await?;
+    let msg = recv_json(&mut ws).await?;
+    assert_eq!(msg["type"], "result");
+    assert_eq!(msg["output"]["kind"], "json");
+
+    ws.send(Message::Text(
+        json!({"type":"subscribe","id":"s1"}).to_string().into(),
+    ))
+    .await?;
+    let msg = recv_json(&mut ws).await?;
+    assert_eq!(msg["type"], "status");
+    assert_eq!(msg["features"].as_array().unwrap().len(), 40);
+    assert!(msg["features"].as_array().unwrap().iter().any(|feature| {
+        feature["tool"] == "get_session_span_tree" && feature["label"] == "Show span tree"
+    }));
+    assert!(msg["features"].as_array().unwrap().iter().all(|f| {
+        f["label"]
+            .as_str()
+            .is_some_and(|label| !label.contains("kaizen_"))
+    }));
     Ok(())
 }
 

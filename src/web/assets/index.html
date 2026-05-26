@@ -10,7 +10,7 @@
 <body>
   <div class="shell">
     <header class="topbar">
-      <a class="brand" href="/"><span class="terminal-mark" aria-hidden="true"><span></span></span><span>Kaizen Console</span></a>
+      <a class="brand" href="/dashboard"><span class="terminal-mark" aria-hidden="true"><span></span></span><span>Kaizen Console</span></a>
       <nav class="nav" aria-label="Primary">
         <a href="/dashboard" data-route="dashboard">Live</a>
         <a href="/session-detail" data-route="session-detail">Session</a>
@@ -18,6 +18,8 @@
         <a href="/experiments" data-route="experiments">Experiments</a>
         <a href="/settings" data-route="settings">Settings</a>
       </nav>
+      <label class="workspace-control">Workspace<input id="workspace-input" class="input" name="workspace" placeholder="/path/to/repo"></label>
+      <button id="open-dev" class="btn" type="button">Developer</button>
       <span id="socket-pill" class="pill warn">connecting</span>
     </header>
     <main class="main">
@@ -25,111 +27,73 @@
         <article class="card kpi span-3"><span>Sessions</span><strong id="metric-sessions">-</strong></article>
         <article class="card kpi span-3"><span>Total cost</span><strong id="metric-cost">-</strong></article>
         <article class="card kpi span-3"><span>Tokens</span><strong id="metric-tokens">-</strong></article>
-        <article class="card kpi span-3"><span>Tools</span><strong id="metric-tools">-</strong></article>
-        <article class="card span-8 stack">
-          <div class="row"><h2>Live event stream</h2><button class="btn primary" data-tool="kaizen_summary">Refresh</button></div>
-          <ul id="stream-feed" class="feed" aria-live="polite"></ul>
-        </article>
+        <article class="card kpi span-3"><span>Features</span><strong id="metric-tools">-</strong></article>
+        <form class="card span-8 stack" data-target="sessions-table" data-render="table">
+          <div class="row"><h1>Live sessions</h1><button class="btn primary" type="submit" data-feature="kaizen_sessions_list" data-args='{"json":true,"limit":20}'>Refresh sessions</button></div>
+          <div class="toolbar"><label>Limit<input class="input" name="limit" type="number" min="1" value="20"></label><label class="check"><input name="refresh" type="checkbox"> Rescan transcripts</label></div>
+          <div id="sessions-table" class="table-wrap empty">No sessions loaded.</div>
+        </form>
         <aside class="card span-4 stack">
-          <button class="btn" data-tool="kaizen_sessions_list" data-args='{"json":true,"limit":8}'>Load sessions</button>
-          <button class="btn" data-tool="kaizen_insights">Load insights</button>
-          <button class="btn" data-tool="kaizen_metrics" data-args='{"json":true}'>Load metrics</button>
+          <button class="btn primary" data-feature="kaizen_summary" data-render="summary" data-target="metrics-panel" data-args='{"json":true}'>Refresh summary</button>
+          <button class="btn" data-feature="kaizen_metrics" data-render="metrics" data-target="metrics-panel" data-args='{"json":true}'>Refresh metrics</button>
+          <button class="btn" data-feature="kaizen_insights" data-render="cards" data-target="insights-panel">Refresh insights</button>
+          <div id="metrics-panel" class="result empty">Metrics not loaded.</div>
         </aside>
+        <article class="card span-12 stack"><div class="row"><h2>Live event stream</h2><span class="chip">websocket</span></div><ul id="live-feed" class="feed" aria-live="polite"></ul><div id="insights-panel" class="result"></div></article>
       </section>
 
-      <section id="session-detail" class="screen two-col" hidden>
-        <form class="card stack" data-form="session">
-          <h2>Session browser</h2>
+      <section id="session-detail" class="screen grid" hidden>
+        <form class="card span-4 stack" data-target="session-results" data-render="table">
+          <h1>Find sessions</h1>
+          <label>Search<input class="input" name="query" placeholder="failed tool span"></label>
+          <div class="toolbar"><label>Since<input class="input" name="since" placeholder="7d"></label><label>Agent<input class="input" name="agent" placeholder="codex"></label><label>Kind<input class="input" name="kind" placeholder="tool"></label></div>
+          <button class="btn primary" type="submit" data-feature="mcp/search_sessions" data-required="query">Search sessions</button>
+          <label>Structured query<input class="input" name="expr" placeholder="tool.name = 'bash'"></label>
+          <button class="btn" type="button" data-feature="kaizen_query" data-required="expr" data-render="table" data-target="session-results">Run query</button>
+        </form>
+        <article class="card span-8 stack"><div class="row"><h2>Results</h2><button class="btn" data-feature="kaizen_tui" data-render="live" data-target="session-detail-pane">Open live view</button></div><div id="session-results" class="table-wrap empty">Search results appear here.</div></article>
+        <form class="card span-5 stack" data-target="session-detail-pane" data-render="detail">
+          <h2>Session detail</h2>
           <label>Session id<input class="input" name="id" required></label>
-          <div class="row"><button class="btn primary" data-tool-submit="kaizen_session_show">Show</button><button class="btn" data-tool-submit="get_session_span_tree" data-extra='{"json":true}'>Tree</button></div>
-          <label>Search query<input class="input" name="query"></label>
-          <button class="btn" data-tool-submit="mcp/search_sessions">Search</button>
-          <button class="btn" data-tool-submit="kaizen_query">Structured query</button>
-          <button class="btn" data-tool-submit="kaizen_tui">Live view</button>
+          <div class="row"><button class="btn primary" type="submit" data-feature="kaizen_session_show" data-required="id">Load session</button><button class="btn" type="button" data-feature="get_session_span_tree" data-required="id" data-render="tree" data-target="span-tree" data-args='{"json":true}'>Show span tree</button></div>
           <label>Feedback score<input class="input" name="score" type="number" min="1" max="5"></label>
-          <label>Feedback label<input class="input" name="label"></label>
+          <label>Feedback label<select class="input" name="label"><option value="">No label</option><option>good</option><option>bad</option><option>interesting</option><option>bug</option><option>regression</option></select></label>
           <label>Feedback note<textarea class="input" name="note"></textarea></label>
-          <button class="btn" data-tool-submit="kaizen_annotate_session" data-session="true">Annotate</button>
+          <button class="btn" type="button" data-feature="kaizen_annotate_session" data-required="id" data-alias='{"id":"session_id"}' data-render="toast" data-target="session-detail-pane">Save feedback</button>
         </form>
-        <article class="card stack"><h2>Result</h2><pre id="session-output" class="output"></pre></article>
+        <article class="card span-7 stack"><h2>Trace</h2><div id="span-tree" class="tree empty">Span tree not loaded.</div><div id="session-detail-pane" class="result empty">Session detail appears here.</div></article>
       </section>
 
-      <section id="analysis" class="screen two-col" hidden>
-        <form class="card stack" data-form="analysis">
-          <h2>Analysis workbench</h2>
-          <label>Days<input class="input" name="days" type="number" min="1" placeholder="7"></label>
-          <label>Target id<input class="input" name="id"></label>
-          <label>Session id<input class="input" name="session_id"></label>
-          <label>Case reason<input class="input" name="reason"></label>
-          <label>Case label<input class="input" name="label"></label>
-          <label>Rule name<input class="input" name="name"></label>
-          <label>Rule filter<input class="input" name="filter"></label>
-          <label>Rule action<select class="input" name="action"><option value="">Select action</option><option value="create_case">Create case</option><option value="queue_review">Queue review</option><option value="emit_alert">Emit alert</option></select></label>
-          <label>Rule message<input class="input" name="message"></label>
-          <label class="check"><input type="checkbox" name="dry_run"> Dry run</label>
-          <button class="btn primary" data-tool-submit="kaizen_retro" data-extra='{"json":true}'>Retro</button>
-          <button class="btn" data-tool-submit="kaizen_metrics_index">Index metrics</button>
-          <button class="btn" data-tool-submit="kaizen_cases_mine">Mine cases</button>
-          <button class="btn" data-tool-submit="kaizen_cases_create">Create case</button>
-          <button class="btn" data-tool-submit="kaizen_cases_list">List cases</button>
-          <button class="btn" data-tool-submit="kaizen_cases_show">Show case</button>
-          <button class="btn" data-tool-submit="kaizen_cases_archive">Archive case</button>
-          <button class="btn" data-tool-submit="kaizen_rules_create">Create rule</button>
-          <button class="btn" data-tool-submit="kaizen_rules_list">List rules</button>
-          <button class="btn" data-tool-submit="kaizen_rules_run">Run rules</button>
-          <button class="btn" data-tool-submit="kaizen_rules_enable">Enable rule</button>
-          <button class="btn" data-tool-submit="kaizen_rules_disable">Disable rule</button>
-          <button class="btn" data-tool-submit="kaizen_alerts_check">Alerts</button>
-          <button class="btn" data-tool-submit="kaizen_review_list">Reviews</button>
-          <button class="btn" data-tool-submit="kaizen_review_show">Show review</button>
-          <button class="btn" data-tool-submit="kaizen_review_resolve">Resolve review</button>
-          <button class="btn" data-tool-submit="kaizen_review_dismiss">Dismiss review</button>
-        </form>
-        <article class="card stack"><h2>Output</h2><pre id="analysis-output" class="output"></pre></article>
+      <section id="analysis" class="screen grid" hidden>
+        <form class="card span-4 stack" data-render="cards" data-target="retro-results"><h1>Retro</h1><label>Days<input class="input" name="days" type="number" min="1" value="7"></label><label class="check"><input name="refresh" type="checkbox"> Rescan first</label><label class="check"><input name="dry_run" type="checkbox"> Dry run</label><div class="row"><button class="btn primary" type="submit" data-feature="kaizen_retro" data-args='{"json":true}'>Analyze retro</button><button class="btn" type="button" data-feature="kaizen_metrics_index" data-render="toast" data-target="retro-results">Rebuild index</button></div></form>
+        <article class="card span-8 stack"><div class="row"><h2>Ranked work</h2><button class="btn" data-feature="kaizen_alerts_check" data-render="cards" data-target="retro-results">Check alerts</button></div><div id="retro-results" class="result empty">Retro and alert results appear here.</div></article>
+        <form class="card span-4 stack" data-render="cards" data-target="case-board"><h2>Cases</h2><label>Session id<input class="input" name="session_id"></label><label>Reason<input class="input" name="reason"></label><label>Label<input class="input" name="label"></label><label>Case id<input class="input" name="id"></label><div class="cluster"><button class="btn primary" type="button" data-feature="kaizen_cases_mine">Mine cases</button><button class="btn" type="button" data-feature="kaizen_cases_list" data-render="table">List cases</button><button class="btn" type="button" data-feature="kaizen_cases_create" data-required="session_id,reason">Create case</button><button class="btn" type="button" data-feature="kaizen_cases_show" data-required="id" data-render="detail">Show case</button><button class="btn" type="button" data-feature="kaizen_cases_archive" data-required="id" data-render="toast">Archive case</button></div></form>
+        <form class="card span-4 stack" data-render="cards" data-target="rule-board"><h2>Rules</h2><label>Name<input class="input" name="name"></label><label>Filter<input class="input" name="filter"></label><label>Action<select class="input" name="action"><option value="">Select</option><option value="create_case">Create case</option><option value="queue_review">Queue review</option><option value="emit_alert">Emit alert</option></select></label><label>Message<input class="input" name="message"></label><label>Rule id<input class="input" name="id"></label><label class="check"><input name="dry_run" type="checkbox"> Dry run</label><div class="cluster"><button class="btn primary" type="button" data-feature="kaizen_rules_create" data-required="name,filter,action">Create rule</button><button class="btn" type="button" data-feature="kaizen_rules_list" data-render="table">List rules</button><button class="btn" type="button" data-feature="kaizen_rules_run">Run rules</button><button class="btn" type="button" data-feature="kaizen_rules_enable" data-required="id" data-render="toast">Enable</button><button class="btn" type="button" data-feature="kaizen_rules_disable" data-required="id" data-render="toast">Disable</button></div></form>
+        <form class="card span-4 stack" data-render="table" data-target="review-board"><h2>Reviews</h2><label>Status<input class="input" name="status" placeholder="open"></label><label>Review id<input class="input" name="id"></label><div class="cluster"><button class="btn primary" type="button" data-feature="kaizen_review_list">List reviews</button><button class="btn" type="button" data-feature="kaizen_review_show" data-required="id" data-render="detail">Show review</button><button class="btn" type="button" data-feature="kaizen_review_resolve" data-required="id" data-render="toast">Resolve</button><button class="btn" type="button" data-feature="kaizen_review_dismiss" data-required="id" data-render="toast">Dismiss</button></div></form>
+        <article class="card span-12 stack"><h2>Analysis boards</h2><div class="boards"><div id="case-board" class="result empty">Case activity appears here.</div><div id="rule-board" class="result empty">Rule activity appears here.</div><div id="review-board" class="result empty">Review queue appears here.</div></div></article>
       </section>
 
-      <section id="experiments" class="screen two-col" hidden>
-        <form class="card stack" data-form="experiments">
-          <h2>Experiments</h2>
-          <label>Name<input class="input" name="name"></label>
-          <label>Hypothesis<input class="input" name="hypothesis"></label>
-          <label>Change<input class="input" name="change"></label>
-          <label>Metric<input class="input" name="metric"></label>
-          <label>Bind<select class="input" name="bind"><option value="">Default</option><option value="git">Git</option><option value="manual">Manual</option></select></label>
-          <label>Duration days<input class="input" name="duration_days" type="number" min="1"></label>
-          <label>Target percent<input class="input" name="target_pct" type="number" step="0.1"></label>
-          <label>Experiment id<input class="input" name="id"></label>
-          <label>Session id<input class="input" name="session"></label>
-          <label>Variant<select class="input" name="variant"><option value="">Select variant</option><option value="control">Control</option><option value="treatment">Treatment</option><option value="excluded">Excluded</option></select></label>
-          <button class="btn primary" data-tool-submit="kaizen_exp_new">Create</button>
-          <button class="btn" data-tool-submit="kaizen_exp_list">List</button>
-          <button class="btn" data-tool-submit="kaizen_exp_status">Status</button>
-          <button class="btn" data-tool-submit="kaizen_exp_start">Start</button>
-          <button class="btn" data-tool-submit="kaizen_exp_tag">Tag</button>
-          <button class="btn" data-tool-submit="kaizen_exp_report" data-extra='{"json":true}'>Report</button>
-          <button class="btn" data-tool-submit="kaizen_exp_conclude">Conclude</button>
-          <button class="btn" data-tool-submit="kaizen_exp_archive">Archive</button>
-        </form>
-        <article class="card stack"><h2>Output</h2><pre id="experiments-output" class="output"></pre></article>
+      <section id="experiments" class="screen grid" hidden>
+        <form class="card span-5 stack" data-render="detail" data-target="experiment-board"><h1>Create experiment</h1><label>Name<input class="input" name="name"></label><label>Hypothesis<textarea class="input" name="hypothesis"></textarea></label><label>Change<input class="input" name="change"></label><label>Metric<input class="input" name="metric" placeholder="tokens_per_session"></label><div class="toolbar"><label>Bind<select class="input" name="bind"><option value="git">Git</option><option value="manual">Manual</option></select></label><label>Days<input class="input" name="duration_days" type="number" min="1" value="14"></label><label>Target %<input class="input" name="target_pct" type="number" step="0.1" value="-10"></label></div><button class="btn primary" type="submit" data-feature="kaizen_exp_new" data-required="name,hypothesis,change,metric">Create experiment</button></form>
+        <form class="card span-7 stack" data-render="detail" data-target="experiment-board"><div class="row"><h2>Experiment board</h2><button class="btn primary" type="button" data-feature="kaizen_exp_list" data-render="table">Refresh list</button></div><label>Experiment id<input class="input" name="id"></label><label>Session id<input class="input" name="session"></label><label>Variant<select class="input" name="variant"><option value="">Select</option><option>control</option><option>treatment</option><option>excluded</option></select></label><div class="cluster"><button class="btn" type="button" data-feature="kaizen_exp_status" data-required="id">Show status</button><button class="btn" type="button" data-feature="kaizen_exp_report" data-required="id" data-render="report" data-args='{"json":true}'>Refresh report</button><button class="btn" type="button" data-feature="kaizen_exp_start" data-required="id" data-render="toast">Start</button><button class="btn" type="button" data-feature="kaizen_exp_tag" data-required="id,session,variant" data-render="toast">Tag session</button><button class="btn" type="button" data-feature="kaizen_exp_conclude" data-required="id">Conclude</button><button class="btn danger-btn" type="button" data-feature="kaizen_exp_archive" data-required="id" data-render="toast">Archive</button></div></form>
+        <article class="card span-12 stack"><h2>Experiment output</h2><div id="experiment-board" class="result empty">Experiment activity appears here.</div></article>
       </section>
 
-      <section id="settings" class="screen two-col" hidden>
-        <form class="card stack" data-form="settings">
-          <h2>Settings</h2>
-          <label>Workspace<input class="input" name="workspace" placeholder="/path/to/repo"></label>
-          <label>Hook source<select class="input" name="source"><option value="">Select source</option><option value="cursor">Cursor</option><option value="claude">Claude</option></select></label>
-          <label>Hook payload<textarea name="payload" class="input"></textarea></label>
-          <button class="btn primary" data-tool-submit="kaizen_init">Init</button>
-          <button class="btn" data-tool-submit="kaizen_sync_status">Sync status</button>
-          <button class="btn" data-tool-submit="kaizen_sync_run" data-extra='{"once":true}'>Sync once</button>
-          <button class="btn" data-tool-submit="kaizen_capabilities">Capabilities</button>
-          <button class="btn" data-tool-submit="kaizen_ingest_hook">Ingest hook</button>
-        </form>
-        <article class="card stack"><h2>Output</h2><pre id="settings-output" class="output"></pre></article>
+      <section id="settings" class="screen grid" hidden>
+        <form class="card span-4 stack" data-render="markdown" data-target="runtime-output"><h1>Runtime</h1><button class="btn primary" type="button" data-feature="kaizen_init">Initialize workspace</button><button class="btn" type="button" data-feature="kaizen_capabilities">Show capabilities</button></form>
+        <form class="card span-4 stack" data-render="detail" data-target="runtime-output"><h2>Sync</h2><button class="btn primary" type="button" data-feature="kaizen_sync_status">Check sync status</button><button class="btn" type="button" data-feature="kaizen_sync_run" data-args='{"once":true}' data-render="toast">Run sync once</button></form>
+        <form class="card span-4 stack" data-render="toast" data-target="runtime-output"><h2>Hook ingest</h2><label>Source<select class="input" name="source"><option value="">Select source</option><option value="cursor">Cursor</option><option value="claude">Claude</option></select></label><label>Payload<textarea class="input" name="payload"></textarea></label><button class="btn primary" type="submit" data-feature="kaizen_ingest_hook" data-required="source,payload">Ingest payload</button></form>
+        <article class="card span-12 stack"><h2>Runtime output</h2><div id="runtime-output" class="result empty">Runtime responses appear here.</div></article>
       </section>
     </main>
+    <dialog id="developer-drawer" class="drawer" aria-labelledby="developer-title">
+      <form method="dialog"><div class="row"><h2 id="developer-title">Developer details</h2><button class="btn" value="close">Close</button></div></form>
+      <label>Filter history<input id="dev-filter" class="input" placeholder="summary, error, session"></label>
+      <div id="dev-list" class="dev-list"></div>
+      <pre id="dev-raw" class="output"></pre>
+    </dialog>
     <div id="live-region" class="visually-hidden" aria-live="polite"></div>
   </div>
-  <script src="/assets/kaizen.js"></script>
+  <script type="module" src="/assets/kaizen.js"></script>
 </body>
 </html>

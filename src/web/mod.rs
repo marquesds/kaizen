@@ -2,6 +2,7 @@
 //! Local daemon web app: embedded UI plus WebSocket tool calls.
 
 mod assets;
+pub mod features;
 mod server;
 pub mod tools;
 

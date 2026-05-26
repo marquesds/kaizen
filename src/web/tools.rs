@@ -94,8 +94,16 @@ fn output(result: CallToolResult) -> Result<ToolOutput, String> {
     }
     Ok(match result.structured_content {
         Some(value) => ToolOutput::Json(value),
-        None => ToolOutput::Text(text),
+        None => parsed_json(&text).map_or(ToolOutput::Text(text), ToolOutput::Json),
     })
+}
+
+fn parsed_json(text: &str) -> Option<Value> {
+    let trimmed = text.trim();
+    if !(trimmed.starts_with('{') || trimmed.starts_with('[')) {
+        return None;
+    }
+    serde_json::from_str(trimmed).ok()
 }
 
 fn result_text(result: &CallToolResult) -> String {
