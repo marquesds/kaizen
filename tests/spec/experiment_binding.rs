@@ -16,9 +16,12 @@ enum SpecClass {
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Deserialize)]
 #[serde(tag = "tag")]
 enum SpecFp {
-    ControlFp,
-    TreatmentFp,
-    OtherFp,
+    #[serde(rename = "ControlFp")]
+    Control,
+    #[serde(rename = "TreatmentFp")]
+    Treatment,
+    #[serde(rename = "OtherFp")]
+    Other,
 }
 
 impl From<SpecClass> for Classification {
@@ -78,9 +81,9 @@ fn resolve(
 
 fn classify_prompt(fp: SpecFp) -> Classification {
     match fp {
-        SpecFp::ControlFp => Classification::Control,
-        SpecFp::TreatmentFp => Classification::Treatment,
-        SpecFp::OtherFp => Classification::Excluded,
+        SpecFp::Control => Classification::Control,
+        SpecFp::Treatment => Classification::Treatment,
+        SpecFp::Other => Classification::Excluded,
     }
 }
 
