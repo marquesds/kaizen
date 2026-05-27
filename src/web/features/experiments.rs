@@ -1,0 +1,78 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+use super::{WebFeature, wf};
+
+pub(super) const FEATURES: &[WebFeature] = &[
+    wf(
+        "experiments",
+        "Lifecycle",
+        "Archive experiment",
+        "kaizen_exp_archive",
+        &["id"],
+        true,
+        "toast",
+    ),
+    wf(
+        "experiments",
+        "Lifecycle",
+        "Conclude experiment",
+        "kaizen_exp_conclude",
+        &["id"],
+        true,
+        "detail",
+    ),
+    wf(
+        "experiments",
+        "Overview",
+        "List experiments",
+        "kaizen_exp_list",
+        &[],
+        false,
+        "table",
+    ),
+    wf(
+        "experiments",
+        "Create",
+        "Create experiment",
+        "kaizen_exp_new",
+        &["name", "hypothesis", "change", "metric"],
+        true,
+        "detail",
+    ),
+    wf(
+        "experiments",
+        "Report",
+        "Refresh report",
+        "kaizen_exp_report",
+        &["id"],
+        false,
+        "report",
+    ),
+    wf(
+        "experiments",
+        "Lifecycle",
+        "Start experiment",
+        "kaizen_exp_start",
+        &["id"],
+        true,
+        "toast",
+    ),
+    wf(
+        "experiments",
+        "Overview",
+        "Show experiment",
+        "kaizen_exp_status",
+        &["id"],
+        false,
+        "detail",
+    ),
+    wf(
+        "experiments",
+        "Tagging",
+        "Tag session",
+        "kaizen_exp_tag",
+        &["id", "session", "variant"],
+        true,
+        "toast",
+    ),
+];

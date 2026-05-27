@@ -16,6 +16,8 @@
   (PostHog, Datadog, OTLP) when configured.
 - `mcp` is the stdio MCP server; tools delegate to the same `shell` commands as
   the CLI (see [mcp.md](mcp.md)).
+- `web` is the daemon-served loopback UI. It serves embedded assets and routes
+  authenticated WebSocket tool calls through the same MCP-backed Rust handlers.
 - `bin_kaizen` owns binary-only CLI parsing and dispatch. It keeps the runtime
   entrypoint thin while routing commands to the same `shell`, `mcp`, `daemon`,
   and `ui` surfaces.
@@ -28,7 +30,7 @@
 3. Metrics index scans git + source tree → `repo_snapshots`,
    `file_facts`, `repo_edges`, Ladybug sidecar.
 4. Daemon-backed clients use the local socket; direct mode opens SQLite in-process.
-5. CLI / TUI / retro read shared smart-metric report builder.
+5. CLI / TUI / web / retro read shared smart-metric report builder.
 6. Sync flushes redacted outbox rows by kind:
    `events`, `tool_spans`, `repo_snapshots`.
 

@@ -36,3 +36,4 @@ pub mod store;
 pub mod sync;
 pub mod telemetry;
 pub mod ui;
+pub mod web;

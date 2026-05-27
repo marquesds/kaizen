@@ -7,7 +7,9 @@ Run `kaizen --help` for grouped subcommands (Trust & observe, Operate, Improve, 
 **Daemon mode:** `kaizen init` starts a local daemon for capture and supported
 read/write paths. Use `kaizen daemon status`, `kaizen daemon stop`, or
 `--no-daemon` / `KAIZEN_DAEMON=0` for direct SQLite mode. See
-[daemon.md](daemon.md).
+[daemon.md](daemon.md). Daemon mode also serves the loopback web console printed
+as `web: http://127.0.0.1:<port>/?token=<token>` by `kaizen daemon start --background`
+and `kaizen daemon status`.
 
 **Cache-first reads:** `sessions list`, `summary`, `insights`, `guidance`, `metrics`, `retro`, **`exp report`**, and **`exp power`** read the local workspace database first and avoid transcript scans. Pass **`--refresh`** (`-r`) when that read should rescan external agent transcripts before rendering. Use **`kaizen load`** when you want an explicit backfill of previous sessions without coupling it to a report. Both can take a while on large workspaces; with `--source provider|mixed`, `--refresh` can also refresh remote provider cache. See [config.md](config.md).
 

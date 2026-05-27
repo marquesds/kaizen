@@ -11,7 +11,8 @@ mod worker;
 use crate::core::paths::kaizen_dir;
 use crate::ipc::{
     CaptureStatus, ClientHello, ClientKind, DaemonRequest, DaemonResponse, DaemonStatus,
-    ObservedSession, PROTO_VERSION, ProxyEndpoint, ServerHello, read_frame, write_frame,
+    ObservedSession, PROTO_VERSION, ProxyEndpoint, ServerHello, WebEndpoint, read_frame,
+    write_frame,
 };
 use anyhow::{Context, Result, anyhow};
 use std::path::PathBuf;
@@ -37,6 +38,7 @@ pub struct BackgroundStart {
     pub pid: u32,
     pub paths: RuntimePaths,
     pub already_running: bool,
+    pub web: Option<WebEndpoint>,
 }
 
 #[derive(Debug, Clone)]
@@ -80,6 +82,7 @@ pub fn start_background() -> Result<BackgroundStart> {
             pid: status.pid,
             paths,
             already_running: true,
+            web: status.web,
         });
     }
     std::fs::create_dir_all(&paths.dir)?;
@@ -109,6 +112,7 @@ pub fn start_background() -> Result<BackgroundStart> {
                 pid: status.pid,
                 paths,
                 already_running: false,
+                web: status.web,
             });
         }
         std::thread::sleep(Duration::from_millis(25));
