@@ -235,6 +235,10 @@ pub fn to_markdown(report: &Report) -> String {
             control_branch,
             treatment_branch,
         } => (control_branch.clone(), treatment_branch.clone()),
+        crate::experiment::types::Binding::PromptFingerprint {
+            control_fingerprint,
+            treatment_fingerprint,
+        } => (short(control_fingerprint), short(treatment_fingerprint)),
         crate::experiment::types::Binding::ManualTag { variant_field } => {
             (format!("manual:{}", variant_field), "manual".into())
         }

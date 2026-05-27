@@ -29,6 +29,7 @@ kaizen/
 │   ├── mcp/              # stdio MCP server (see `docs/mcp.md`)
 │   ├── proxy/            # local LLM API forwarder + `EventSource::Proxy` (`docs/llm-proxy.md`)
 │   ├── telemetry/        # optional exporter fan-out
+│   ├── guidance/         # skill/rule scorecards and candidate proposals
 │   ├── metrics/         # repo indexing + smart metric report
 │   ├── shell/           # CLI command implementations
 │   ├── store/            # SQLite facade, schema, query/write modules

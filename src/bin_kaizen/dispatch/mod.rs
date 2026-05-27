@@ -72,13 +72,14 @@ pub(crate) fn run(cli: Cli) -> anyhow::Result<()> {
             source,
         } => trust::insights(workspace, project, all_workspaces, refresh, source),
         Command::Guidance {
+            subcmd,
             days,
             json,
             workspace,
             project,
             refresh,
             source,
-        } => trust::guidance(days, json, workspace, project, refresh, source),
+        } => trust::guidance(subcmd, days, json, workspace, project, refresh, source),
         Command::Metrics {
             subcmd,
             days,

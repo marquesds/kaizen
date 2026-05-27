@@ -224,6 +224,8 @@ struct ExpNewArg {
     treatment_commit: Option<String>,
     control_branch: Option<String>,
     treatment_branch: Option<String>,
+    control_fingerprint: Option<String>,
+    treatment_fingerprint: Option<String>,
 }
 
 fn default_bind() -> String {
@@ -844,6 +846,8 @@ impl KaizenMcp {
             treatment_commit,
             control_branch,
             treatment_branch,
+            control_fingerprint,
+            treatment_fingerprint,
         }): Parameters<ExpNewArg>,
     ) -> Result<CallToolResult, ErrorData> {
         let w = resolve_ws(&ws)?;
@@ -859,6 +863,8 @@ impl KaizenMcp {
             treatment_commit,
             control_branch,
             treatment_branch,
+            control_fingerprint,
+            treatment_fingerprint,
         };
         let t = run_blocking(move || exp::exp_new_text(w.as_deref(), args)).await?;
         ok_str(t)

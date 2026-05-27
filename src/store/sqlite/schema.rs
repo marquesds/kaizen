@@ -317,6 +317,22 @@ pub(super) const MIGRATIONS: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS tool_spans_session_ended_idx ON tool_spans(session_id, ended_at_ms)",
     "CREATE INDEX IF NOT EXISTS tool_span_paths_path_idx ON tool_span_paths(path, span_id)",
     "CREATE INDEX IF NOT EXISTS feedback_session_idx ON session_feedback(session_id)",
+    "CREATE TABLE IF NOT EXISTS guidance_candidates (
+        id TEXT PRIMARY KEY,
+        artifact_kind TEXT NOT NULL CHECK(artifact_kind IN ('skill','rule')),
+        artifact_id TEXT NOT NULL,
+        action_json TEXT NOT NULL,
+        status TEXT NOT NULL CHECK(status IN ('proposed','applied','validated','rejected','archived')),
+        rationale TEXT NOT NULL,
+        evidence_json TEXT NOT NULL,
+        created_at_ms INTEGER NOT NULL,
+        applied_at_ms INTEGER,
+        treatment_fingerprint TEXT,
+        experiment_id TEXT,
+        backup_path TEXT
+    );
+    CREATE INDEX IF NOT EXISTS guidance_candidates_status_idx
+        ON guidance_candidates(status, created_at_ms)",
 ];
 
 pub(super) fn mmap_size_bytes_from_mb(raw: Option<&str>) -> i64 {

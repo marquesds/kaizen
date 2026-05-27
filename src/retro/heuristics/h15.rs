@@ -11,15 +11,22 @@ pub fn run(inputs: &Inputs) -> Vec<Bet> {
         return vec![];
     }
     let low_count = scores.iter().filter(|(_, s)| *s < LOW_THRESHOLD).count();
-    if low_count < MIN_LOW_COUNT && !mean_dropped(scores) {
+    if low_count < MIN_LOW_COUNT && !eval_trend_declined(scores) {
         return vec![];
     }
     vec![make_bet(scores, low_count, inputs.window_end_ms)]
 }
 
-fn mean_dropped(scores: &[(String, f64)]) -> bool {
-    let _ = scores;
-    false
+fn eval_trend_declined(scores: &[(String, f64)]) -> bool {
+    if scores.len() < 6 {
+        return false;
+    }
+    let (early, late) = scores.split_at(scores.len() / 2);
+    mean(early) - mean(late) >= 0.15
+}
+
+fn mean(scores: &[(String, f64)]) -> f64 {
+    scores.iter().map(|(_, score)| score).sum::<f64>() / scores.len() as f64
 }
 
 fn make_bet(scores: &[(String, f64)], low_count: usize, recency_ms: u64) -> Bet {

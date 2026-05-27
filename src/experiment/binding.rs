@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Classify sessions into Control / Treatment / Excluded under a binding.
 //!
-//! Resolution order: manual tag > git ancestry. Branch-binding is a
-//! special case of GitCommit: caller resolves branch tips to commits.
+//! Resolution order: manual tag > binding-specific classifier.
 
 use crate::core::event::SessionRecord;
 use crate::experiment::types::{Binding, Classification};
@@ -37,6 +36,18 @@ pub fn classify(
             control_branch,
             treatment_branch,
         } => classify_git(session, control_branch, treatment_branch, workspace),
+        Binding::PromptFingerprint {
+            control_fingerprint,
+            treatment_fingerprint,
+        } => classify_prompt(session, control_fingerprint, treatment_fingerprint),
+    }
+}
+
+fn classify_prompt(session: &SessionRecord, control: &str, treatment: &str) -> Classification {
+    match session.prompt_fingerprint.as_deref() {
+        Some(fp) if fp == control => Classification::Control,
+        Some(fp) if fp == treatment => Classification::Treatment,
+        _ => Classification::Excluded,
     }
 }
 
@@ -151,6 +162,18 @@ mod tests {
         let tags = ManualTags::new();
         let got = classify(&s, &binding, &tags, Path::new("/no"));
         assert_eq!(got, Classification::Excluded);
+    }
+
+    #[test]
+    fn prompt_fingerprint_classifies_exact_matches() {
+        let mut s = mk("s1", None);
+        s.prompt_fingerprint = Some("fp-b".into());
+        let binding = Binding::PromptFingerprint {
+            control_fingerprint: "fp-a".into(),
+            treatment_fingerprint: "fp-b".into(),
+        };
+        let got = classify(&s, &binding, &ManualTags::new(), Path::new("/no"));
+        assert_eq!(got, Classification::Treatment);
     }
 
     #[test]

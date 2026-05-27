@@ -1,40 +1,47 @@
 use super::*;
 
+#[derive(clap::Args)]
+pub(crate) struct ExpNewCommand {
+    #[arg(long)]
+    pub(crate) name: String,
+    #[arg(long)]
+    pub(crate) hypothesis: String,
+    #[arg(long)]
+    pub(crate) change: String,
+    /// tokens_per_session|cost_per_session|success_rate|tool_loops|duration_minutes|files_per_session
+    #[arg(long)]
+    pub(crate) metric: String,
+    /// git|branch|manual
+    #[arg(long, default_value = "git")]
+    pub(crate) bind: String,
+    #[arg(long, default_value_t = 14)]
+    pub(crate) duration_days: u32,
+    /// target delta pct, e.g. -10.0 for -10%
+    #[arg(long, default_value_t = -10.0, allow_hyphen_values = true)]
+    pub(crate) target_pct: f64,
+    #[arg(long)]
+    pub(crate) control_commit: Option<String>,
+    #[arg(long)]
+    pub(crate) treatment_commit: Option<String>,
+    #[arg(long)]
+    pub(crate) control_branch: Option<String>,
+    #[arg(long)]
+    pub(crate) treatment_branch: Option<String>,
+    #[arg(long)]
+    pub(crate) control_fingerprint: Option<String>,
+    #[arg(long)]
+    pub(crate) treatment_fingerprint: Option<String>,
+    #[arg(long)]
+    pub(crate) workspace: Option<PathBuf>,
+    /// project name shorthand for --workspace (mutually exclusive)
+    #[arg(long, conflicts_with = "workspace")]
+    pub(crate) project: Option<String>,
+}
+
 #[derive(Subcommand)]
 pub(crate) enum ExpCommand {
     /// Create experiment in Draft state (records control/treatment commits).
-    New {
-        #[arg(long)]
-        name: String,
-        #[arg(long)]
-        hypothesis: String,
-        #[arg(long)]
-        change: String,
-        /// tokens_per_session|cost_per_session|success_rate|tool_loops|duration_minutes|files_per_session
-        #[arg(long)]
-        metric: String,
-        /// git|branch|manual
-        #[arg(long, default_value = "git")]
-        bind: String,
-        #[arg(long, default_value_t = 14)]
-        duration_days: u32,
-        /// target delta pct, e.g. -10.0 for -10%
-        #[arg(long, default_value_t = -10.0, allow_hyphen_values = true)]
-        target_pct: f64,
-        #[arg(long)]
-        control_commit: Option<String>,
-        #[arg(long)]
-        treatment_commit: Option<String>,
-        #[arg(long)]
-        control_branch: Option<String>,
-        #[arg(long)]
-        treatment_branch: Option<String>,
-        #[arg(long)]
-        workspace: Option<PathBuf>,
-        /// project name shorthand for --workspace (mutually exclusive)
-        #[arg(long, conflicts_with = "workspace")]
-        project: Option<String>,
-    },
+    New(Box<ExpNewCommand>),
     /// Transition experiment from Draft to Running.
     Start {
         id: String,

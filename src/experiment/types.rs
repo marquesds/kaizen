@@ -33,6 +33,10 @@ pub enum Binding {
         control_branch: String,
         treatment_branch: String,
     },
+    PromptFingerprint {
+        control_fingerprint: String,
+        treatment_fingerprint: String,
+    },
     ManualTag {
         variant_field: String,
     },

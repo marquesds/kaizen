@@ -65,6 +65,61 @@ pub(crate) enum PromptCommand {
 }
 
 #[derive(Subcommand)]
+pub(crate) enum GuidanceCommand {
+    /// Score skill and rule artifacts with stored outcome evidence.
+    Score {
+        #[arg(long, default_value_t = 30)]
+        days: u32,
+        #[arg(long, default_value_t = 30)]
+        min_sessions: u64,
+        #[arg(long)]
+        json: bool,
+        #[command(flatten)]
+        ws: WorkspaceFlags,
+    },
+    /// Propose one candidate change for a skill or rule artifact.
+    Propose {
+        #[arg(long)]
+        artifact: String,
+        #[arg(long, default_value_t = 3)]
+        max_ops: usize,
+        #[arg(long)]
+        llm: bool,
+        #[arg(long)]
+        apply: bool,
+        #[arg(long)]
+        json: bool,
+        #[command(flatten)]
+        ws: WorkspaceFlags,
+    },
+    /// List, show, reject, validate, or archive guidance candidates.
+    Candidates {
+        #[command(subcommand)]
+        subcmd: GuidanceCandidatesCommand,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum GuidanceCandidatesCommand {
+    List {
+        #[arg(long)]
+        json: bool,
+        #[command(flatten)]
+        ws: WorkspaceFlags,
+    },
+    Show {
+        id: String,
+        #[arg(long)]
+        json: bool,
+        #[command(flatten)]
+        ws: WorkspaceFlags,
+    },
+    Reject(IdOnly),
+    Validate(IdOnly),
+    Archive(IdOnly),
+}
+
+#[derive(Subcommand)]
 pub(crate) enum SessionsCommand {
     /// List sessions for current workspace.
     List {

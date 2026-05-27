@@ -8,6 +8,7 @@
 - `store` owns SQLite raw tables, the incremental event projector, and derived
   indexes (`tool_spans`, `file_facts`, `repo_edges`).
 - `metrics` builds commit-pinned repo snapshots and Ladybug sidecar.
+- `guidance` scores skill/rule artifacts and models proposal candidates.
 - `retro` consumes raw telemetry + smart metrics for heuristic bets.
 - `sync` ships redacted events, tool spans, and repo snapshots.
 - `proxy` forwards LLM HTTP traffic and appends `EventSource::Proxy` rows (see
@@ -30,8 +31,10 @@
 3. Metrics index scans git + source tree → `repo_snapshots`,
    `file_facts`, `repo_edges`, Ladybug sidecar.
 4. Daemon-backed clients use the local socket; direct mode opens SQLite in-process.
-5. CLI / TUI / web / retro read shared smart-metric report builder.
-6. Sync flushes redacted outbox rows by kind:
+5. Guidance scorecards join artifact inventory with evals, outcomes, feedback,
+   costs, and prompt fingerprints.
+6. CLI / TUI / web / retro read shared smart-metric report builder.
+7. Sync flushes redacted outbox rows by kind:
    `events`, `tool_spans`, `repo_snapshots`.
 
 ## Store Projector

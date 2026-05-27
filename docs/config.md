@@ -173,3 +173,22 @@ min_cost_usd = 0.01                         # skip sessions cheaper than this
 **API key resolution:** `api_key` is checked first; if empty, `ANTHROPIC_API_KEY` is used. Put the key in `~/.kaizen/config.toml` to keep it out of the repo.
 
 **Merge:** `api_key` — non-empty user value wins. All other fields: user non-default wins, else workspace value.
+
+## `[guidance.proposals]`
+
+Optional LLM edit proposals for `kaizen guidance propose --llm`. Disabled by
+default; deterministic scoring and non-LLM candidates do not read this section.
+
+```toml
+[guidance.proposals]
+enabled  = false
+endpoint = "https://api.anthropic.com"
+api_key  = ""      # falls back to ANTHROPIC_API_KEY
+model    = "claude-haiku-4-5-20251001"
+max_ops  = 3
+redact   = true
+```
+
+Proposal calls receive scorecard evidence and redacted rejected-candidate memory
+for one selected artifact, not raw session transcripts. Direct mutation still
+requires `--apply`.

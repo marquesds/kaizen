@@ -19,6 +19,7 @@ pub mod core_loop;
 pub mod daemon;
 pub mod eval;
 pub mod feedback;
+pub mod guidance;
 pub mod ipc;
 pub mod prompt;
 
