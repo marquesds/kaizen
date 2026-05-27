@@ -26,6 +26,8 @@ pub struct NewArgs {
     pub treatment_commit: Option<String>,
     pub control_branch: Option<String>,
     pub treatment_branch: Option<String>,
+    pub control_fingerprint: Option<String>,
+    pub treatment_fingerprint: Option<String>,
 }
 
 pub fn exp_new_text(workspace: Option<&Path>, args: NewArgs) -> Result<String> {
@@ -96,7 +98,19 @@ fn build_binding(ws: &Path, args: &NewArgs) -> Result<Binding> {
         "manual" => Ok(Binding::ManualTag {
             variant_field: "variant".into(),
         }),
-        other => Err(anyhow!("unsupported bind: {other} (use git|branch|manual)")),
+        "prompt" => Ok(Binding::PromptFingerprint {
+            control_fingerprint: args
+                .control_fingerprint
+                .clone()
+                .ok_or_else(|| anyhow!("--control-fingerprint required for --bind prompt"))?,
+            treatment_fingerprint: args
+                .treatment_fingerprint
+                .clone()
+                .ok_or_else(|| anyhow!("--treatment-fingerprint required for --bind prompt"))?,
+        }),
+        other => Err(anyhow!(
+            "unsupported bind: {other} (use git|branch|manual|prompt)"
+        )),
     }
 }
 
@@ -196,6 +210,16 @@ pub fn exp_status_text(workspace: Option<&Path>, id: &str) -> Result<String> {
             writeln!(
                 &mut out,
                 "binding:    branch control={control_branch} treatment={treatment_branch}"
+            )
+            .unwrap();
+        }
+        Binding::PromptFingerprint {
+            control_fingerprint,
+            treatment_fingerprint,
+        } => {
+            writeln!(
+                &mut out,
+                "binding:    prompt control={control_fingerprint} treatment={treatment_fingerprint}"
             )
             .unwrap();
         }

@@ -10,6 +10,8 @@ pub mod feedback;
 pub mod fmt;
 pub mod gc;
 pub mod guidance;
+pub mod guidance_candidates;
+pub mod guidance_science;
 pub mod ingest;
 pub mod init;
 pub mod insights;

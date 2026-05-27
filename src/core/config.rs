@@ -531,6 +531,51 @@ fn default_eval_min_cost() -> f64 {
     0.01
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GuidanceProposalConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "default_guidance_endpoint")]
+    pub endpoint: String,
+    #[serde(default)]
+    pub api_key: String,
+    #[serde(default = "default_guidance_model")]
+    pub model: String,
+    #[serde(default = "default_guidance_max_ops")]
+    pub max_ops: usize,
+    #[serde(default = "default_true")]
+    pub redact: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct GuidanceConfig {
+    #[serde(default)]
+    pub proposals: GuidanceProposalConfig,
+}
+
+impl Default for GuidanceProposalConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            endpoint: default_guidance_endpoint(),
+            api_key: String::new(),
+            model: default_guidance_model(),
+            max_ops: default_guidance_max_ops(),
+            redact: true,
+        }
+    }
+}
+
+fn default_guidance_endpoint() -> String {
+    default_eval_endpoint()
+}
+fn default_guidance_model() -> String {
+    default_eval_model()
+}
+fn default_guidance_max_ops() -> usize {
+    3
+}
+
 /// Opt-in post-hook outcome measurement (Tier C).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CollectOutcomesConfig {
@@ -619,6 +664,8 @@ pub struct Config {
     #[serde(default)]
     pub eval: EvalConfig,
     #[serde(default)]
+    pub guidance: GuidanceConfig,
+    #[serde(default)]
     pub collect: CollectConfig,
 }
 
@@ -655,8 +702,46 @@ fn merge(base: Config, user: Config) -> Config {
         telemetry: merge_telemetry(base.telemetry, user.telemetry),
         proxy: merge_proxy(base.proxy, user.proxy),
         eval: merge_eval(base.eval, user.eval),
+        guidance: merge_guidance(base.guidance, user.guidance),
         collect: merge_collect(base.collect, user.collect),
     }
+}
+
+fn merge_guidance(base: GuidanceConfig, user: GuidanceConfig) -> GuidanceConfig {
+    GuidanceConfig {
+        proposals: merge_guidance_proposals(base.proposals, user.proposals),
+    }
+}
+
+fn merge_guidance_proposals(
+    base: GuidanceProposalConfig,
+    user: GuidanceProposalConfig,
+) -> GuidanceProposalConfig {
+    let def = GuidanceProposalConfig::default();
+    GuidanceProposalConfig {
+        enabled: pick_bool(user.enabled, base.enabled, def.enabled),
+        endpoint: pick_string(user.endpoint, base.endpoint, def.endpoint),
+        api_key: if user.api_key.is_empty() {
+            base.api_key
+        } else {
+            user.api_key
+        },
+        model: pick_string(user.model, base.model, def.model),
+        max_ops: if user.max_ops != def.max_ops {
+            user.max_ops
+        } else {
+            base.max_ops
+        },
+        redact: pick_bool(user.redact, base.redact, def.redact),
+    }
+}
+
+fn pick_bool(user: bool, base: bool, def: bool) -> bool {
+    if user != def { user } else { base }
+}
+
+fn pick_string(user: String, base: String, def: String) -> String {
+    if user != def { user } else { base }
 }
 
 fn merge_collect(base: CollectConfig, user: CollectConfig) -> CollectConfig {

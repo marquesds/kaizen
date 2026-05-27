@@ -5,36 +5,25 @@ use std::path::PathBuf;
 pub(super) fn exp(cmd: ExpCommand) -> anyhow::Result<()> {
     use kaizen::shell::exp;
     match cmd {
-        ExpCommand::New {
-            name,
-            hypothesis,
-            change,
-            metric,
-            bind,
-            duration_days,
-            target_pct,
-            control_commit,
-            treatment_commit,
-            control_branch,
-            treatment_branch,
-            workspace,
-            project,
-        } => {
-            let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+        ExpCommand::New(args) => {
+            let args = *args;
+            let ws = resolve_ws(args.workspace.as_deref(), args.project.as_deref())?;
             exp::cmd_new(
                 ws.as_deref(),
                 exp::NewArgs {
-                    name,
-                    hypothesis,
-                    change,
-                    metric,
-                    bind,
-                    duration_days,
-                    target_pct,
-                    control_commit,
-                    treatment_commit,
-                    control_branch,
-                    treatment_branch,
+                    name: args.name,
+                    hypothesis: args.hypothesis,
+                    change: args.change,
+                    metric: args.metric,
+                    bind: args.bind,
+                    duration_days: args.duration_days,
+                    target_pct: args.target_pct,
+                    control_commit: args.control_commit,
+                    treatment_commit: args.treatment_commit,
+                    control_branch: args.control_branch,
+                    treatment_branch: args.treatment_branch,
+                    control_fingerprint: args.control_fingerprint,
+                    treatment_fingerprint: args.treatment_fingerprint,
                 },
             )
         }

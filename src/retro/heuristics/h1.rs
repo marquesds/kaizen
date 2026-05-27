@@ -36,7 +36,10 @@ pub fn run(inputs: &Inputs) -> Vec<Bet> {
                 "On-disk size ~{} bytes; not in recent `skills_used` index.",
                 sf.size_bytes
             )],
-            apply_step: format!("rm -rf .cursor/skills/{}", sf.slug),
+            apply_step: format!(
+                "Run `kaizen guidance propose --artifact skill:{} --apply` to back up, remove, and validate.",
+                sf.slug
+            ),
             evidence_recency_ms: sf.mtime_ms,
         confidence: None,
         category: None,
@@ -65,7 +68,10 @@ pub fn run(inputs: &Inputs) -> Vec<Bet> {
                 "On-disk size ~{} bytes; not in recent `rules_used` index.",
                 rf.size_bytes
             )],
-            apply_step: format!("rm .cursor/rules/{}.mdc", rf.slug),
+            apply_step: format!(
+                "Run `kaizen guidance propose --artifact rule:{} --apply` to back up, remove, and validate.",
+                rf.slug
+            ),
             evidence_recency_ms: rf.mtime_ms,
         confidence: None,
         category: None,

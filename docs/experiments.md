@@ -41,6 +41,7 @@ pub enum Metric {
 pub enum Binding {
     GitCommit  { control_commit: String, treatment_commit: String },
     Branch     { control_branch: String, treatment_branch: String },
+    PromptFingerprint { control_fingerprint: String, treatment_fingerprint: String },
     ManualTag  { variant_field: String }, // event payload key holding 'A'|'B'
 }
 
@@ -66,6 +67,10 @@ Resolution order, per session:
 
 Branch binding is a special case of GitCommit where control/treatment
 commits = tip of each branch at evaluation time.
+
+Prompt binding classifies a session by the `prompt_fingerprint` captured at
+session start. It is intended for validating guidance candidates that change
+`.cursor/skills/*/SKILL.md` or `.cursor/rules/*.mdc`.
 
 ## Statistics
 
@@ -132,6 +137,11 @@ kaizen exp new --bind branch \
   --control-branch main \
   --treatment-branch feat/new-skill \
   --metric cost_per_session --target -15%
+
+kaizen exp new --bind prompt \
+  --control-fingerprint <fp_before> \
+  --treatment-fingerprint <fp_after> \
+  --metric cost_per_session --target -10%
 ```
 
 ## Worked Example 1 — Add a Skill

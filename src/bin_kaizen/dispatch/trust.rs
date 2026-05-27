@@ -66,6 +66,7 @@ pub(super) fn insights(
 }
 
 pub(super) fn guidance(
+    subcmd: Option<GuidanceCommand>,
     days: u32,
     json: bool,
     workspace: Option<PathBuf>,
@@ -74,7 +75,107 @@ pub(super) fn guidance(
     source: DataSource,
 ) -> anyhow::Result<()> {
     let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+    if let Some(cmd) = subcmd {
+        return guidance_subcmd(ws, cmd);
+    }
     kaizen::shell::guidance::cmd_guidance(ws.as_deref(), days, json, refresh, source)
+}
+
+fn guidance_subcmd(ws: Option<PathBuf>, cmd: GuidanceCommand) -> anyhow::Result<()> {
+    match cmd {
+        GuidanceCommand::Score {
+            days,
+            min_sessions,
+            json,
+            ws: f,
+        } => {
+            let ws = resolve_ws(
+                f.workspace.as_deref().or(ws.as_deref()),
+                f.project.as_deref(),
+            )?;
+            kaizen::shell::guidance_science::cmd_score(ws.as_deref(), days, min_sessions, json)
+        }
+        GuidanceCommand::Propose {
+            artifact,
+            max_ops,
+            llm,
+            apply,
+            json,
+            ws: f,
+        } => {
+            let ws = resolve_ws(
+                f.workspace.as_deref().or(ws.as_deref()),
+                f.project.as_deref(),
+            )?;
+            kaizen::shell::guidance_science::cmd_propose(
+                ws.as_deref(),
+                &artifact,
+                max_ops,
+                llm,
+                apply,
+                json,
+            )
+        }
+        GuidanceCommand::Candidates { subcmd } => guidance_candidates(ws, subcmd),
+    }
+}
+
+fn guidance_candidates(
+    parent_ws: Option<PathBuf>,
+    cmd: GuidanceCandidatesCommand,
+) -> anyhow::Result<()> {
+    use kaizen::guidance::CandidateStatus;
+    use kaizen::shell::guidance_candidates::CandidateOp;
+    match cmd {
+        GuidanceCandidatesCommand::List { json, ws } => {
+            let ws = resolve_ws(
+                ws.workspace.as_deref().or(parent_ws.as_deref()),
+                ws.project.as_deref(),
+            )?;
+            kaizen::shell::guidance_candidates::cmd(ws.as_deref(), CandidateOp::List { json })
+        }
+        GuidanceCandidatesCommand::Show { id, json, ws } => {
+            let ws = resolve_ws(
+                ws.workspace.as_deref().or(parent_ws.as_deref()),
+                ws.project.as_deref(),
+            )?;
+            kaizen::shell::guidance_candidates::cmd(ws.as_deref(), CandidateOp::Show { id, json })
+        }
+        GuidanceCandidatesCommand::Reject(a) => {
+            candidate_set(parent_ws, a, CandidateStatus::Rejected)
+        }
+        GuidanceCandidatesCommand::Validate(a) => candidate_validate(parent_ws, a),
+        GuidanceCandidatesCommand::Archive(a) => {
+            candidate_set(parent_ws, a, CandidateStatus::Archived)
+        }
+    }
+}
+
+fn candidate_set(
+    parent_ws: Option<PathBuf>,
+    args: IdOnly,
+    status: kaizen::guidance::CandidateStatus,
+) -> anyhow::Result<()> {
+    let ws = resolve_ws(
+        args.ws.workspace.as_deref().or(parent_ws.as_deref()),
+        args.ws.project.as_deref(),
+    )?;
+    let op = kaizen::shell::guidance_candidates::CandidateOp::Set {
+        id: args.id,
+        status,
+    };
+    kaizen::shell::guidance_candidates::cmd(ws.as_deref(), op)
+}
+
+fn candidate_validate(parent_ws: Option<PathBuf>, args: IdOnly) -> anyhow::Result<()> {
+    let ws = resolve_ws(
+        args.ws.workspace.as_deref().or(parent_ws.as_deref()),
+        args.ws.project.as_deref(),
+    )?;
+    kaizen::shell::guidance_candidates::cmd(
+        ws.as_deref(),
+        kaizen::shell::guidance_candidates::CandidateOp::Validate { id: args.id },
+    )
 }
 
 pub(super) fn observe(

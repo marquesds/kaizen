@@ -229,7 +229,26 @@ kaizen guidance
 kaizen guidance --days 14
 kaizen guidance --json
 kaizen guidance --refresh
+kaizen guidance score --days 30 --min-sessions 30
+kaizen guidance propose --artifact skill:tdd
+kaizen guidance propose --artifact rule:style --apply
+kaizen guidance candidates list
+kaizen guidance candidates validate <candidate_id>
 ```
+
+`guidance score` adds deterministic evaluation from stored outcomes: eval rows,
+human feedback, test/lint outcomes, cost, tokens, and repeated tool-call loops.
+Rows include a deterministic 70/30 train/held-out validation split, validation
+gate, and generalization gap. Rows are marked `stale`, `insufficient_evidence`,
+or `current`. `guidance propose` creates a candidate for one artifact; `--apply`
+backs the file up under
+`.kaizen/backup/guidance/<candidate_id>/`, mutates only that artifact, captures a
+new prompt snapshot, and creates a prompt-bound experiment when possible.
+Rejected candidates are remembered per artifact, so later proposals can avoid
+repeating harmful edits.
+`guidance candidates validate` reads that experiment: proven improvement marks
+the candidate `validated`, proven miss or guardrail regression marks it
+`rejected`, and missing arm/evidence leaves it `applied`.
 
 ## `kaizen metrics`
 
@@ -361,6 +380,7 @@ kaizen exp new --name add-skill \
   --metric tokens_per_session \
   --bind git --duration-days 14 --target-pct -10
   # --bind branch --control-branch main --treatment-branch feat/x
+  # --bind prompt --control-fingerprint <fp> --treatment-fingerprint <fp>
 
 kaizen exp start <id>           # Draft → Running
 kaizen exp list

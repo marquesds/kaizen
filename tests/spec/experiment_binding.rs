@@ -13,6 +13,17 @@ enum SpecClass {
     Excluded,
 }
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Deserialize)]
+#[serde(tag = "tag")]
+enum SpecFp {
+    #[serde(rename = "ControlFp")]
+    Control,
+    #[serde(rename = "TreatmentFp")]
+    Treatment,
+    #[serde(rename = "OtherFp")]
+    Other,
+}
+
 impl From<SpecClass> for Classification {
     fn from(s: SpecClass) -> Self {
         match s {
@@ -29,6 +40,7 @@ impl From<SpecClass> for Classification {
 struct BindingState {
     manual_tag: SpecClass,
     git_class: SpecClass,
+    prompt_class: SpecClass,
     conflict: bool,
 }
 
@@ -38,6 +50,7 @@ struct BindingState {
 struct BindingDriver {
     manual_tag: Classification,
     git_class: Classification,
+    prompt_class: Classification,
     conflict: bool,
 }
 
@@ -46,32 +59,48 @@ impl Default for BindingDriver {
         Self {
             manual_tag: Classification::Excluded,
             git_class: Classification::Excluded,
+            prompt_class: Classification::Excluded,
             conflict: false,
         }
     }
 }
 
-fn resolve(manual: &Classification, git: &Classification) -> Classification {
+fn resolve(
+    manual: &Classification,
+    prompt: &Classification,
+    git: &Classification,
+) -> Classification {
     if *manual != Classification::Excluded {
         manual.clone()
+    } else if *prompt != Classification::Excluded {
+        prompt.clone()
     } else {
         git.clone()
+    }
+}
+
+fn classify_prompt(fp: SpecFp) -> Classification {
+    match fp {
+        SpecFp::Control => Classification::Control,
+        SpecFp::Treatment => Classification::Treatment,
+        SpecFp::Other => Classification::Excluded,
+    }
+}
+
+fn spec_class(c: &Classification) -> SpecClass {
+    match c {
+        Classification::Control => SpecClass::Control,
+        Classification::Treatment => SpecClass::Treatment,
+        Classification::Excluded => SpecClass::Excluded,
     }
 }
 
 impl State<BindingDriver> for BindingState {
     fn from_driver(d: &BindingDriver) -> Result<Self> {
         Ok(BindingState {
-            manual_tag: match d.manual_tag {
-                Classification::Control => SpecClass::Control,
-                Classification::Treatment => SpecClass::Treatment,
-                Classification::Excluded => SpecClass::Excluded,
-            },
-            git_class: match d.git_class {
-                Classification::Control => SpecClass::Control,
-                Classification::Treatment => SpecClass::Treatment,
-                Classification::Excluded => SpecClass::Excluded,
-            },
+            manual_tag: spec_class(&d.manual_tag),
+            git_class: spec_class(&d.git_class),
+            prompt_class: spec_class(&d.prompt_class),
             conflict: d.conflict,
         })
     }
@@ -85,15 +114,20 @@ impl Driver for BindingDriver {
             init => {
                 self.manual_tag = Classification::Excluded;
                 self.git_class  = Classification::Excluded;
+                self.prompt_class = Classification::Excluded;
                 self.conflict   = false;
             },
             step => {
                 self.manual_tag = Classification::Excluded;
                 self.git_class  = Classification::Excluded;
+                self.prompt_class = Classification::Excluded;
                 self.conflict   = false;
             },
             classify_via_git(g: SpecClass) => {
                 self.git_class = g.into();
+            },
+            classify_via_prompt(fp: SpecFp) => {
+                self.prompt_class = classify_prompt(fp);
             },
             apply_manual_tag(v: SpecClass) => {
                 let incoming: Classification = v.into();
@@ -116,7 +150,7 @@ fn manual_beats_git() {
         ..Default::default()
     };
     assert_eq!(
-        resolve(&d.manual_tag, &d.git_class),
+        resolve(&d.manual_tag, &d.prompt_class, &d.git_class),
         Classification::Control
     );
 }
@@ -129,8 +163,21 @@ fn git_used_without_manual() {
         ..Default::default()
     };
     assert_eq!(
-        resolve(&d.manual_tag, &d.git_class),
+        resolve(&d.manual_tag, &d.prompt_class, &d.git_class),
         Classification::Treatment
+    );
+}
+
+#[test]
+fn prompt_exact_match_beats_git_without_manual() {
+    let d = BindingDriver {
+        prompt_class: Classification::Control,
+        git_class: Classification::Treatment,
+        ..Default::default()
+    };
+    assert_eq!(
+        resolve(&d.manual_tag, &d.prompt_class, &d.git_class),
+        Classification::Control
     );
 }
 

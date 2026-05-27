@@ -189,6 +189,8 @@ pub(crate) enum Command {
     /// Skill and Cursor rule adoption from observed path refs in payloads (not silent injection).
     #[command(next_help_heading = "Trust & observe")]
     Guidance {
+        #[command(subcommand)]
+        subcmd: Option<GuidanceCommand>,
         /// Trailing window in days (default 7).
         #[arg(long, default_value_t = 7)]
         days: u32,

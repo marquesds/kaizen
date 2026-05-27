@@ -133,17 +133,17 @@ fn maybe_bet(
         id: format!("H16:{short_worse}|{short_better}"),
         heuristic_id: "H16".into(),
         title: format!(
-            "Prompt {short_worse} underperforms {short_better} — {metric} diff {delta:.0}%"
+            "Prompt {short_worse} is associated with worse {metric} than {short_better}"
         ),
         hypothesis: format!(
-            "Prompt {short_worse} has worse {metric} ({delta:.1}%) vs {short_better} over {} sessions.",
+            "Prompt {short_worse} is associated with {delta:.1}% worse {metric} vs {short_better} over {} sessions; run a prompt-bound experiment before treating this as causal.",
             worse.sessions.len()
         ),
         expected_tokens_saved_per_week: worse.sessions.len() as f64 * TOKENS_SAVED_PER_SESSION,
         effort_minutes: 20,
         evidence: worse.sessions.iter().take(5).cloned().collect(),
         apply_step: format!(
-            "Run `kaizen prompt diff {short_worse} {short_better}` to inspect changes."
+            "Run `kaizen prompt diff {short_worse} {short_better}`, then `kaizen exp new --bind prompt` to validate."
         ),
         evidence_recency_ms: recency_ms,
         confidence: None,

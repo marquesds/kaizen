@@ -267,6 +267,7 @@ mod events;
 mod experiment_windows;
 mod feedback;
 mod guidance;
+mod guidance_candidates;
 mod maintenance;
 mod metrics;
 mod outcomes;

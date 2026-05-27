@@ -36,7 +36,7 @@ constructors stay simple.
 
 | ID | Name | Signal | Bet | Confidence | Category |
 |---|---|---|---|---|---|
-| H1 | Dead Skill / Rule | On-disk skill or `.mdc` rule unused in 30d lookback and not edited recently | Remove or merge unused rule/skill | High | QuickWin |
+| H1 | Dead Skill / Rule | On-disk skill or `.mdc` rule unused in 30d lookback and not edited recently | Propose validated removal through `kaizen guidance` | High | QuickWin |
 | H2 | Hot File Cluster | Pair of files co-edited in at least 3 sessions across top-level paths | Refactor hidden coupling | Medium | Investigation |
 | H3 | Path churn | Same path touched by at least 4 tool calls in one session | Tighten guardrails for path | Medium | Investigation |
 | H4 | Dominant tool | One tool is at least 25% of events and has at least 15 calls | Review read/search shortcuts | Low | Hygiene |
@@ -50,8 +50,8 @@ constructors stay simple.
 | H12 | Large file reads | Repeated reads of large indexed files | Split file or improve read hygiene | High | Investigation |
 | H13 | Delegation load | High MCP call share or frequent subagent sessions | Reduce chatter or fan-out | Low | Hygiene |
 | H14 | Instruction bloat | Many skill/rule files or large combined bytes | Consolidate rules/skills | Medium | Investigation |
-| H15 | Low eval scores | Multiple low LLM-as-judge scores | Review low-scoring sessions | Low | Hygiene |
-| H16 | Prompt variant underperforms | Fingerprint group has worse cost or error rate | Diff prompt variants | Low | Hygiene |
+| H15 | Low eval scores | Multiple low LLM-as-judge scores or score trend drop | Review low-scoring sessions | Low | Hygiene |
+| H16 | Prompt variant association | Fingerprint group is associated with worse cost or error rate | Diff variants, then validate with prompt binding | Low | Hygiene |
 | H17 | Human feedback struggles | Bad/regression feedback or low mean score | Review flagged sessions | Low | Hygiene |
 | H18 | Deep span tree | Tool span depth or fan-out crosses threshold | Flatten tool chain | Low | Hygiene |
 | H19 | Context pressure | Sessions use at least 80% of context window | Split sessions or prune instructions | High | Investigation |
@@ -141,7 +141,7 @@ Span: 2026-04-15 → 2026-04-22 · Sessions: 47 · Cost: $42.10
 - Hypothesis: The skill is on disk but has not fired in the lookback window.
 - Evidence: 0 invocations in 30 days · last edit 78 days ago
 - Saves ~56000 tokens/week (est.) · Confidence: High
-- Effort: 5 min · Apply: rm -rf .cursor/skills/cursor-guide
+- Effort: 5 min · Apply: kaizen guidance propose --artifact skill:cursor-guide --apply
 
 ## Raw Stats
 

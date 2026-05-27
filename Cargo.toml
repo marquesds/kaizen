@@ -116,6 +116,18 @@ name = "guidance_cmd"
 path = "tests/spec/guidance_cmd.rs"
 
 [[test]]
+name = "guidance_score"
+path = "tests/spec/guidance_score.rs"
+
+[[test]]
+name = "guidance_proposal_llm"
+path = "tests/spec/guidance_proposal_llm.rs"
+
+[[test]]
+name = "guidance_score_validation"
+path = "tests/spec/guidance_score_validation.rs"
+
+[[test]]
 name = "init_setup"
 path = "tests/spec/init_setup.rs"
 
@@ -210,6 +222,10 @@ path = "tests/spec/read_report_perf.rs"
 [[test]]
 name = "h33_automation"
 path = "tests/spec/h33_automation.rs"
+
+[[test]]
+name = "guidance_candidate"
+path = "tests/spec/guidance_candidate.rs"
 
 [[test]]
 name = "experiment_binding"

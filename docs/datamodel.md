@@ -49,12 +49,18 @@
   (`create_case`, `queue_review`, `emit_alert`).
 - `review_items` / `alert_events`
   local queues produced by rules and built-in alert checks.
+- `guidance_candidates`
+  proposed skill/rule edits with artifact id, action JSON, lifecycle status,
+  evidence, backup path, treatment prompt fingerprint, and optional experiment id.
 
 ## Invariants
 
 - Raw `events` append-only. Derived tables can rebuild from them.
 - Rule actions are idempotent by `source_key`; rerunning a rule does not create
   duplicate cases, reviews, or alerts for the same hit.
+- Guidance candidates move through `proposed`, `applied`, `validated`,
+  `rejected`, or `archived`; `--apply` records a backup path before mutation.
+  Validation is evidence-gated by the candidate's prompt-bound experiment.
 - During tiered migration, `Event` remains the source of truth across SQLite,
   the hot log, and Parquet writers.
 - Incremental projector owns hot derived writes for `tool_spans`, `files_touched`,
@@ -87,5 +93,6 @@
 - `sessions 1:N tool_spans`
 - `sessions 1:N trace_spans`
 - `sessions 1:1 session_repo_binding`
+- `prompt_snapshots 1:N guidance_candidates` through `treatment_fingerprint`
 - `repo_snapshots 1:N file_facts`
 - `repo_snapshots 1:N repo_edges`
