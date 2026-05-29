@@ -8,6 +8,7 @@ const LONG_ABOUT: &str = "Deploy and share kaizen: real-time-tailable agent sess
 
 mod experiment;
 mod improve;
+mod interchange;
 mod operate;
 mod shared;
 mod telemetry;
@@ -15,6 +16,7 @@ mod trust;
 
 pub(crate) use experiment::*;
 pub(crate) use improve::*;
+pub(crate) use interchange::*;
 pub(crate) use operate::*;
 pub(crate) use shared::*;
 pub(crate) use telemetry::*;
@@ -267,6 +269,24 @@ pub(crate) enum Command {
     Telemetry {
         #[command(subcommand)]
         subcmd: TelemetrySubcommand,
+    },
+    /// Export local telemetry into interchange formats.
+    #[command(next_help_heading = "Integrations")]
+    Export {
+        #[command(subcommand)]
+        subcmd: ExportCommand,
+    },
+    /// Import local telemetry from interchange formats.
+    #[command(next_help_heading = "Integrations")]
+    Import {
+        #[command(subcommand)]
+        subcmd: ImportCommand,
+    },
+    /// Verify local audit invariants.
+    #[command(next_help_heading = "Integrations")]
+    Verify {
+        #[command(subcommand)]
+        subcmd: VerifyCommand,
     },
     /// Experiment binding + report.
     #[command(next_help_heading = "Improve")]

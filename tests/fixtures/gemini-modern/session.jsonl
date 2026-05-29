@@ -1,0 +1,5 @@
+{"type":"session","session_id":"gemini-modern-1","cwd":"/tmp/kaizen-modern","model":"gemini-2.5-pro","timestamp":"2026-05-29T10:00:00Z"}
+{"note":"text-only"}
+{bad json
+{"timestamp_ms":1780000000100,"message":{"content":[{"type":"tool_use","id":"g-call-1","name":"read_file","input":{"path":"src/main.rs"}}]},"usageMetadata":{"promptTokenCount":120,"candidatesTokenCount":40,"thoughtsTokenCount":7}}
+{"timestamp_ms":1780000000200,"message":{"content":[{"type":"tool_result","tool_use_id":"g-call-1","content":"ok"}]}}

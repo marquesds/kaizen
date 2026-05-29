@@ -288,4 +288,22 @@ pub(crate) enum MetricsCommand {
         #[arg(long)]
         json: bool,
     },
+    /// Materialized session aggregate maintenance.
+    Aggregates {
+        #[command(subcommand)]
+        subcmd: MetricsAggregatesCommand,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum MetricsAggregatesCommand {
+    /// Rebuild materialized session aggregates.
+    Rebuild {
+        /// workspace root (default: cwd)
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        /// project name shorthand for --workspace (mutually exclusive)
+        #[arg(long, conflicts_with = "workspace")]
+        project: Option<String>,
+    },
 }

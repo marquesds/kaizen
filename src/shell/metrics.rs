@@ -120,14 +120,17 @@ pub fn cmd_metrics_quality(workspace: Option<&Path>, days: u32, json: bool) -> R
 
 fn format_quality(report: &crate::metrics::quality::CaptureQualityReport) -> String {
     format!(
-        "Capture quality\n  events: {}\n  proxy_events: {}\n  trace_spans: {}\n  token_coverage: {}%\n  latency_coverage: {}%\n  context_coverage: {}%\n  proxy_correlation: {}%\n  orphan_spans: {}\n",
+        "Capture quality\n  events: {}\n  proxy_events: {}\n  trace_spans: {}\n  token_coverage: {}%\n  cost_coverage: {}%\n  latency_coverage: {}%\n  context_coverage: {}%\n  proxy_correlation: {}%\n  cache_read_tokens: {}\n  cache_creation_tokens: {}\n  orphan_spans: {}\n",
         report.events_total,
         report.proxy_events,
         report.trace_spans_total,
         report.token_coverage_pct,
+        report.cost_coverage_pct,
         report.latency_coverage_pct,
         report.context_coverage_pct,
         report.proxy_correlation_pct,
+        report.cache_read_tokens,
+        report.cache_creation_tokens,
         report.orphan_span_count,
     )
 }

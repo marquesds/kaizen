@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use futures_util::{SinkExt, StreamExt};
+use kaizen::core::event::{SessionRecord, SessionStatus};
+use kaizen::store::Store;
 use serde_json::{Value, json};
 use tokio::net::TcpListener;
 use tokio_tungstenite::connect_async;
@@ -13,6 +15,7 @@ async fn websocket_auth_and_tool_calls() -> anyhow::Result<()> {
     let workspace = tmp.path().join("repo");
     std::fs::create_dir_all(&home)?;
     std::fs::create_dir_all(&workspace)?;
+    let workspace = std::fs::canonicalize(workspace)?;
     unsafe {
         std::env::set_var("HOME", &home);
         std::env::set_var("KAIZEN_HOME", home.join(".kaizen"));
@@ -81,6 +84,28 @@ async fn websocket_auth_and_tool_calls() -> anyhow::Result<()> {
     assert_eq!(msg["type"], "result");
     assert_eq!(msg["output"]["kind"], "json");
 
+    let store = Store::open(&kaizen::core::workspace::db_path(&workspace)?)?;
+    store.upsert_session(&session(
+        "web-session",
+        workspace.to_string_lossy().as_ref(),
+    ))?;
+    ws.send(Message::Text(
+        json!({
+            "type": "visualization_snapshot",
+            "id": "viz",
+            "workspace": workspace.to_string_lossy(),
+            "selected_session_id": "web-session"
+        })
+        .to_string()
+        .into(),
+    ))
+    .await?;
+    let msg = recv_json(&mut ws).await?;
+    assert_eq!(msg["type"], "visualization_snapshot");
+    assert_eq!(msg["id"], "viz");
+    assert_eq!(msg["report"]["totals"]["session_count"], 1);
+    assert_eq!(msg["report"]["selected"]["session"]["id"], "web-session");
+
     ws.send(Message::Text(
         json!({"type":"subscribe","id":"s1"}).to_string().into(),
     ))
@@ -109,6 +134,32 @@ async fn assert_rejected(url: &str) -> anyhow::Result<()> {
 
 fn call(id: &str, tool: &str, args: Value) -> String {
     json!({ "type": "call", "id": id, "tool": tool, "args": args }).to_string()
+}
+
+fn session(id: &str, workspace: &str) -> SessionRecord {
+    SessionRecord {
+        id: id.into(),
+        agent: "codex".into(),
+        model: Some("gpt-5".into()),
+        workspace: workspace.into(),
+        started_at_ms: 1_000,
+        ended_at_ms: None,
+        status: SessionStatus::Running,
+        trace_path: "/trace".into(),
+        start_commit: None,
+        end_commit: None,
+        branch: None,
+        dirty_start: None,
+        dirty_end: None,
+        repo_binding_source: None,
+        prompt_fingerprint: None,
+        parent_session_id: None,
+        agent_version: None,
+        os: None,
+        arch: None,
+        repo_file_count: None,
+        repo_total_loc: None,
+    }
 }
 
 async fn recv_type(

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! CLI command implementations.
 
+use crate::collect::tail::antigravity::scan_antigravity_workspace;
 use crate::collect::tail::claude::scan_claude_session_dir;
 use crate::collect::tail::claude_code::scan_claude_project_dir;
 use crate::collect::tail::codex::scan_codex_session_dir;
@@ -8,9 +9,13 @@ use crate::collect::tail::codex_desktop::scan_codex_sessions_root;
 use crate::collect::tail::copilot_cli::scan_copilot_cli_workspace;
 use crate::collect::tail::copilot_vscode::scan_copilot_vscode_workspace;
 use crate::collect::tail::cursor::scan_session_dir_all;
+use crate::collect::tail::cursor_state_db::scan_cursor_state_db_workspace;
+use crate::collect::tail::gemini::scan_gemini_workspace;
 use crate::collect::tail::goose::scan_goose_workspace;
+use crate::collect::tail::kimi::scan_kimi_workspace;
 use crate::collect::tail::openclaw::scan_openclaw_workspace;
 use crate::collect::tail::opencode::scan_opencode_workspace;
+use crate::collect::tail::pi::scan_pi_workspace;
 use crate::core::config;
 use crate::core::event::{Event, SessionRecord};
 use crate::metrics::report;
@@ -790,6 +795,21 @@ pub(crate) fn collect_all_agent_sessions(
 
     let tail = &cfg.sources.tail;
     let home_pb = PathBuf::from(&home);
+    if tail.gemini {
+        out.extend(bind_workspace(scan_gemini_workspace(ws), ws_str));
+    }
+    if tail.pi {
+        out.extend(bind_workspace(scan_pi_workspace(ws), ws_str));
+    }
+    if tail.kimi {
+        out.extend(bind_workspace(scan_kimi_workspace(ws), ws_str));
+    }
+    if tail.antigravity {
+        out.extend(bind_workspace(scan_antigravity_workspace(ws), ws_str));
+    }
+    if tail.cursor_state_db {
+        out.extend(bind_workspace(scan_cursor_state_db_workspace(ws), ws_str));
+    }
     if tail.goose {
         out.extend(scan_goose_workspace(&home_pb, ws)?);
     }
@@ -806,6 +826,18 @@ pub(crate) fn collect_all_agent_sessions(
         out.extend(scan_copilot_vscode_workspace(ws)?);
     }
     Ok(out)
+}
+
+fn bind_workspace(
+    rows: Vec<(SessionRecord, Vec<Event>)>,
+    workspace: &str,
+) -> Vec<(SessionRecord, Vec<Event>)> {
+    rows.into_iter()
+        .map(|(mut record, events)| {
+            record.workspace = workspace.to_string();
+            (record, events)
+        })
+        .collect()
 }
 
 pub(crate) fn persist_session_batch(

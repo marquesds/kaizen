@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+pub mod antigravity;
 pub mod claude;
 pub mod claude_code;
 pub mod codex;
@@ -7,9 +8,18 @@ mod codex_desktop_event;
 pub mod copilot_cli;
 pub mod copilot_vscode;
 pub mod cursor;
+pub mod cursor_state_db;
+mod cursor_state_db_fields;
+pub mod gemini;
 pub mod goose;
+pub mod kimi;
+pub(crate) mod modern_jsonl;
+pub(crate) mod modern_jsonl_event;
+pub(crate) mod modern_jsonl_fields;
+pub(crate) mod modern_jsonl_record;
 pub mod openclaw;
 pub mod opencode;
+pub mod pi;
 pub mod vibe;
 
 use std::path::Path;

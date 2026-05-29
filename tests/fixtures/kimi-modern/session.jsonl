@@ -1,0 +1,4 @@
+{"session_id":"kimi-modern-1","cwd":"/tmp/kaizen-modern","model":"kimi-k2","timestamp_ms":1780000020000}
+{"role":"assistant","timestamp_ms":1780000020100,"tool_calls":[{"id":"kimi-call-1","function":{"name":"shell","arguments":"{\"cmd\":\"ls\"}"}}],"usage":{"prompt_tokens":200,"completion_tokens":50}}
+{"role":"tool","tool_call_id":"kimi-call-1","content":"ok","timestamp_ms":1780000020200}
+{bad json

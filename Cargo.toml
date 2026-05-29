@@ -152,6 +152,14 @@ name = "web_parity"
 path = "tests/web_parity.rs"
 
 [[test]]
+name = "visualization_report"
+path = "tests/spec/visualization_report.rs"
+
+[[test]]
+name = "atif_jsonl_hash"
+path = "tests/spec/atif_jsonl_hash.rs"
+
+[[test]]
 name = "mcp_server"
 path = "tests/spec/mcp_server.rs"
 

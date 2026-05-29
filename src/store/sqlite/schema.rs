@@ -301,6 +301,37 @@ pub(super) const MIGRATIONS: &[&str] = &[
         session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
         created_at_ms INTEGER NOT NULL
     )",
+    "CREATE TABLE IF NOT EXISTS session_aggregates (
+        session_id TEXT PRIMARY KEY,
+        event_count INTEGER NOT NULL,
+        tool_call_count INTEGER NOT NULL,
+        error_count INTEGER NOT NULL,
+        tokens_in INTEGER NOT NULL,
+        tokens_out INTEGER NOT NULL,
+        reasoning_tokens INTEGER NOT NULL,
+        cache_read_tokens INTEGER NOT NULL,
+        cache_creation_tokens INTEGER NOT NULL,
+        cost_usd_e6 INTEGER NOT NULL,
+        first_event_ms INTEGER,
+        last_event_ms INTEGER,
+        rebuilt_at_ms INTEGER NOT NULL
+    )",
+    "CREATE TABLE IF NOT EXISTS step_diffs (
+        session_id TEXT NOT NULL,
+        span_id TEXT NOT NULL,
+        files_json TEXT NOT NULL,
+        added_lines INTEGER NOT NULL DEFAULT 0,
+        removed_lines INTEGER NOT NULL DEFAULT 0,
+        raw_patch TEXT,
+        PRIMARY KEY(session_id, span_id)
+    )",
+    "CREATE TABLE IF NOT EXISTS event_hashes (
+        session_id TEXT NOT NULL,
+        seq INTEGER NOT NULL,
+        prev_hash TEXT NOT NULL,
+        event_hash TEXT NOT NULL,
+        PRIMARY KEY(session_id, seq)
+    )",
     "CREATE INDEX IF NOT EXISTS session_samples_session_idx ON session_samples(session_id)",
     "CREATE INDEX IF NOT EXISTS cases_status_idx ON cases(status, created_at_ms)",
     "CREATE INDEX IF NOT EXISTS review_items_status_idx ON review_items(status, created_at_ms)",

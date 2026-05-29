@@ -46,6 +46,16 @@ impl Default for CursorSourceConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TailAgentToggles {
     #[serde(default = "default_true")]
+    pub gemini: bool,
+    #[serde(default = "default_true")]
+    pub pi: bool,
+    #[serde(default = "default_true")]
+    pub kimi: bool,
+    #[serde(default = "default_true")]
+    pub antigravity: bool,
+    #[serde(default = "default_true")]
+    pub cursor_state_db: bool,
+    #[serde(default = "default_true")]
     pub goose: bool,
     #[serde(default = "default_true")]
     pub openclaw: bool,
@@ -60,6 +70,11 @@ pub struct TailAgentToggles {
 impl Default for TailAgentToggles {
     fn default() -> Self {
         Self {
+            gemini: true,
+            pi: true,
+            kimi: true,
+            antigravity: true,
+            cursor_state_db: true,
             goose: true,
             openclaw: true,
             opencode: true,
@@ -838,6 +853,27 @@ fn merge_tail_toggles(
     def: TailAgentToggles,
 ) -> TailAgentToggles {
     TailAgentToggles {
+        gemini: if user.gemini != def.gemini {
+            user.gemini
+        } else {
+            base.gemini
+        },
+        pi: if user.pi != def.pi { user.pi } else { base.pi },
+        kimi: if user.kimi != def.kimi {
+            user.kimi
+        } else {
+            base.kimi
+        },
+        antigravity: if user.antigravity != def.antigravity {
+            user.antigravity
+        } else {
+            base.antigravity
+        },
+        cursor_state_db: if user.cursor_state_db != def.cursor_state_db {
+            user.cursor_state_db
+        } else {
+            base.cursor_state_db
+        },
         goose: if user.goose != def.goose {
             user.goose
         } else {

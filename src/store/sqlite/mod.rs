@@ -206,8 +206,11 @@ pub struct ToolSpanSyncRow {
 pub(crate) struct CaptureQualityRow {
     pub source: String,
     pub has_tokens: bool,
+    pub has_cost: bool,
     pub has_latency: bool,
     pub has_context: bool,
+    pub cache_read_tokens: u64,
+    pub cache_creation_tokens: u64,
 }
 
 pub(crate) struct TraceSpanQualityRow {
@@ -286,6 +289,7 @@ mod tests;
 mod tool_span_sync;
 mod tool_spans;
 mod trace_spans;
+mod visualization;
 
 pub(super) fn now_ms() -> u64 {
     std::time::SystemTime::now()

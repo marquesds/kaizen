@@ -6,6 +6,7 @@ pub mod core_query;
 pub mod doctor;
 pub mod eval;
 pub mod exp;
+pub mod extensions;
 pub mod feedback;
 pub mod fmt;
 pub mod gc;
