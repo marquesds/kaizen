@@ -65,8 +65,11 @@ impl Store {
         let mut stmt = self.conn.prepare(
             "SELECT e.source,
                     e.tokens_in IS NOT NULL OR e.tokens_out IS NOT NULL OR e.reasoning_tokens IS NOT NULL,
+                    e.cost_usd_e6 IS NOT NULL,
                     e.latency_ms IS NOT NULL OR e.ttft_ms IS NOT NULL,
-                    e.context_used_tokens IS NOT NULL AND e.context_max_tokens IS NOT NULL
+                    e.context_used_tokens IS NOT NULL AND e.context_max_tokens IS NOT NULL,
+                    COALESCE(e.cache_read_tokens, 0),
+                    COALESCE(e.cache_creation_tokens, 0)
              FROM events e JOIN sessions s ON s.id = e.session_id
              WHERE s.workspace = ?1 AND e.ts_ms >= ?2 AND e.ts_ms <= ?3",
         )?;
@@ -74,8 +77,11 @@ impl Store {
             Ok(CaptureQualityRow {
                 source: row.get(0)?,
                 has_tokens: row.get::<_, i64>(1)? != 0,
-                has_latency: row.get::<_, i64>(2)? != 0,
-                has_context: row.get::<_, i64>(3)? != 0,
+                has_cost: row.get::<_, i64>(2)? != 0,
+                has_latency: row.get::<_, i64>(3)? != 0,
+                has_context: row.get::<_, i64>(4)? != 0,
+                cache_read_tokens: row.get::<_, i64>(5)? as u64,
+                cache_creation_tokens: row.get::<_, i64>(6)? as u64,
             })
         })?;
         Ok(rows.filter_map(|row| row.ok()).collect())

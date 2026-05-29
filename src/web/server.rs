@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Axum router for the local daemon web app.
 
-use super::{assets, features, tools};
+use super::{assets, features, snapshot, tools};
 use axum::Router;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Query, State};
@@ -41,6 +41,12 @@ enum ClientMessage {
     Ping {
         #[serde(default)]
         id: Option<String>,
+    },
+    VisualizationSnapshot {
+        id: String,
+        workspace: String,
+        #[serde(default)]
+        selected_session_id: Option<String>,
     },
 }
 
@@ -134,6 +140,14 @@ async fn handle_text(socket: &mut WebSocket, text: &str, subscribed: &mut bool) 
         Ok(ClientMessage::Ping { id }) => {
             send(socket, json!({"type":"pong","id":id})).await.is_ok()
         }
+        Ok(ClientMessage::VisualizationSnapshot {
+            id,
+            workspace,
+            selected_session_id,
+        }) => {
+            let value = snapshot_msg(id, workspace, selected_session_id).await;
+            send(socket, value).await.is_ok()
+        }
         Err(err) => send(socket, json!({"type":"error","error":err.to_string()}))
             .await
             .is_ok(),
@@ -144,6 +158,18 @@ async fn call_msg(id: &str, tool: &str, args: Value) -> Value {
     match tools::call(tool, args).await {
         Ok(output) => json!({"type":"result","id":id,"tool":tool,"output":output}),
         Err(err) => json!({"type":"error","id":id,"tool":tool,"error":err}),
+    }
+}
+
+async fn snapshot_msg(id: String, workspace: String, selected_session_id: Option<String>) -> Value {
+    let req = snapshot::SnapshotRequest {
+        workspace,
+        selected_session_id,
+    };
+    match tokio::task::spawn_blocking(move || snapshot::load(req)).await {
+        Ok(Ok(report)) => json!({"type":"visualization_snapshot","id":id,"report":report}),
+        Ok(Err(err)) => json!({"type":"error","id":id,"error":err.to_string()}),
+        Err(err) => json!({"type":"error","id":id,"error":err.to_string()}),
     }
 }
 

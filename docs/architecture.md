@@ -48,8 +48,7 @@ requested with `KAIZEN_PROJECTOR=legacy`.
 ## External Boundaries
 
 - Agent transcript dirs: Cursor, Claude Code, Codex.
-- Tail agents: Goose (`~/.config/goose/`), OpenClaw (`~/.openclaw/agents/*/sessions/`),
-  OpenCode (`~/.local/share/opencode/`), Copilot CLI, Copilot VS Code.
+- Tail agents: Gemini, Pi, Kimi, Antigravity, Goose, OpenClaw, OpenCode, Copilot CLI, Copilot VS Code, and Cursor `state.vscdb`.
 - OpenClaw hook handler: `~/.openclaw/hooks/kaizen-events/handler.ts` (written by `kaizen init`,
   subscribes to `command:new`, `command:stop`, `message:received`, and related events).
 - Git CLI for commit/churn/dirty facts.

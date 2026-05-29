@@ -110,6 +110,7 @@ impl Store {
             self.invalidate_span_tree_cache();
         }
         self.append_search_event(e);
+        self.refresh_extension_rows(e)?;
         let Some(ctx) = ctx else {
             return Ok(());
         };
@@ -138,6 +139,15 @@ impl Store {
         let row = serde_json::to_string(&outbound)?;
         self.outbox()?.append(&e.session_id, "events", &row)?;
         enqueue_tool_spans_for_session(self, &e.session_id, ctx)?;
+        Ok(())
+    }
+
+    fn refresh_extension_rows(&self, e: &Event) -> Result<()> {
+        crate::extensions::hash_chain::store_event_hash(self, e)?;
+        crate::extensions::aggregates::upsert_session(self, &e.session_id)?;
+        if let Err(err) = crate::extensions::diffs::refresh_session(self, &e.session_id, false) {
+            tracing::warn!(session_id = %e.session_id, "step diff attribution skipped: {err:#}");
+        }
         Ok(())
     }
 

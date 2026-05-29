@@ -31,25 +31,25 @@ mod tests {
     }
 
     #[test]
-    fn web_assets_expose_workflows_not_tool_labels() {
+    fn web_assets_expose_read_only_visualization_screen() {
         for needle in [
             ">kaizen_",
             ">mcp/",
             "onclick=",
             "role=\"button\"",
             "data-tool",
+            "data-feature",
+            "session-detail",
+            "experiments",
+            "settings",
         ] {
             assert!(!INDEX.contains(needle), "index contains {needle}");
         }
-        for feature in crate::web::features::all() {
-            assert!(
-                INDEX.contains(&format!("data-feature=\"{}\"", feature.tool)),
-                "missing visible workflow for {}",
-                feature.tool
-            );
-        }
+        assert!(INDEX.contains("<main"));
+        assert!(INDEX.contains("visualization-screen"));
+        assert!(INDEX.contains("aria-live=\"polite\""));
         assert!(INDEX.contains("developer-drawer"));
-        assert!(INDEX.contains("data-feature=\"kaizen_summary\""));
+        assert!(JS.contains("visualization_snapshot"));
         assert!(JS.contains("showModal"));
         assert!(RENDER_JS.contains("renderOutput"));
         assert!(CSS.contains(".drawer"));

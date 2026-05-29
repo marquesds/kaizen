@@ -12,9 +12,12 @@ pub struct CaptureQualityReport {
     pub trace_spans_total: u64,
     pub orphan_span_count: u64,
     pub token_coverage_pct: u8,
+    pub cost_coverage_pct: u8,
     pub latency_coverage_pct: u8,
     pub context_coverage_pct: u8,
     pub proxy_correlation_pct: u8,
+    pub cache_read_tokens: u64,
+    pub cache_creation_tokens: u64,
 }
 
 pub fn build_quality_report(
@@ -33,9 +36,12 @@ pub fn build_quality_report(
         trace_spans_total: spans.len() as u64,
         orphan_span_count: spans.iter().filter(|r| r.is_orphan).count() as u64,
         token_coverage_pct: pct(rows.len(), rows.iter().filter(|r| r.has_tokens).count()),
+        cost_coverage_pct: pct(rows.len(), rows.iter().filter(|r| r.has_cost).count()),
         latency_coverage_pct: pct(rows.len(), rows.iter().filter(|r| r.has_latency).count()),
         context_coverage_pct: pct(rows.len(), rows.iter().filter(|r| r.has_context).count()),
         proxy_correlation_pct: pct(proxy_events as usize, correlated as usize),
+        cache_read_tokens: rows.iter().map(|r| r.cache_read_tokens).sum(),
+        cache_creation_tokens: rows.iter().map(|r| r.cache_creation_tokens).sum(),
     })
 }
 

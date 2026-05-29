@@ -1,0 +1,2 @@
+{"session_id":"sess-jsonl","seq":0,"ts_ms":100,"kind":"message","source":"tail","payload":{"role":"user","text":"hello"}}
+{"session_id":"sess-jsonl","sequence":1,"timestamp_ms":110,"type":"tool_call","tool":"Edit","tool_call_id":"call-1","payload":{"path":"src/lib.rs"}}
