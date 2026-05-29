@@ -5,16 +5,22 @@
 id = "claude-opus-4"
 input_per_mtok = 15000000
 output_per_mtok = 75000000
+cache_read_per_mtok = 1500000
+cache_create_per_mtok = 18750000
 
 [[models]]
 id = "claude-sonnet-4"
 input_per_mtok = 3000000
 output_per_mtok = 15000000
+cache_read_per_mtok = 300000
+cache_create_per_mtok = 3750000
 
 [[models]]
 id = "claude-haiku-4"
 input_per_mtok = 800000
 output_per_mtok = 4000000
+cache_read_per_mtok = 80000
+cache_create_per_mtok = 1000000
 
 [[models]]
 id = "gpt-4o"

@@ -1,0 +1,4 @@
+{"type":"session","id":"antigravity-modern-1","workspacePath":"/tmp/kaizen-modern","model":"gemini-3-pro","timestamp_ms":1780000030000}
+{"type":"response","timestamp":"2026-05-29T10:00:01Z","payload":{"parts":[{"functionCall":{"id":"ag-call-1","name":"edit_file","args":{"path":"src/lib.rs"}}}]},"usageMetadata":{"promptTokenCount":300,"candidatesTokenCount":80}}
+{"type":"response","timestamp":"2026-05-29T10:00:02Z","payload":{"parts":[{"functionResponse":{"id":"ag-call-1","name":"edit_file","response":{"ok":true}}}]}}
+not-json

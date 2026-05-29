@@ -104,6 +104,18 @@ fn write_claude_session(home: &Path, workspace: &Path, id: &str) -> anyhow::Resu
     Ok(())
 }
 
+fn write_gemini_session(workspace: &Path, id: &str) -> anyhow::Result<()> {
+    let dir = workspace.join(".gemini");
+    std::fs::create_dir_all(&dir)?;
+    let ws = workspace.to_string_lossy().to_string();
+    let lines = vec![
+        json!({"type":"session","session_id":id,"cwd":ws,"model":"gemini-2.5-pro","timestamp":"2026-05-15T20:47:40Z"}),
+        json!({"timestamp":"2026-05-15T20:47:41Z","message":{"content":[{"type":"tool_use","id":"g1","name":"read_file"}]}}),
+    ];
+    std::fs::write(dir.join(format!("{id}.jsonl")), join_jsonl(lines))?;
+    Ok(())
+}
+
 fn join_jsonl(lines: Vec<serde_json::Value>) -> String {
     let mut text = lines
         .into_iter()
@@ -248,10 +260,11 @@ fn sessions_list_refresh_sees_modern_agent_logs() -> anyhow::Result<()> {
     set_env("KAIZEN_HOME", home.path().join(".kaizen"));
     write_codex_session(home.path(), &ws, "codex-refresh-1")?;
     write_claude_session(home.path(), &ws, "claude-refresh-1")?;
+    write_gemini_session(&ws, "gemini-refresh-1")?;
 
     let text = sessions_list_text(Some(&ws), true, true, false, None)?;
     let json: serde_json::Value = serde_json::from_str(&text)?;
-    assert_eq!(json["count"], 2);
+    assert_eq!(json["count"], 3);
 
     clear_env("KAIZEN_HOME");
     clear_env("HOME");

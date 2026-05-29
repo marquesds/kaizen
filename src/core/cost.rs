@@ -14,7 +14,20 @@ pub struct ModelPrice {
     pub input_per_mtok: i64,
     pub output_per_mtok: i64,
     #[serde(default)]
+    pub cache_read_per_mtok: Option<i64>,
+    #[serde(default)]
+    pub cache_create_per_mtok: Option<i64>,
+    #[serde(default)]
     pub avg_tokens_per_turn: u32,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct TokenUsage {
+    pub input: u32,
+    pub output: u32,
+    pub reasoning: u32,
+    pub cache_read: u32,
+    pub cache_create: u32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -54,6 +67,13 @@ impl CostTable {
         tin * price.input_per_mtok / 1_000_000 + tout * price.output_per_mtok / 1_000_000
     }
 
+    pub fn estimate_usage_cost_usd_e6(&self, model: Option<&str>, usage: TokenUsage) -> i64 {
+        let Some(price) = self.price_for(model) else {
+            return 0;
+        };
+        usage_cost(price, usage)
+    }
+
     pub fn find(&self, model: &str) -> Option<&ModelPrice> {
         self.models.iter().find(|p| p.id == model)
     }
@@ -81,6 +101,52 @@ impl CostTable {
         }
         Some(self.estimate(model, tin, tout))
     }
+
+    pub fn estimate_tail_usage_cost_usd_e6(
+        &self,
+        model: Option<&str>,
+        usage: TokenUsage,
+    ) -> Option<i64> {
+        usage
+            .any()
+            .then(|| self.estimate_usage_cost_usd_e6(model, usage))
+    }
+
+    fn price_for(&self, model: Option<&str>) -> Option<&ModelPrice> {
+        model
+            .and_then(|m| self.models.iter().find(|p| p.id == m))
+            .or_else(|| self.models.iter().find(|p| p.id == "cursor"))
+    }
+}
+
+impl TokenUsage {
+    pub fn from_tail(input: Option<u32>, output: Option<u32>, reasoning: Option<u32>) -> Self {
+        Self {
+            input: input.unwrap_or(0),
+            output: output.unwrap_or(0),
+            reasoning: reasoning.unwrap_or(0),
+            cache_read: 0,
+            cache_create: 0,
+        }
+    }
+
+    fn any(self) -> bool {
+        self.input > 0
+            || self.output > 0
+            || self.reasoning > 0
+            || self.cache_read > 0
+            || self.cache_create > 0
+    }
+}
+
+fn usage_cost(price: &ModelPrice, usage: TokenUsage) -> i64 {
+    let out = usage.output.saturating_add(usage.reasoning) as i64;
+    let cache_read = price.cache_read_per_mtok.unwrap_or(price.input_per_mtok);
+    let cache_create = price.cache_create_per_mtok.unwrap_or(price.input_per_mtok);
+    usage.input as i64 * price.input_per_mtok / 1_000_000
+        + out * price.output_per_mtok / 1_000_000
+        + usage.cache_read as i64 * cache_read / 1_000_000
+        + usage.cache_create as i64 * cache_create / 1_000_000
 }
 
 static BUNDLED_COST: OnceLock<CostTable> = OnceLock::new();
@@ -176,5 +242,40 @@ mod tests {
             .estimate_tail_event_cost_usd_e6(Some("claude-sonnet-4"), Some(1000), Some(500), None)
             .expect("cost");
         assert_eq!(with_reasoning, output_only);
+    }
+
+    #[test]
+    fn usage_estimate_prices_cache_tokens_separately() {
+        let table = CostTable::load().unwrap();
+        let cached = table.estimate_usage_cost_usd_e6(
+            Some("claude-sonnet-4"),
+            TokenUsage {
+                input: 1000,
+                output: 500,
+                reasoning: 0,
+                cache_read: 1000,
+                cache_create: 1000,
+            },
+        );
+        let plain = table.estimate(Some("claude-sonnet-4"), 3000, 500);
+        assert!(cached < plain);
+    }
+
+    #[test]
+    fn tail_estimate_includes_cache_usage() {
+        let table = CostTable::load().unwrap();
+        let cached = table
+            .estimate_tail_usage_cost_usd_e6(
+                Some("claude-sonnet-4"),
+                TokenUsage {
+                    input: 0,
+                    output: 0,
+                    reasoning: 0,
+                    cache_read: 1000,
+                    cache_create: 0,
+                },
+            )
+            .expect("cache read cost");
+        assert!(cached > 0);
     }
 }

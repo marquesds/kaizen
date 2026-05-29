@@ -1,6 +1,7 @@
 mod common;
 mod improve;
 mod improve_exp;
+mod interchange;
 mod operate;
 mod operate_daemon;
 mod operate_telemetry;
@@ -25,6 +26,9 @@ pub(crate) fn run(cli: Cli) -> anyhow::Result<()> {
         Command::Completions { shell } => operate::completions(shell),
         Command::Sync { subcmd } => operate::sync(subcmd),
         Command::Telemetry { subcmd } => operate_telemetry::telemetry(subcmd),
+        Command::Export { subcmd } => interchange::export(subcmd),
+        Command::Import { subcmd } => interchange::import(subcmd),
+        Command::Verify { subcmd } => interchange::verify(subcmd),
         Command::Upgrade { from_source } => operate::upgrade(from_source),
         Command::Mcp => operate::mcp(),
         Command::Proxy { subcmd } => operate::proxy(subcmd),

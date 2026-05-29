@@ -72,6 +72,11 @@ Tiered storage keeps recent rows in a hot append log, analytical history in Parq
 |-----|---------|--------|
 | `cursor.enabled` | `true` | Tier-1 Cursor transcript discovery |
 | `cursor.transcript_glob` | `*/agent-transcripts` | Glob under each scan root |
+| `tail.gemini` | `true` | Tail Gemini-family JSONL sessions |
+| `tail.pi` | `true` | Tail Pi JSONL sessions |
+| `tail.kimi` | `true` | Tail Kimi JSONL sessions |
+| `tail.antigravity` | `true` | Tail Antigravity JSONL sessions |
+| `tail.cursor_state_db` | `true` | Read Cursor/VS Code `state.vscdb` metadata |
 | `tail.goose` | `true` | Tail Goose JSONL / paths (see [concepts](concepts.md#collection)) |
 | `tail.openclaw` | `true` | Tail OpenClaw sessions from `~/.openclaw/agents/*/sessions/` |
 | `tail.opencode` | `true` | Tail OpenCode agent data |

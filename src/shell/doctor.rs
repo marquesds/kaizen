@@ -94,8 +94,8 @@ pub fn doctor_text(workspace: Option<&Path>) -> Result<(i32, String)> {
     let t = &cfg.sources.tail;
     writeln!(
         &mut out,
-        "  sources.tail: goose={} opencode={} copilot_cli={} copilot_vscode={}",
-        t.goose, t.opencode, t.copilot_cli, t.copilot_vscode
+        "  sources.tail: gemini={} pi={} kimi={} antigravity={} cursor_state_db={} goose={} opencode={} copilot_cli={} copilot_vscode={}",
+        t.gemini, t.pi, t.kimi, t.antigravity, t.cursor_state_db, t.goose, t.opencode, t.copilot_cli, t.copilot_vscode
     )
     .unwrap();
     let sync_on = !cfg.sync.endpoint.is_empty() && !cfg.sync.team_id.is_empty();

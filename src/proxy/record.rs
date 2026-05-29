@@ -2,7 +2,7 @@
 //! SQLite: ensure proxy session, append one `Cost` or `Error` per completed forward.
 
 use crate::core::config::Config;
-use crate::core::cost::CostTable;
+use crate::core::cost::{CostTable, TokenUsage};
 use crate::core::event::{Event, EventKind, EventSource, SessionRecord, SessionStatus};
 use crate::core::trace_span::{TraceSpanKind, TraceSpanRecord, span_payload, trace_id_for_session};
 use crate::store::Store;
@@ -26,22 +26,31 @@ fn bundled_cost_table() -> &'static CostTable {
 /// same as when the model id is unknown — avoids `cost_usd_e6 = 0` for priced models with
 /// zero tokens.
 fn proxy_event_cost_usd_e6(a: &RecordArgs) -> Option<i64> {
-    let saw_usage = a.tokens_in.is_some() || a.tokens_out.is_some() || a.reasoning_tokens.is_some();
+    let saw_usage = a.tokens_in.is_some()
+        || a.tokens_out.is_some()
+        || a.reasoning_tokens.is_some()
+        || a.cache_creation_tokens.is_some()
+        || a.cache_read_tokens.is_some();
     if a.upstream_error.is_some() && !saw_usage {
         return None;
     }
-    let tin = a.tokens_in.unwrap_or(0);
-    let tout = a
-        .tokens_out
-        .unwrap_or(0)
-        .saturating_add(a.reasoning_tokens.unwrap_or(0));
     let table = bundled_cost_table();
     let cost = if a.upstream_error.is_none() && !saw_usage {
         table.estimate(None, 0, 0)
     } else {
-        table.estimate(a.model.as_deref(), tin, tout)
+        table.estimate_usage_cost_usd_e6(a.model.as_deref(), usage(a))
     };
     Some(cost)
+}
+
+fn usage(a: &RecordArgs) -> TokenUsage {
+    TokenUsage {
+        input: a.tokens_in.unwrap_or(0),
+        output: a.tokens_out.unwrap_or(0),
+        reasoning: a.reasoning_tokens.unwrap_or(0),
+        cache_read: a.cache_read_tokens.unwrap_or(0),
+        cache_create: a.cache_creation_tokens.unwrap_or(0),
+    }
 }
 
 /// Append telemetry for one upstream round-trip. Pure sync — call from `spawn_blocking`.
@@ -255,6 +264,19 @@ mod tests {
         a.tokens_in = Some(1000);
         a.tokens_out = Some(500);
         assert_eq!(proxy_event_cost_usd_e6(&a), Some(10_500));
+    }
+
+    #[test]
+    fn proxy_cost_prices_cache_read_cheaper_than_input() {
+        let mut a = sample_args();
+        a.tokens_in = Some(1000);
+        a.tokens_out = Some(500);
+        a.cache_read_tokens = Some(1000);
+        let cached = proxy_event_cost_usd_e6(&a).unwrap();
+        a.tokens_in = Some(2000);
+        a.cache_read_tokens = None;
+        let plain = proxy_event_cost_usd_e6(&a).unwrap();
+        assert!(cached < plain);
     }
 
     #[test]

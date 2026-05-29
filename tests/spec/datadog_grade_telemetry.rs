@@ -82,6 +82,7 @@ fn capture_quality_reports_field_coverage_and_orphans() -> anyhow::Result<()> {
     assert_eq!(report.events_total, 3);
     assert_eq!(report.proxy_events, 2);
     assert_eq!(report.token_coverage_pct, 67);
+    assert_eq!(report.cost_coverage_pct, 33);
     assert_eq!(report.latency_coverage_pct, 33);
     assert_eq!(report.context_coverage_pct, 33);
     assert_eq!(report.proxy_correlation_pct, 50);
@@ -135,7 +136,7 @@ fn event(
         tokens_in,
         tokens_out: None,
         reasoning_tokens: None,
-        cost_usd_e6: None,
+        cost_usd_e6: (seq == 0).then_some(42),
         stop_reason: None,
         latency_ms,
         ttft_ms: None,

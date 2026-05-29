@@ -4,6 +4,7 @@
 mod assets;
 pub mod features;
 mod server;
+mod snapshot;
 pub mod tools;
 
 use crate::ipc::WebEndpoint;

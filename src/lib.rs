@@ -18,8 +18,10 @@ pub mod core;
 pub mod core_loop;
 pub mod daemon;
 pub mod eval;
+pub mod extensions;
 pub mod feedback;
 pub mod guidance;
+pub mod interchange;
 pub mod ipc;
 pub mod prompt;
 
@@ -37,4 +39,5 @@ pub mod store;
 pub mod sync;
 pub mod telemetry;
 pub mod ui;
+pub mod visualization;
 pub mod web;

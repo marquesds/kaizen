@@ -99,6 +99,11 @@ In `.kaizen/config.toml`:
 
 ```toml
 [sources.tail]
+gemini = true
+pi = true
+kimi = true
+antigravity = true
+cursor_state_db = true
 goose = true
 opencode = true
 copilot_cli = true

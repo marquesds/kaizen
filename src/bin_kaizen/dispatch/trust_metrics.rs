@@ -33,6 +33,7 @@ pub(super) fn metrics(req: MetricsRequest) -> anyhow::Result<()> {
             days,
             json,
         }) => metrics_quality(workspace, project, days, json),
+        Some(MetricsCommand::Aggregates { subcmd }) => metrics_aggregates(subcmd),
         None => metrics_report(report),
     }
 }
@@ -54,6 +55,15 @@ fn metrics_quality(
 ) -> anyhow::Result<()> {
     let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
     kaizen::shell::metrics::cmd_metrics_quality(ws.as_deref(), days, json)
+}
+
+fn metrics_aggregates(subcmd: MetricsAggregatesCommand) -> anyhow::Result<()> {
+    match subcmd {
+        MetricsAggregatesCommand::Rebuild { workspace, project } => {
+            let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
+            kaizen::shell::extensions::cmd_aggregates_rebuild(ws.as_deref())
+        }
+    }
 }
 
 fn metrics_report(req: MetricsReportRequest) -> anyhow::Result<()> {

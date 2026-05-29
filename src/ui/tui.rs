@@ -10,6 +10,7 @@ use crate::metrics::types::MetricsReport;
 use crate::store::span_tree::SpanNode;
 use crate::store::{SessionFilter, Store};
 use crate::ui::theme;
+use crate::visualization::{VisualizationQuery, VisualizationReport};
 use anyhow::Result;
 use arc_swap::ArcSwapOption;
 use crossterm::{
@@ -36,7 +37,7 @@ use time::OffsetDateTime;
 use tokio::sync::{Notify, mpsc};
 use tokio::task::JoinHandle;
 use tokio::time::{Duration, Instant, sleep_until};
-use view::{DetailData, DetailState, EventView, SessionView};
+use view::{DetailData, DetailState, EventView, SessionView, render_dashboard};
 use worker::{StoreRequest, StoreResponse, spawn_store_worker};
 
 const THIRTY_DAYS_SEC: u64 = 30 * 24 * 3600;
@@ -59,7 +60,9 @@ struct App {
     detail: bool,
     show_metrics: bool,
     metrics: Option<MetricsReport>,
+    visualization: Option<VisualizationReport>,
     metrics_cache: Arc<ArcSwapOption<MetricsReport>>,
+    visualization_cache: Arc<ArcSwapOption<VisualizationReport>>,
     report_dirty: Arc<AtomicBool>,
     report_notify: Arc<Notify>,
     pulse: bool,
@@ -79,6 +82,7 @@ impl App {
     fn open(
         workspace: &Path,
         metrics_cache: Arc<ArcSwapOption<MetricsReport>>,
+        visualization_cache: Arc<ArcSwapOption<VisualizationReport>>,
         report_dirty: Arc<AtomicBool>,
         report_notify: Arc<Notify>,
     ) -> Result<Self> {
@@ -87,6 +91,7 @@ impl App {
         let (store_tx, store_rx) = spawn_store_worker(db);
         let ws = workspace.to_string_lossy().to_string();
         let metrics = metrics_cache.load_full().as_deref().cloned();
+        let visualization = visualization_cache.load_full().as_deref().cloned();
         let app = Self {
             sessions: SessionView::new(),
             events: EventView::new(),
@@ -100,7 +105,9 @@ impl App {
             detail: false,
             show_metrics: false,
             metrics,
+            visualization,
             metrics_cache,
+            visualization_cache,
             report_dirty,
             report_notify,
             pulse: false,
@@ -124,6 +131,7 @@ impl App {
 
     fn sync_metrics_cache(&mut self) {
         self.metrics = self.metrics_cache.load_full().as_deref().cloned();
+        self.visualization = self.visualization_cache.load_full().as_deref().cloned();
     }
 
     fn mark_report_dirty(&self) {
@@ -323,7 +331,7 @@ impl App {
     }
 
     fn set_viewport_height(&mut self, height: usize) {
-        let h = height.saturating_sub(4);
+        let h = height.saturating_sub(12);
         self.session_viewport_height = h.max(1);
         self.event_viewport_height = h.max(1);
         self.sessions
@@ -453,17 +461,22 @@ fn draw(f: &mut ratatui::Frame, app: &App) {
     }
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .constraints([
+            Constraint::Length(8),
+            Constraint::Min(1),
+            Constraint::Length(1),
+        ])
         .split(f.area());
 
     let panes = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(35), Constraint::Percentage(65)])
-        .split(chunks[0]);
+        .split(chunks[1]);
 
+    render_dashboard(f, app.visualization.as_ref(), chunks[0]);
     draw_sessions(f, app, panes[0]);
     draw_events(f, app, panes[1]);
-    draw_statusbar(f, app, chunks[1]);
+    draw_statusbar(f, app, chunks[2]);
 }
 
 fn draw_sessions(f: &mut ratatui::Frame, app: &App, area: ratatui::layout::Rect) {
@@ -831,6 +844,7 @@ fn spawn_report_worker(
     db_path: PathBuf,
     workspace: String,
     cache: Arc<ArcSwapOption<MetricsReport>>,
+    visualization_cache: Arc<ArcSwapOption<VisualizationReport>>,
     dirty: Arc<AtomicBool>,
     notify: Arc<Notify>,
     ui_tx: mpsc::UnboundedSender<()>,
@@ -851,12 +865,23 @@ fn spawn_report_worker(
             let ws = workspace.clone();
             let next = tokio::task::spawn_blocking(move || {
                 let store = Store::open_read_only(&db)?;
-                report::build_report(&store, &ws, 7)
+                let metrics = report::build_report(&store, &ws, 7)?;
+                let visualization = crate::visualization::build_report(
+                    &store,
+                    VisualizationQuery {
+                        workspace: ws,
+                        selected_session_id: None,
+                        now_ms: now_ms(),
+                        day_start_hour: 0,
+                    },
+                )?;
+                anyhow::Ok((metrics, visualization))
             })
             .await;
             last_run = Instant::now();
-            if let Ok(Ok(report)) = next {
+            if let Ok(Ok((report, visualization))) = next {
                 cache.store(Some(Arc::new(report)));
+                visualization_cache.store(Some(Arc::new(visualization)));
                 let _ = ui_tx.send(());
             }
         }
@@ -886,6 +911,7 @@ pub async fn run(workspace: &Path) -> Result<()> {
     let workspace = workspace_buf.as_path();
     let db_path = crate::core::workspace::db_path(workspace)?;
     let metrics_cache = Arc::new(ArcSwapOption::from(None));
+    let visualization_cache = Arc::new(ArcSwapOption::from(None));
     let report_dirty = Arc::new(AtomicBool::new(true));
     let report_notify = Arc::new(Notify::new());
     let (report_ui_tx, mut report_ui_rx) = mpsc::unbounded_channel();
@@ -894,6 +920,7 @@ pub async fn run(workspace: &Path) -> Result<()> {
             db_path.clone(),
             workspace.to_string_lossy().to_string(),
             metrics_cache.clone(),
+            visualization_cache.clone(),
             report_dirty.clone(),
             report_notify.clone(),
             report_ui_tx,
@@ -902,6 +929,7 @@ pub async fn run(workspace: &Path) -> Result<()> {
     let mut app = App::open(
         workspace,
         metrics_cache,
+        visualization_cache,
         report_dirty.clone(),
         report_notify.clone(),
     )?;
