@@ -85,13 +85,11 @@ pub(crate) enum GuidanceCommand {
         #[arg(long)]
         llm: bool,
         #[arg(long)]
-        apply: bool,
-        #[arg(long)]
         json: bool,
         #[command(flatten)]
         ws: WorkspaceFlags,
     },
-    /// List, show, reject, validate, or archive guidance candidates.
+    /// List, show, reject, or archive guidance candidates.
     Candidates {
         #[command(subcommand)]
         subcmd: GuidanceCandidatesCommand,
@@ -114,7 +112,6 @@ pub(crate) enum GuidanceCandidatesCommand {
         ws: WorkspaceFlags,
     },
     Reject(IdOnly),
-    Validate(IdOnly),
     Archive(IdOnly),
 }
 

@@ -76,30 +76,6 @@ impl Store {
         )?;
         Ok(())
     }
-
-    pub fn mark_guidance_candidate_applied(
-        &self,
-        id: &str,
-        applied_at_ms: u64,
-        treatment_fingerprint: &str,
-        backup_path: &str,
-        experiment_id: Option<&str>,
-    ) -> Result<()> {
-        self.conn.execute(
-            "UPDATE guidance_candidates
-             SET status = 'applied', applied_at_ms = ?2, treatment_fingerprint = ?3,
-                 backup_path = ?4, experiment_id = ?5
-             WHERE id = ?1",
-            params![
-                id,
-                applied_at_ms as i64,
-                treatment_fingerprint,
-                backup_path,
-                experiment_id
-            ],
-        )?;
-        Ok(())
-    }
 }
 
 const GUIDANCE_CANDIDATE_SELECT: &str = "SELECT id, artifact_kind, artifact_id, action_json,

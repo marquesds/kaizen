@@ -39,12 +39,12 @@ fn canonicalize_error(path: &Path, error: std::io::Error) -> anyhow::Error {
 }
 
 fn register_workspace(workspace: &Path) {
-    let _ = crate::core::machine_registry::upsert_from_resolve(workspace);
     let Ok(data_dir) = project_data_dir(workspace) else {
         return;
     };
-    if let Err(e) = crate::core::migrate_home::migrate_legacy_in_repo(workspace, &data_dir) {
-        tracing::warn!("legacy migration failed: {e}");
+    let _ = crate::core::machine_registry::upsert_from_resolve(workspace);
+    if let Err(e) = crate::core::legacy_import::import_legacy(workspace, &data_dir) {
+        tracing::warn!("legacy import failed: {e}");
     }
 }
 
@@ -71,7 +71,13 @@ pub fn machine_workspaces(seed: Option<&Path>) -> Result<Vec<PathBuf>> {
 }
 
 pub fn db_path(workspace: &Path) -> Result<PathBuf> {
-    Ok(crate::core::paths::project_data_path(workspace)?.join("kaizen.db"))
+    let path = crate::core::paths::project_data_child(workspace, Path::new("kaizen.db"))?;
+    ["kaizen.db-journal", "kaizen.db-wal", "kaizen.db-shm"]
+        .into_iter()
+        .try_for_each(|name| {
+            crate::core::paths::project_data_child(workspace, Path::new(name)).map(drop)
+        })?;
+    Ok(path)
 }
 
 fn registry_entries() -> Result<Vec<PathBuf>> {

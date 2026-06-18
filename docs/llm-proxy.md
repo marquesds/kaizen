@@ -59,8 +59,7 @@ around the same daemon proxy endpoints. It injects `KAIZEN_SESSION_KEY`,
 
 ## Config (`[proxy]`)
 
-Workspace `/.kaizen/config.toml` and `~/.kaizen/config.toml` (same merge as the rest of Kaizen)
-support:
+The project-data `config.toml` and `~/.kaizen/config.toml` support:
 
 | Key | Default | Notes |
 |-----|---------|--------|

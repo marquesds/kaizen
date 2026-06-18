@@ -1,10 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-use crate::guidance::inventory;
-use crate::guidance::types::{ArtifactRef, ArtifactState, CandidateAction, CandidateStatus};
+use crate::guidance::types::{ArtifactState, CandidateAction, CandidateStatus};
 use crate::guidance::types::{GuidanceCandidate, GuidanceScoreRow};
-use anyhow::{Result, anyhow};
-use std::fs;
-use std::path::{Path, PathBuf};
 
 pub fn deterministic(
     row: &GuidanceScoreRow,
@@ -41,31 +37,6 @@ pub fn rejected_memory_lines(rejected: &[GuidanceCandidate]) -> Vec<String> {
         .collect()
 }
 
-pub fn apply_candidate(
-    workspace: &Path,
-    candidate: &GuidanceCandidate,
-    now_ms: u64,
-) -> Result<AppliedCandidate> {
-    let artifact = inventory::find(workspace, &candidate.artifact)?;
-    let backup = backup_artifact(workspace, &candidate.id, &artifact.path)?;
-    match &candidate.action {
-        CandidateAction::Delete => delete_artifact(&candidate.artifact, &artifact.path)?,
-        CandidateAction::Replace { content } => fs::write(&artifact.path, content)?,
-        CandidateAction::ReviewOnly => return Err(anyhow!("candidate has no applyable edit")),
-    }
-    let snapshot = crate::prompt::snapshot::capture(workspace, now_ms)?;
-    Ok(AppliedCandidate {
-        backup_path: backup.to_string_lossy().to_string(),
-        treatment_fingerprint: snapshot.fingerprint.clone(),
-        snapshot,
-    })
-}
-
-pub struct AppliedCandidate {
-    pub backup_path: String,
-    pub treatment_fingerprint: String,
-    pub snapshot: crate::prompt::PromptSnapshot,
-}
 fn intended_action(row: &GuidanceScoreRow) -> CandidateAction {
     match row.state {
         ArtifactState::Stale => CandidateAction::Delete,
@@ -116,33 +87,6 @@ pub fn action_label(action: &CandidateAction) -> &'static str {
         CandidateAction::Replace { .. } => "replace",
         CandidateAction::ReviewOnly => "review_only",
     }
-}
-
-fn backup_artifact(workspace: &Path, id: &str, path: &Path) -> Result<PathBuf> {
-    let rel = path.strip_prefix(workspace).unwrap_or(path);
-    let backup = workspace.join(".kaizen/backup/guidance").join(id).join(rel);
-    if let Some(parent) = backup.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    fs::copy(path, &backup)?;
-    Ok(backup)
-}
-
-fn delete_artifact(artifact: &ArtifactRef, path: &Path) -> Result<()> {
-    fs::remove_file(path)?;
-    if artifact.kind == crate::guidance::types::ArtifactKind::Skill {
-        remove_empty_parent(path)?;
-    }
-    Ok(())
-}
-
-fn remove_empty_parent(path: &Path) -> Result<()> {
-    if let Some(parent) = path.parent()
-        && parent.read_dir()?.next().is_none()
-    {
-        fs::remove_dir(parent)?;
-    }
-    Ok(())
 }
 
 #[cfg(test)]

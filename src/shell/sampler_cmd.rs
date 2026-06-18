@@ -9,9 +9,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 
 fn stop_path(workspace: &Path, session_id: &str) -> Result<PathBuf> {
-    Ok(crate::core::paths::project_data_dir(workspace)?
-        .join("sampler-stop")
-        .join(session_id))
+    let relative = PathBuf::from("sampler-stop").join(session_id);
+    crate::core::paths::project_data_child(workspace, &relative)
 }
 
 /// Sample `pid` until stop file, cap, or process exit.

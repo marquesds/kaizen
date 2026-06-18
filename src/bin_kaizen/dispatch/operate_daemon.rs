@@ -168,6 +168,7 @@ mod tests {
             pid: "/tmp/k/daemon.pid".into(),
             sock: "/tmp/k/daemon.sock".into(),
             log: "/tmp/k/daemon.log".into(),
+            token: "/tmp/k/web_token.hex".into(),
         }
     }
 }

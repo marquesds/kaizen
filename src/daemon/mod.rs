@@ -11,12 +11,12 @@ mod server;
 mod supervisor;
 mod worker;
 
-pub use background::{BackgroundStart, start_background};
+pub use background::{BackgroundStart, start_background, start_background_for};
 pub use client::{
     begin_observed_session_blocking, ensure_capture_blocking, ensure_proxy_blocking,
     hello_blocking, request_blocking,
 };
 pub use lifecycle::{
-    DaemonStatusOutcome, RuntimePaths, enabled, ensure_running, runtime_paths, start_foreground,
-    status_outcome, stop, try_status,
+    DaemonStatusOutcome, RuntimePaths, enabled, ensure_running, ensure_running_for, runtime_paths,
+    runtime_paths_for, start_foreground, status_outcome, stop, try_status,
 };

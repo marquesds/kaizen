@@ -51,7 +51,7 @@
   local queues produced by rules and built-in alert checks.
 - `guidance_candidates`
   proposed skill/rule edits with artifact id, action JSON, lifecycle status,
-  evidence, backup path, treatment prompt fingerprint, and optional experiment id.
+  evidence, and optional legacy application metadata retained for old databases.
 
 ## Invariants
 
@@ -59,8 +59,8 @@
 - Rule actions are idempotent by `source_key`; rerunning a rule does not create
   duplicate cases, reviews, or alerts for the same hit.
 - Guidance candidates move through `proposed`, `applied`, `validated`,
-  `rejected`, or `archived`; `--apply` records a backup path before mutation.
-  Validation is evidence-gated by the candidate's prompt-bound experiment.
+  `rejected`, or `archived`. New proposals remain review-only; `applied` and
+  `validated` remain readable for databases created by older releases.
 - SQLite `events` are the only canonical raw event history. Legacy hot-event
   and cold-partition artifacts are ignored. A legacy sync outbox is imported
   once into SQLite and archived.

@@ -34,7 +34,7 @@ pub(crate) enum TelemetrySubcommand {
         /// Exporter template to append without prompting.
         #[arg(long = "type", value_enum)]
         exporter_type: Option<TelemetryExporterKind>,
-        /// File exporter path, absolute or relative to each workspace.
+        /// File exporter path, absolute or relative to Kaizen project data.
         #[arg(long)]
         path: Option<PathBuf>,
     },
@@ -90,7 +90,7 @@ pub(crate) enum TelemetrySubcommand {
         /// Exporter template to append without prompting.
         #[arg(long = "type", value_enum)]
         exporter_type: Option<TelemetryExporterKind>,
-        /// File exporter path, absolute or relative to each workspace.
+        /// File exporter path, absolute or relative to Kaizen project data.
         #[arg(long)]
         path: Option<PathBuf>,
         /// API key (DD_API_KEY for datadog, POSTHOG_API_KEY for posthog). Falls back to env.
@@ -125,7 +125,7 @@ pub(crate) enum TelemetrySubcommand {
         #[arg(long, conflicts_with = "workspace")]
         project: Option<String>,
     },
-    /// Read local NDJSON from the `file` exporter (default: `<workspace>/.kaizen/telemetry.ndjson`).
+    /// Read local NDJSON from the `file` exporter under Kaizen project data.
     Tail {
         /// workspace root (default: cwd)
         #[arg(long)]
@@ -133,7 +133,7 @@ pub(crate) enum TelemetrySubcommand {
         /// project name shorthand for --workspace (mutually exclusive)
         #[arg(long, conflicts_with = "workspace")]
         project: Option<String>,
-        /// File path (absolute or relative to workspace).
+        /// File path (absolute or relative to Kaizen project data).
         #[arg(long, short = 'f')]
         file: Option<PathBuf>,
         /// Print current file contents and exit (no follow).

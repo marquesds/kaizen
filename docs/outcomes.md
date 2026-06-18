@@ -4,7 +4,7 @@ Opt-in **post-stop** snapshots: after a `Stop` hook, kaizen can spawn a detached
 
 ## Enable
 
-In `.kaizen/config.toml` (workspace) and/or `~/.kaizen/config.toml` (user):
+In `~/.kaizen/projects/<slug>/config.toml` or `~/.kaizen/config.toml`:
 
 ```toml
 [collect.outcomes]
@@ -16,6 +16,10 @@ timeout_secs = 600
 ```
 
 Merge rules: [config.md](config.md) (`[collect.outcomes]`).
+
+These commands are explicit, opt-in subprocesses that run in the workspace.
+Their normal tooling may create ignored build artifacts such as `target/`.
+Kaizen's own files and state still remain outside the repository.
 
 ## Lifecycle
 

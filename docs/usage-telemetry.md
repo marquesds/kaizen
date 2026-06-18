@@ -8,6 +8,8 @@ Pluggable sinks receive the same redacted batches as Kaizen sync. The default
 build ships PostHog, Datadog, and OTLP exporters. The `dev` tracing sink remains
 opt-in through `--features telemetry-dev`. The file sink defaults to
 `~/.kaizen/projects/<slug>/telemetry.ndjson`.
+Relative file paths use that project-data directory. Absolute paths inside the
+target repository are rejected.
 
 Configuration lives in `[[telemetry.exporters]]` under
 `~/.kaizen/config.toml`. See [config.md](config.md#telemetry).

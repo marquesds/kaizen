@@ -7,7 +7,12 @@ Config is TOML. **Paths:**
 | `~/.kaizen/projects/<slug>/config.toml` | Per-project (slug = canonical path with `/` replaced by `-`); never checked into VCS |
 | `~/.kaizen/config.toml` | Per-user; use for secrets and machine-wide defaults |
 
-`KAIZEN_HOME` overrides `~/.kaizen`. The old `<workspace>/.kaizen/` layout is auto-migrated to the project data dir on first use; a `MIGRATED.txt` marker is left behind.
+`KAIZEN_HOME` overrides `~/.kaizen`. On first use, Kaizen copies an old
+`<workspace>/.kaizen/` directory into project data and writes
+`LEGACY_IMPORTED.txt` there. It never moves, deletes, or marks the source.
+Legacy import rejects symlinks and special files before copying anything.
+`KAIZEN_HOME` must resolve outside the target repository. Kaizen also rejects
+traversal, symlink, and hard-link aliases for its write targets.
 
 **Load order:** the workspace and user files are both read; `src/core/config.rs` merges them as follows.
 
@@ -117,7 +122,7 @@ Remote read-back (provider pull) and cache policy. OTLP is **export only**; it i
 
 When `true`, the corresponding field may be emitted in **cleartext** on outbound / canonical telemetry for that key; when `false` (default), omit or hash. Keys: `team`, `runner_label`, `actor_kind`, `actor_label`, `agent`, `model`, `env`, `job`, `branch`. `workspace_label` is reserved for exporter-derived `project_name`, which is always sent as repo identity rather than actor identity.
 
-**Exporters** are `[[telemetry.exporters]]` tables with `type = "file" | "posthog" | "datadog" | "otlp" | "dev" | "none"`. For `file`, optional `path` (relative paths resolve against the workspace root) defaults to **`~/.kaizen/projects/<slug>/telemetry.ndjson`**. The `kaizen telemetry configure` command appends a template block to `~/.kaizen/config.toml`.
+**Exporters** are `[[telemetry.exporters]]` tables with `type = "file" | "posthog" | "datadog" | "otlp" | "dev" | "none"`. For `file`, optional relative `path` values resolve under **`~/.kaizen/projects/<slug>/`**; the default is `telemetry.ndjson`. Absolute paths are allowed except inside the target repository. The `kaizen telemetry configure` command appends a template block to `~/.kaizen/config.toml`.
 
 **Credential resolution (per exporter):** standard env vars are preferred, with `KAIZEN_`-prefixed fallbacks in some cases, for example:
 
@@ -186,5 +191,5 @@ redact   = true
 ```
 
 Proposal calls receive scorecard evidence and redacted rejected-candidate memory
-for one selected artifact, not raw session transcripts. Direct mutation still
-requires `--apply`.
+for one selected artifact, not raw session transcripts. Proposals are
+review-only; Kaizen never applies them to the target repository.

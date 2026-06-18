@@ -25,18 +25,17 @@ category, effort estimate, and apply step.
 | Skills triggered | SQLite `skills_used` |
 | Repo state | `git ls-files`, file sizes, mtimes |
 | Skill/rule files | `.cursor/skills/`, `.cursor/rules/`, `AGENTS.md` |
-| Past reports | `.kaizen/reports/*.md` |
+| Past reports | `~/.kaizen/projects/<slug>/reports/*.md` |
 | Optional outcomes | test/lint rows, process samples, feedback, eval scores |
 
 ## Heuristics
 
-Each heuristic is a pure function from `Inputs` to `Vec<Bet>`. Confidence and
-category are assigned by the engine after heuristics run, so older heuristic
-constructors stay simple.
+Each heuristic is a pure function from `Inputs` to `Vec<Bet>`. The engine adds
+confidence and category after heuristics run.
 
 | ID | Name | Signal | Bet | Confidence | Category |
 |---|---|---|---|---|---|
-| H1 | Dead Skill / Rule | On-disk skill or `.mdc` rule unused in 30d lookback and not edited recently | Propose validated removal through `kaizen guidance` | High | QuickWin |
+| H1 | Dead Skill / Rule | On-disk skill or `.mdc` rule unused in 30d lookback and not edited recently | Propose reviewed removal through `kaizen guidance` | High | QuickWin |
 | H2 | Hot File Cluster | Pair of files co-edited in at least 3 sessions across top-level paths | Refactor hidden coupling | Medium | Investigation |
 | H3 | Path churn | Same path touched by at least 4 tool calls in one session | Tighten guardrails for path | Medium | Investigation |
 | H4 | Dominant tool | One tool is at least 25% of events and has at least 15 calls | Review read/search shortcuts | Low | Hygiene |
@@ -141,7 +140,7 @@ Span: 2026-04-15 → 2026-04-22 · Sessions: 47 · Cost: $42.10
 - Hypothesis: The skill is on disk but has not fired in the lookback window.
 - Evidence: 0 invocations in 30 days · last edit 78 days ago
 - Saves ~56000 tokens/week (est.) · Confidence: High
-- Effort: 5 min · Apply: kaizen guidance propose --artifact skill:cursor-guide --apply
+- Effort: 5 min · Apply: review `kaizen guidance propose --artifact skill:cursor-guide`
 
 ## Raw Stats
 
@@ -164,7 +163,6 @@ kaizen retro                       # run for last 7 days, write report
 kaizen retro --days 30             # custom window
 kaizen retro --dry-run             # print, do not write
 kaizen retro --json                # emit Report as JSON to stdout
-kaizen retro --apply <bet-id>      # interactive apply (v0.2)
 ```
 
 ## Retro as Agent Skill
@@ -172,7 +170,7 @@ kaizen retro --apply <bet-id>      # interactive apply (v0.2)
 Kaizen can install a `kaizen-retro` skill into consuming repos. The skill calls
 `kaizen retro --json --days 7`, parses the `Report`, and summarizes the best
 bets with hypothesis, impact, evidence, confidence, and apply step. It suggests
-one next action but does not apply changes automatically.
+one next action but does not apply changes.
 
 ## Quint Spec
 

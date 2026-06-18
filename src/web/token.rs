@@ -1,20 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use crate::core::paths::kaizen_dir;
 use anyhow::{Context, Result, anyhow, bail};
 use rand::Rng;
 use std::fs;
 use std::io::{ErrorKind, Write};
 use std::path::Path;
 
-const TOKEN_FILE: &str = "web_token.hex";
 const TOKEN_BYTES: usize = 32;
 const TOKEN_HEX_LEN: usize = TOKEN_BYTES * 2;
-
-pub(super) fn load_or_create() -> Result<String> {
-    let home = kaizen_dir().ok_or_else(|| anyhow!("KAIZEN_HOME / HOME unset"))?;
-    load_or_create_at(&home.join(TOKEN_FILE))
-}
 
 pub(super) fn ephemeral() -> String {
     let mut bytes = [0_u8; TOKEN_BYTES];
@@ -22,7 +15,8 @@ pub(super) fn ephemeral() -> String {
     hex::encode(bytes)
 }
 
-fn load_or_create_at(path: &Path) -> Result<String> {
+pub(super) fn load_or_create_at(path: &Path) -> Result<String> {
+    crate::core::safe_fs::reject_alias(path)?;
     create_parent(path)?;
     match load(path)? {
         Some(token) => Ok(token),
@@ -39,6 +33,7 @@ fn create_parent(path: &Path) -> Result<()> {
 }
 
 fn load(path: &Path) -> Result<Option<String>> {
+    crate::core::safe_fs::reject_alias(path)?;
     match fs::read_to_string(path) {
         Ok(raw) => validate_and_secure(path, raw).map(Some),
         Err(err) if err.kind() == ErrorKind::NotFound => Ok(None),

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Background daemon process startup.
 
-use super::lifecycle::{RuntimePaths, runtime_paths, try_status};
+use super::lifecycle::{RuntimePaths, runtime_paths, runtime_paths_for, try_status};
 use crate::ipc::{DaemonStatus, WebEndpoint};
 use anyhow::{Context, Result, anyhow};
 use std::path::Path;
@@ -19,7 +19,14 @@ pub struct BackgroundStart {
 }
 
 pub fn start_background() -> Result<BackgroundStart> {
-    let paths = runtime_paths()?;
+    start_background_at(runtime_paths()?)
+}
+
+pub fn start_background_for(workspace: &Path) -> Result<BackgroundStart> {
+    start_background_at(runtime_paths_for(workspace)?)
+}
+
+fn start_background_at(paths: RuntimePaths) -> Result<BackgroundStart> {
     if let Some(start) = running_start(&paths) {
         return Ok(start);
     }
@@ -43,10 +50,7 @@ fn spawn_background(paths: &RuntimePaths) -> Result<Child> {
 }
 
 fn open_log(path: &Path) -> Result<std::fs::File> {
-    std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(path)
+    crate::core::safe_fs::append(path)
         .with_context(|| format!("open daemon log: {}", path.display()))
 }
 

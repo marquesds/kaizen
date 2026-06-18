@@ -42,9 +42,12 @@ Idempotent workspace setup:
 | `~/.cursor/skills/kaizen-retro/SKILL.md` | Written unless already replaced. |
 | `~/.cursor/skills/kaizen-eval/SKILL.md` | Written unless already replaced. |
 | `~/.kaizen/projects/<slug>/backup/*.bak` | Created before changing existing host files. |
+| Legacy `<workspace>/.kaizen/` | Copied into project data; source remains unchanged. |
 
 Codex, Goose, OpenCode, Copilot, and other supported agents are also ingested
-through transcript tails. Re-running `init` is safe.
+through transcript tails. Re-running `init` is safe. Kaizen never creates,
+edits, moves, or deletes files inside the target workspace.
+An in-workspace `KAIZEN_HOME` is rejected before setup writes anything.
 
 ```bash
 kaizen init

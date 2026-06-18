@@ -80,21 +80,15 @@ fn spawn_detached(args: Vec<OsString>, message: &str) {
 }
 
 fn touch_sampler_stop_file(workspace: &Path, session_id: &str) {
-    let Some(dir) = stop_dir(workspace) else {
+    let relative = std::path::PathBuf::from("sampler-stop").join(session_id);
+    let Ok(path) = crate::core::paths::project_file_for_write(workspace, &relative) else {
+        tracing::warn!("sampler-stop: invalid path");
         return;
     };
-    if let Err(error) = std::fs::create_dir_all(&dir) {
-        tracing::warn!(?error, "sampler-stop mkdir");
+    if path.exists() {
         return;
     }
-    if let Err(error) = std::fs::File::create(dir.join(session_id)) {
+    if let Err(error) = crate::core::safe_fs::create_new(&path) {
         tracing::warn!(?error, "sampler-stop touch");
     }
-}
-
-fn stop_dir(workspace: &Path) -> Option<std::path::PathBuf> {
-    crate::core::paths::project_data_dir(workspace)
-        .map(|dir| dir.join("sampler-stop"))
-        .map_err(|error| tracing::warn!(?error, "sampler-stop: no data dir"))
-        .ok()
 }

@@ -24,4 +24,5 @@ SQLite WAL for M0–M1. Single file per workspace at `.kaizen/kaizen.db`.
 ## Amendment (2026-05-06) — Project data moved out of repo
 
 See ADR 007. The DB path moved from `<workspace>/.kaizen/kaizen.db` to
-`~/.kaizen/projects/<slug>/kaizen.db`. Existing in-repo `.kaizen/` dirs auto-migrate on first use.
+`~/.kaizen/projects/<slug>/kaizen.db`. ADR 011 replaced destructive migration
+with copy-only legacy import.

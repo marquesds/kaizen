@@ -12,7 +12,6 @@ pub enum CandidateOp {
     List { json: bool },
     Show { id: String, json: bool },
     Set { id: String, status: CandidateStatus },
-    Validate { id: String },
 }
 
 pub fn cmd(ws: Option<&Path>, op: CandidateOp) -> Result<()> {
@@ -27,7 +26,6 @@ pub fn text(ws: Option<&Path>, op: CandidateOp) -> Result<String> {
         CandidateOp::List { json } => list(&store, json),
         CandidateOp::Show { id, json } => show(&store, &id, json),
         CandidateOp::Set { id, status } => set_status(&store, &id, status),
-        CandidateOp::Validate { id } => validate(&store, &ws, &id),
     }
 }
 
@@ -53,29 +51,6 @@ fn show(store: &Store, id: &str, json_out: bool) -> Result<String> {
 fn set_status(store: &Store, id: &str, status: CandidateStatus) -> Result<String> {
     store.set_guidance_candidate_status(id, status)?;
     Ok(format!("{} {id}\n", status.as_str()))
-}
-
-fn validate(store: &Store, ws: &Path, id: &str) -> Result<String> {
-    let c = store
-        .get_guidance_candidate(id)?
-        .ok_or_else(|| anyhow!("candidate not found: {id}"))?;
-    let gate = crate::guidance::validation::evaluate(store, ws, &c)?;
-    if let Some(status) = gate.next_status() {
-        store.set_guidance_candidate_status(id, status)?;
-    }
-    Ok(format_gate(&gate))
-}
-
-fn format_gate(g: &crate::guidance::validation::ValidationGate) -> String {
-    let mut out = String::new();
-    let _ = writeln!(&mut out, "id:        {}", g.candidate_id);
-    let _ = writeln!(&mut out, "experiment: {}", g.experiment_id);
-    let _ = writeln!(&mut out, "outcome:   {:?}", g.outcome);
-    let _ = writeln!(&mut out, "arms:      {} / {}", g.n_control, g.n_treatment);
-    if let Some(delta) = g.delta_pct {
-        let _ = writeln!(&mut out, "delta:     {delta:.1}%");
-    }
-    out
 }
 
 pub(crate) fn format_candidate(c: &GuidanceCandidate) -> String {

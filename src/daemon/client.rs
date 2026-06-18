@@ -6,6 +6,7 @@ use crate::ipc::{
     PROTO_VERSION, ProxyEndpoint, ServerHello, read_frame, write_frame,
 };
 use anyhow::{Context, Result, anyhow};
+use std::path::Path;
 use tokio::net::UnixStream;
 
 pub fn request_blocking(request: DaemonRequest) -> Result<DaemonResponse> {
@@ -13,12 +14,22 @@ pub fn request_blocking(request: DaemonRequest) -> Result<DaemonResponse> {
     tokio::runtime::Runtime::new()?.block_on(request_async(request))
 }
 
+fn request_blocking_for(workspace: &str, request: DaemonRequest) -> Result<DaemonResponse> {
+    super::ensure_running_for(Path::new(workspace))?;
+    tokio::runtime::Runtime::new()?.block_on(request_async(request))
+}
+
 pub fn hello_blocking(client: ClientKind, workspace: Option<String>) -> Result<ServerHello> {
-    match request_blocking(DaemonRequest::Hello(ClientHello {
+    let request = DaemonRequest::Hello(ClientHello {
         proto_version: PROTO_VERSION,
         client,
-        workspace,
-    }))? {
+        workspace: workspace.clone(),
+    });
+    let response = match workspace.as_deref() {
+        Some(workspace) => request_blocking_for(workspace, request),
+        None => request_blocking(request),
+    }?;
+    match response {
         DaemonResponse::Hello(hello) => Ok(hello),
         DaemonResponse::Error { message, .. } => Err(anyhow!(message)),
         _ => Err(anyhow!("unexpected daemon hello response")),
@@ -26,7 +37,11 @@ pub fn hello_blocking(client: ClientKind, workspace: Option<String>) -> Result<S
 }
 
 pub fn ensure_capture_blocking(workspace: String, deep: bool) -> Result<CaptureStatus> {
-    match request_blocking(DaemonRequest::EnsureWorkspaceCapture { workspace, deep })? {
+    let request = DaemonRequest::EnsureWorkspaceCapture {
+        workspace: workspace.clone(),
+        deep,
+    };
+    match request_blocking_for(&workspace, request)? {
         DaemonResponse::CaptureStatus(status) => Ok(*status),
         DaemonResponse::Error { message, .. } => Err(anyhow!(message)),
         _ => Err(anyhow!("unexpected daemon capture response")),
@@ -34,10 +49,11 @@ pub fn ensure_capture_blocking(workspace: String, deep: bool) -> Result<CaptureS
 }
 
 pub fn ensure_proxy_blocking(workspace: String, provider: String) -> Result<ProxyEndpoint> {
-    match request_blocking(DaemonRequest::EnsureProxy {
-        workspace,
+    let request = DaemonRequest::EnsureProxy {
+        workspace: workspace.clone(),
         provider,
-    })? {
+    };
+    match request_blocking_for(&workspace, request)? {
         DaemonResponse::ProxyEndpoint(endpoint) => Ok(endpoint),
         DaemonResponse::Error { message, .. } => Err(anyhow!(message)),
         _ => Err(anyhow!("unexpected daemon proxy response")),
@@ -48,7 +64,11 @@ pub fn begin_observed_session_blocking(
     workspace: String,
     agent: String,
 ) -> Result<ObservedSession> {
-    match request_blocking(DaemonRequest::BeginObservedSession { workspace, agent })? {
+    let request = DaemonRequest::BeginObservedSession {
+        workspace: workspace.clone(),
+        agent,
+    };
+    match request_blocking_for(&workspace, request)? {
         DaemonResponse::ObservedSession(session) => Ok(session),
         DaemonResponse::Error { message, .. } => Err(anyhow!(message)),
         _ => Err(anyhow!("unexpected daemon observe response")),

@@ -39,19 +39,18 @@ fn ts_ms() -> u64 {
 }
 
 fn backup_path(ws: &Path, filename: &str) -> Result<PathBuf> {
-    let dir = crate::core::paths::project_data_dir(ws)?.join("backup");
-    std::fs::create_dir_all(&dir)?;
-    Ok(dir.join(format!("{}.{}.bak", filename, ts_ms())))
+    let relative = PathBuf::from("backup").join(format!("{}.{}.bak", filename, ts_ms()));
+    crate::core::paths::project_file_for_write(ws, &relative)
 }
 
 fn ensure_config(out: &mut String, ws: &Path) -> Result<()> {
-    let data_dir = crate::core::paths::project_data_dir(ws)?;
-    let path = data_dir.join("config.toml");
+    let path = crate::core::paths::project_file_for_write(ws, Path::new("config.toml"))?;
     if path.exists() {
         writeln!(out, "  skipped  config.toml (project data dir)").unwrap();
         return Ok(());
     }
-    std::fs::write(&path, CONFIG_TOML)?;
+    let mut file = crate::core::safe_fs::create_new(&path)?;
+    std::io::Write::write_all(&mut file, CONFIG_TOML.as_bytes())?;
     writeln!(out, "  created  {}", path.display()).unwrap();
     Ok(())
 }
@@ -487,14 +486,14 @@ pub fn init_text_with_options(
     };
     let mut out = String::new();
     if let Ok(data_dir) = crate::core::paths::project_data_dir(&ws) {
-        match crate::core::migrate_home::migrate_legacy_in_repo(&ws, &data_dir) {
-            Ok(crate::core::migrate_home::MigrationOutcome::Migrated) => {
-                writeln!(out, "  migrated  .kaizen/ → {}", data_dir.display()).unwrap();
+        match crate::core::legacy_import::import_legacy(&ws, &data_dir) {
+            Ok(crate::core::legacy_import::ImportOutcome::Imported) => {
+                writeln!(out, "  imported  .kaizen/ → {}", data_dir.display()).unwrap();
             }
-            Ok(crate::core::migrate_home::MigrationOutcome::Conflict) => {
+            Ok(crate::core::legacy_import::ImportOutcome::Conflict) => {
                 writeln!(
                     out,
-                    "  warning  .kaizen/ and {} both non-empty — skipping auto-migration",
+                    "  warning  .kaizen/ and {} both non-empty — skipping legacy import",
                     data_dir.display()
                 )
                 .unwrap();

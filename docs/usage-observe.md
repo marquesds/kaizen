@@ -108,16 +108,15 @@ kaizen guidance --json
 kaizen guidance --refresh
 kaizen guidance score --days 30 --min-sessions 30
 kaizen guidance propose --artifact skill:tdd
-kaizen guidance propose --artifact rule:style --apply
+kaizen guidance propose --artifact rule:style
 kaizen guidance candidates list
-kaizen guidance candidates validate <candidate_id>
 ```
 
 `guidance score` evaluates stored outcomes, feedback, cost, tokens, and repeated
 tool loops with a deterministic train/validation split. `guidance propose`
-creates one candidate and, with `--apply`, backs up that artifact under
-`~/.kaizen/projects/<slug>/backup/guidance/<candidate_id>/`. Validation uses the
-candidate's prompt-bound experiment.
+stores one review-only candidate. It may suggest deletion or replacement, but
+never changes the artifact. Apply accepted changes with your normal editor and
+measure them through `kaizen exp`.
 
 ## `kaizen metrics`
 

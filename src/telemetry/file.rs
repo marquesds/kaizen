@@ -5,26 +5,58 @@ use super::TelemetryExporter;
 use super::batch_metadata;
 use crate::sync::IngestExportBatch;
 use anyhow::{Context, Result};
-use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-/// Default: `~/.kaizen/projects/<slug>/telemetry.ndjson`.
-pub fn default_ndjson_path(workspace: &Path) -> PathBuf {
-    crate::core::paths::project_data_dir(workspace)
-        .map(|d| d.join("telemetry.ndjson"))
-        .unwrap_or_else(|_| workspace.join("telemetry.ndjson"))
+/// Default: `$KAIZEN_HOME/projects/<slug>/telemetry.ndjson`.
+pub fn default_ndjson_path(workspace: &Path) -> Result<PathBuf> {
+    crate::core::paths::project_data_child(workspace, Path::new("telemetry.ndjson"))
 }
 
-pub fn resolve_file_exporter_path(path_opt: Option<&str>, workspace: &Path) -> PathBuf {
-    let p: PathBuf = path_opt
-        .map(PathBuf::from)
-        .unwrap_or_else(|| default_ndjson_path(workspace));
+pub fn resolve_file_exporter_path(path_opt: Option<&str>, workspace: &Path) -> Result<PathBuf> {
+    let Some(p) = path_opt.map(PathBuf::from) else {
+        return default_ndjson_path(workspace);
+    };
     if p.is_absolute() {
-        p
-    } else {
-        workspace.join(p)
+        ensure_outside_workspace(&p, workspace)?;
+        ensure_not_symlink(&p)?;
+        return Ok(p);
     }
+    ensure_relative(&p)?;
+    crate::core::paths::project_data_child(workspace, &p)
+}
+
+fn ensure_not_symlink(path: &Path) -> Result<()> {
+    match std::fs::symlink_metadata(path) {
+        Ok(metadata) => anyhow::ensure!(
+            !metadata.file_type().is_symlink(),
+            "telemetry output rejects symlink"
+        ),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.into()),
+    }
+    Ok(())
+}
+
+fn ensure_relative(path: &Path) -> Result<()> {
+    let escapes = path
+        .components()
+        .any(|part| matches!(part, std::path::Component::ParentDir));
+    anyhow::ensure!(!escapes, "telemetry file path cannot contain `..`");
+    Ok(())
+}
+
+fn ensure_outside_workspace(path: &Path, workspace: &Path) -> Result<()> {
+    let workspace = crate::core::paths::canonical(workspace);
+    let linked_inside = path
+        .ancestors()
+        .find_map(|parent| parent.canonicalize().ok())
+        .is_some_and(|parent| parent.starts_with(&workspace));
+    anyhow::ensure!(
+        !path.starts_with(&workspace) && !linked_inside,
+        "telemetry output cannot be inside target repository"
+    );
+    Ok(())
 }
 
 pub struct FileExporter {
@@ -64,11 +96,9 @@ fn append_json_line(path: &Path, v: &serde_json::Value) -> Result<()> {
     if let Some(d) = path.parent() {
         std::fs::create_dir_all(d).with_context(|| format!("create {}", d.display()))?;
     }
-    let mut f = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(path)
-        .with_context(|| format!("open {}", path.display()))?;
+    ensure_not_symlink(path)?;
+    let mut f =
+        crate::core::safe_fs::append(path).with_context(|| format!("open {}", path.display()))?;
     serde_json::to_writer(&mut f, v)?;
     f.write_all(b"\n")?;
     f.flush()?;
@@ -78,6 +108,7 @@ fn append_json_line(path: &Path, v: &serde_json::Value) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::paths::test_lock;
     use crate::sync::IngestExportBatch;
     use crate::sync::export_batch::SessionEvalsBatchBody;
 
@@ -94,5 +125,28 @@ mod tests {
             v.get("batch_kind").and_then(|x| x.as_str()),
             Some("session_evals")
         );
+    }
+
+    #[test]
+    fn relative_path_stays_in_project_data() {
+        let _guard = test_lock::global().lock().unwrap();
+        let home = tempfile::tempdir().unwrap();
+        let workspace = tempfile::tempdir().unwrap();
+        unsafe { std::env::set_var("KAIZEN_HOME", home.path()) };
+        let path =
+            resolve_file_exporter_path(Some("custom/events.ndjson"), workspace.path()).unwrap();
+        let expected = crate::core::paths::project_data_path(workspace.path())
+            .unwrap()
+            .join("custom/events.ndjson");
+        unsafe { std::env::remove_var("KAIZEN_HOME") };
+        assert_eq!(path, expected);
+    }
+
+    #[test]
+    fn absolute_path_inside_workspace_is_rejected() {
+        let workspace = tempfile::tempdir().unwrap();
+        let path = workspace.path().join("telemetry.ndjson");
+        let error = resolve_file_exporter_path(path.to_str(), workspace.path()).unwrap_err();
+        assert!(error.to_string().contains("target repository"));
     }
 }

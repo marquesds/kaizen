@@ -13,7 +13,7 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::time::Duration;
 
-/// `--file` relative to `workspace` when not absolute. Default: `.kaizen/telemetry.ndjson`.
+/// `--file` is relative to project data when not absolute.
 pub fn cmd_telemetry_tail(
     workspace: Option<&Path>,
     file: Option<PathBuf>,
@@ -22,18 +22,18 @@ pub fn cmd_telemetry_tail(
 ) -> Result<()> {
     let ws = workspace_path(workspace)?;
     let default_tail = file.is_none();
-    let path = resolve_tail_path(&ws, file);
+    let path = resolve_tail_path(&ws, file)?;
     if no_follow {
         return dump_file(&path, pretty_json, default_tail);
     }
     follow_file(&path, pretty_json)
 }
 
-fn resolve_tail_path(ws: &Path, file: Option<PathBuf>) -> PathBuf {
+fn resolve_tail_path(ws: &Path, file: Option<PathBuf>) -> Result<PathBuf> {
     match file {
         None => default_ndjson_path(ws),
-        Some(p) if p.is_absolute() => p,
-        Some(p) => ws.join(p),
+        Some(p) if p.is_absolute() => Ok(p),
+        Some(p) => Ok(crate::core::paths::project_data_path(ws)?.join(p)),
     }
 }
 

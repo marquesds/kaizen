@@ -138,9 +138,9 @@ kaizen init
 kaizen open
 ```
 
-`kaizen init` is idempotent. Creates `~/.kaizen/projects/<slug>/config.toml`, patches
-agent hooks for Cursor / Claude Code, and installs the retro skill.
-Safe to rerun. `kaizen open` launches the local dashboard.
+`kaizen init` is idempotent. It creates project data under `~/.kaizen`, patches
+user-level Cursor / Claude Code hooks, and installs the retro skill. It never
+changes the target repository. `kaizen open` launches the local dashboard.
 
 ## Uninstall
 
@@ -149,8 +149,8 @@ cargo uninstall kaizen-cli
 rm -rf ~/.kaizen
 ```
 
-Remove hook edits from `.cursor/hooks.json` and
-`.claude/settings.json` if you want a full revert. `kaizen init`
+Remove hook edits from `~/.cursor/hooks.json` and
+`~/.claude/settings.json` if you want a full revert. `kaizen init`
 backs up originals under `~/.kaizen/projects/<slug>/backup/`.
 
 ## Verify

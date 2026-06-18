@@ -11,13 +11,14 @@ pub mod tools;
 use crate::ipc::WebEndpoint;
 use anyhow::{Context, Result};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::path::Path;
 use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
 
 const DEFAULT_LISTEN: &str = "127.0.0.1:7878";
 
-pub async fn start() -> Result<(WebEndpoint, JoinHandle<()>)> {
-    let token = token::load_or_create()?;
+pub async fn start(token_path: &Path) -> Result<(WebEndpoint, JoinHandle<()>)> {
+    let token = token::load_or_create_at(token_path)?;
     let listener = bind_loopback().await?;
     start_with_token(listener, token).await
 }

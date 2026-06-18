@@ -2,7 +2,6 @@
 //! `kaizen telemetry` subcommands: configure, print-effective, doctor, pull, push, schema.
 
 use crate::core::config::{self, ExporterConfig, effective_redaction_salt};
-use crate::core::paths::kaizen_dir;
 use crate::core::project_identity::project_name;
 #[cfg(any(feature = "telemetry-datadog", feature = "telemetry-posthog"))]
 use crate::provider::TelemetryQueryProvider;
@@ -41,9 +40,8 @@ pub struct ConfigureOptions {
 /// nothing. Re-running for the same exporter type + key field is a no-op (no duplicate row).
 pub fn cmd_telemetry_configure(workspace: Option<&Path>, options: ConfigureOptions) -> Result<()> {
     let ws = workspace_path(workspace)?;
-    let home = kaizen_dir().ok_or_else(|| anyhow::anyhow!("KAIZEN_HOME / HOME unset"))?;
-    let cfg_path = home.join("config.toml");
-    std::fs::create_dir_all(&home)?;
+    let cfg_path = crate::core::home_paths::file_for_write(&ws, Path::new("config.toml"))?;
+    let home = cfg_path.parent().unwrap().to_path_buf();
 
     println!("Kaizen telemetry — optional sinks fan-out alongside Kaizen sync.");
     let t = resolve_exporter_type(&options)?;
@@ -218,14 +216,12 @@ fn datadog_block(api_key: &str, site: &str) -> String {
 }
 
 fn append_block(path: &Path, block: &str) -> Result<()> {
-    let mut f = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(path)?;
-    if f.metadata()?.len() > 0 {
-        f.write_all(b"\n")?;
+    let mut content = std::fs::read_to_string(path).unwrap_or_default();
+    if !content.is_empty() {
+        content.push('\n');
     }
-    f.write_all(block.as_bytes())?;
+    content.push_str(block);
+    crate::core::safe_fs::write_atomic(path, content.as_bytes())?;
     Ok(())
 }
 
@@ -341,9 +337,7 @@ enabled = true
             .replace('"', "\\\"");
         writeln!(&mut block, "path = \"{path}\"").unwrap();
     } else {
-        block.push_str(
-            "# path = \"telemetry.ndjson\"   # optional; default .kaizen/telemetry.ndjson under each workspace\n",
-        );
+        block.push_str("# path = \"telemetry.ndjson\"   # optional; relative to project data\n");
     }
     block
 }
@@ -362,7 +356,7 @@ pub fn print_effective_config_text(workspace: Option<&Path>) -> Result<String> {
                 let p = path
                     .as_deref()
                     .map(|p| p.to_string())
-                    .unwrap_or_else(|| "<workspace>/.kaizen/telemetry.ndjson".into());
+                    .unwrap_or_else(|| "$KAIZEN_HOME/projects/<slug>/telemetry.ndjson".into());
                 writeln!(&mut s, "[{i}] type=file enabled={enabled} path={p}").unwrap();
             }
             ExporterConfig::Dev { enabled } => {
@@ -508,7 +502,7 @@ pub fn cmd_telemetry_push(
         .cloned()
         .ok_or_else(|| anyhow::anyhow!("no workspace roots"))?;
     let cfg = config::load(&primary)?;
-    let home = kaizen_dir().ok_or_else(|| anyhow::anyhow!("KAIZEN_HOME / HOME unset"))?;
+    let home = crate::core::home_paths::root(&primary)?;
     let salt = effective_redaction_salt(&cfg.sync, &home).context(
         "resolve redaction salt (configured `[sync].team_salt_hex` or auto-generated `local_salt.hex`)",
     )?;

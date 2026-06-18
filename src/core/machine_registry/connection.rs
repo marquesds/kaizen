@@ -1,10 +1,10 @@
 use anyhow::{Context, Result};
 use rusqlite::{Connection, OpenFlags};
 
-use super::{db_path, sql};
+use super::{db_path, db_path_for_write, sql};
 
-pub(super) fn open_write() -> Result<Option<Connection>> {
-    let Some(path) = db_path() else {
+pub(super) fn open_write(workspace: &std::path::Path) -> Result<Option<Connection>> {
+    let Some(path) = db_path_for_write(workspace)? else {
         return Ok(None);
     };
     create_parent(&path)?;

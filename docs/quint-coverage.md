@@ -42,7 +42,7 @@ When to add or extend a spec: see [`.cursor/rules/quint-before-code.mdc`](../.cu
 | [`specs/openclaw-ingest.qnt`](../specs/openclaw-ingest.qnt) | `tests/spec/openclaw_ingest_spec.rs` | OpenClaw workspace filter (accept/reject) |
 | [`specs/prompt-tracking.qnt`](../specs/prompt-tracking.qnt) | `tests/spec/prompt_tracking_spec.rs` | prompt snapshot lifecycle (SessionStart capture, Stop re-capture, prompt_changed event) |
 | [`specs/session-feedback.qnt`](../specs/session-feedback.qnt) | `tests/spec/session_feedback_spec.rs` | H17 human feedback trigger (bad/regression count, mean score threshold) |
-| [`specs/guidance-candidate.qnt`](../specs/guidance-candidate.qnt) | `tests/spec/guidance_candidate.rs` | Guidance candidate lifecycle and apply safety (backup, one artifact, prompt-bound experiment) |
+| [`specs/guidance-candidate.qnt`](../specs/guidance-candidate.qnt) | `tests/spec/guidance_candidate.rs` | Review-only candidate lifecycle and zero target-artifact mutations |
 | [`specs/guidance-proposal-llm.qnt`](../specs/guidance-proposal-llm.qnt) | `tests/spec/guidance_proposal_llm.rs` | Optional LLM proposal gate (explicit flag, enabled config, redaction, max ops, rejected memory) |
 | [`specs/guidance-score.qnt`](../specs/guidance-score.qnt) | `tests/spec/guidance_score.rs` | Guidance score validation gate (`no_data`, `needs_more_validation`, `stable`, `regression`) |
 | [`specs/span-hierarchy.qnt`](../specs/span-hierarchy.qnt) | `tests/spec/span_hierarchy_spec.rs` | `assign_parents` invariants: containment, depth consistency, no cycles, root depth=0 |

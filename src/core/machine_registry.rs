@@ -20,6 +20,13 @@ pub fn db_path() -> Option<PathBuf> {
     kaizen_dir().map(|d| d.join(MACHINE_DB))
 }
 
+fn db_path_for_write(workspace: &Path) -> Result<Option<PathBuf>> {
+    if kaizen_dir().is_none() {
+        return Ok(None);
+    }
+    crate::core::home_paths::sqlite_file_for_write(workspace, MACHINE_DB).map(Some)
+}
+
 fn now_ms() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -34,19 +41,19 @@ fn name_for_path(path: &Path) -> String {
         .unwrap_or_default()
 }
 
-fn open_conn_write() -> Result<Option<Connection>> {
-    connection::open_write()
+fn open_conn_write(workspace: &Path) -> Result<Option<Connection>> {
+    connection::open_write(workspace)
 }
 
 fn open_conn_read() -> Result<Option<Connection>> {
     connection::open_read()
 }
 
-fn with_write<F>(f: F) -> Result<()>
+fn with_write<F>(workspace: &Path, f: F) -> Result<()>
 where
     F: FnOnce(&Connection) -> Result<()>,
 {
-    let Some(conn) = open_conn_write()? else {
+    let Some(conn) = open_conn_write(workspace)? else {
         return Ok(());
     };
     legacy::migrate(&conn)?;
@@ -55,7 +62,7 @@ where
 
 /// Upsert a workspace seen from [`resolve`](crate::core::workspace::resolve).
 pub fn upsert_from_resolve(path: &Path) -> Result<()> {
-    with_write(|conn| upsert_seen(conn, path))
+    with_write(path, |conn| upsert_seen(conn, path))
 }
 
 fn upsert_seen(conn: &Connection, path: &Path) -> Result<()> {
@@ -70,7 +77,7 @@ fn upsert_seen(conn: &Connection, path: &Path) -> Result<()> {
 
 /// Record a successful `kaizen init` (increments `init_count`, optional git + version).
 pub fn record_init(path: &Path) -> Result<()> {
-    with_write(|conn| insert_init(conn, path))
+    with_write(path, |conn| insert_init(conn, path))
 }
 
 fn insert_init(conn: &Connection, path: &Path) -> Result<()> {

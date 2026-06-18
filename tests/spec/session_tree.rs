@@ -130,7 +130,12 @@ fn empty_session_tree_has_text_placeholder_and_json_empty_array() -> anyhow::Res
     std::fs::create_dir_all(&ws)?;
     let bin = env!("CARGO_BIN_EXE_kaizen");
 
-    run(bin, &home, &ws, &["init", "--workspace", path(&ws)])?;
+    run(
+        bin,
+        &home,
+        &ws,
+        &["--no-daemon", "init", "--workspace", path(&ws)],
+    )?;
     ingest_start(bin, &home, &ws, "tree-empty")?;
 
     let text = output(
@@ -161,7 +166,12 @@ fn missing_session_tree_is_error() -> anyhow::Result<()> {
     std::fs::create_dir_all(&ws)?;
     let bin = env!("CARGO_BIN_EXE_kaizen");
 
-    run(bin, &home, &ws, &["init", "--workspace", path(&ws)])?;
+    run(
+        bin,
+        &home,
+        &ws,
+        &["--no-daemon", "init", "--workspace", path(&ws)],
+    )?;
     let out = command(
         bin,
         &home,

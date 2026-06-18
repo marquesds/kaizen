@@ -50,6 +50,8 @@ kaizen retro
 `kaizen init` creates local storage under
 `~/.kaizen/projects/<slug>/` and wires supported agent hooks idempotently.
 Re-running it is safe; originals back up under the project data directory.
+Kaizen-owned writes never touch the target repository. Hook configuration lives
+in your user home, and legacy `<repo>/.kaizen/` data is copied rather than moved.
 
 ## How the Loop Works
 

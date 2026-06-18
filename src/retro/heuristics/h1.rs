@@ -37,7 +37,7 @@ pub fn run(inputs: &Inputs) -> Vec<Bet> {
                 sf.size_bytes
             )],
             apply_step: format!(
-                "Run `kaizen guidance propose --artifact skill:{} --apply` to back up, remove, and validate.",
+                "Run `kaizen guidance propose --artifact skill:{}` and review the suggested change.",
                 sf.slug
             ),
             evidence_recency_ms: sf.mtime_ms,
@@ -69,7 +69,7 @@ pub fn run(inputs: &Inputs) -> Vec<Bet> {
                 rf.size_bytes
             )],
             apply_step: format!(
-                "Run `kaizen guidance propose --artifact rule:{} --apply` to back up, remove, and validate.",
+                "Run `kaizen guidance propose --artifact rule:{}` and review the suggested change.",
                 rf.slug
             ),
             evidence_recency_ms: rf.mtime_ms,

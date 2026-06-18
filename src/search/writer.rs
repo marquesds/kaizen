@@ -4,7 +4,7 @@
 use crate::search::SearchDoc;
 use crate::search::schema::{SearchFields, build_schema, event_key};
 use anyhow::{Context, Result};
-use std::fs::{File, OpenOptions};
+use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 use tantivy::schema::Term;
@@ -24,8 +24,8 @@ pub struct PendingWriter {
 
 impl PendingWriter {
     pub fn open(root: &Path) -> Result<Self> {
-        let dir = index_dir(root);
-        std::fs::create_dir_all(&dir)?;
+        let dir = crate::core::paths::descendant_dir_for_write(root, Path::new("search"))?;
+        reject_tree_symlinks(&dir)?;
         let lock = lock_file(&dir)?;
         let (schema, fields) = build_schema();
         let index = open_or_create(&dir, schema)?;
@@ -106,14 +106,24 @@ pub fn index_dir(root: &Path) -> PathBuf {
 }
 
 fn lock_file(dir: &Path) -> Result<File> {
-    let file = OpenOptions::new()
-        .create(true)
-        .truncate(false)
-        .read(true)
-        .write(true)
-        .open(dir.join(".writer.lock"))?;
+    let file = crate::core::safe_fs::read_write(&dir.join(".writer.lock"))?;
     file.lock().context("lock search writer")?;
     Ok(file)
+}
+
+fn reject_tree_symlinks(root: &Path) -> Result<()> {
+    for entry in std::fs::read_dir(root)? {
+        let path = entry?.path();
+        let metadata = std::fs::symlink_metadata(&path)?;
+        anyhow::ensure!(
+            !metadata.file_type().is_symlink(),
+            "search index rejects symlink"
+        );
+        if metadata.is_dir() {
+            reject_tree_symlinks(&path)?;
+        }
+    }
+    Ok(())
 }
 
 fn open_or_create(dir: &Path, schema: tantivy::schema::Schema) -> Result<Index> {

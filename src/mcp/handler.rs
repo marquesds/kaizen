@@ -24,9 +24,9 @@ const MCP_CAPABILITIES: &str = r#"Kaizen MCP exposes most `kaizen` CLI workflows
 - kaizen_insights — Activity dashboard (7d). kaizen_retro — weekly bets. kaizen_exp_* — experiments.
 - kaizen_query / kaizen_cases_* / kaizen_rules_* / kaizen_alerts_check / kaizen_review_* — local trace-to-case automation loop.
 - List/summary/insights/metrics/retro are cache-first; set refresh=true to force a full transcript rescan (matches CLI --refresh).
-- sessions_list/summary/insights/metrics also accept all_workspaces=true to aggregate across registered workspace-local DBs.
+- sessions_list/summary/insights/metrics also accept all_workspaces=true to aggregate across registered project DBs.
 - kaizen_ingest_hook — same as `kaizen ingest hook` (rare; hooks call this).
-- kaizen_init — idempotent .kaizen/ + hook patches. kaizen_sync_* — outbox. kaizen_tui — not available (returns JSON stub).
+- kaizen_init — idempotent user-level hooks and home project data; target repos stay read-only. kaizen_sync_* — outbox. kaizen_tui — not available (returns JSON stub).
 
 Docs: https://github.com/marquesds/kaizen/blob/main/docs/mcp.md
 "#;

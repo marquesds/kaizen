@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Scientific skill/rule scoring and candidate commands.
 
-use crate::experiment::store as exp_store;
-use crate::experiment::types::{Binding, Criterion, Direction, Experiment, Metric, State};
-use crate::guidance::{self, ArtifactRef, CandidateStatus, GuidanceCandidate};
+use crate::guidance::{self, ArtifactRef, GuidanceCandidate};
 use crate::shell::cli::workspace_path;
 use crate::store::Store;
 use anyhow::{Result, anyhow};
@@ -37,13 +35,9 @@ pub fn cmd_propose(
     artifact: &str,
     max_ops: usize,
     llm: bool,
-    apply: bool,
     json_out: bool,
 ) -> Result<()> {
-    print!(
-        "{}",
-        propose_text(ws, artifact, max_ops, llm, apply, json_out)?
-    );
+    print!("{}", propose_text(ws, artifact, max_ops, llm, json_out)?);
     Ok(())
 }
 
@@ -52,18 +46,14 @@ pub fn propose_text(
     artifact: &str,
     max_ops: usize,
     llm: bool,
-    apply: bool,
     json_out: bool,
 ) -> Result<String> {
     let ws = workspace_path(ws)?;
     let store = Store::open(&crate::core::workspace::db_path(&ws)?)?;
     let artifact =
         ArtifactRef::parse(artifact).ok_or_else(|| anyhow!("use skill:<id> or rule:<id>"))?;
-    let mut candidate = proposed_candidate(&ws, &store, &artifact, max_ops, llm)?;
+    let candidate = proposed_candidate(&ws, &store, &artifact, max_ops, llm)?;
     store.upsert_guidance_candidate(&candidate)?;
-    if apply {
-        apply_and_record(&ws, &store, &mut candidate)?;
-    }
     if json_out {
         Ok(serde_json::to_string_pretty(&candidate)?)
     } else {
@@ -106,65 +96,6 @@ fn score_row(
         .into_iter()
         .find(|r| r.artifact == *artifact)
         .ok_or_else(|| anyhow!("artifact not in scorecard: {artifact}"))
-}
-
-fn apply_and_record(ws: &Path, store: &Store, candidate: &mut GuidanceCandidate) -> Result<()> {
-    let now = now_ms();
-    let before = crate::prompt::snapshot::capture(ws, now)?;
-    store.upsert_prompt_snapshot(&before)?;
-    let applied = guidance::proposals::apply_candidate(ws, candidate, now)?;
-    store.upsert_prompt_snapshot(&applied.snapshot)?;
-    let exp_id = create_prompt_experiment(
-        store,
-        candidate,
-        &before.fingerprint,
-        &applied.treatment_fingerprint,
-        now,
-    )?;
-    store.mark_guidance_candidate_applied(
-        &candidate.id,
-        now,
-        &applied.treatment_fingerprint,
-        &applied.backup_path,
-        Some(&exp_id),
-    )?;
-    candidate.status = CandidateStatus::Applied;
-    candidate.applied_at_ms = Some(now);
-    candidate.treatment_fingerprint = Some(applied.treatment_fingerprint);
-    candidate.backup_path = Some(applied.backup_path);
-    candidate.experiment_id = Some(exp_id);
-    Ok(())
-}
-
-fn create_prompt_experiment(
-    store: &Store,
-    c: &GuidanceCandidate,
-    control: &str,
-    treatment: &str,
-    now: u64,
-) -> Result<String> {
-    let exp = Experiment {
-        id: uuid::Uuid::now_v7().to_string(),
-        name: format!("guidance-{}", c.artifact),
-        hypothesis: format!("{} improves {}", c.rationale, c.artifact),
-        change_description: format!("guidance candidate {}", c.id),
-        metric: Metric::CostPerSession,
-        binding: Binding::PromptFingerprint {
-            control_fingerprint: control.into(),
-            treatment_fingerprint: treatment.into(),
-        },
-        duration_days: 14,
-        success_criterion: Criterion::Delta {
-            direction: Direction::Decrease,
-            target_pct: -10.0,
-        },
-        state: State::Running,
-        created_at_ms: now,
-        concluded_at_ms: None,
-        guardrails: Vec::new(),
-    };
-    exp_store::save_experiment(store, &exp)?;
-    Ok(exp.id)
 }
 
 fn format_score(report: &crate::guidance::GuidanceScoreReport) -> String {

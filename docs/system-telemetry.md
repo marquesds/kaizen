@@ -24,7 +24,7 @@ Ingest spawns `kaizen __sampler-run --workspace … --session … --pid …` wit
 
 On **Stop**, ingest creates an empty file at:
 
-`.kaizen/sampler-stop/<session_id>`
+`~/.kaizen/projects/<slug>/sampler-stop/<session_id>`
 
 The sampler loop checks for this file each iteration and exits. The process also stops if the PID disappears or `max_samples_per_session` is reached.
 

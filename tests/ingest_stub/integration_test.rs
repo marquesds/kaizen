@@ -69,8 +69,9 @@ async fn sync_flush_sends_redacted_gzip_batch() {
     tokio::time::sleep(std::time::Duration::from_millis(80)).await;
 
     let tmp = tempfile::TempDir::new().unwrap();
-    let ws = tmp.path().to_path_buf();
-    let kz_home = ws.join(".kzhome");
+    let ws = tmp.path().join("repo");
+    let kz_home = tmp.path().join("home");
+    std::fs::create_dir_all(&ws).unwrap();
     let salt_hex = "00".repeat(32);
     let endpoint = format!("http://{}", addr);
     let (_data_dir, db, cfg) = {
@@ -225,8 +226,9 @@ async fn sync_flush_workspace_facts_hits_route() {
     tokio::time::sleep(std::time::Duration::from_millis(80)).await;
 
     let tmp = tempfile::TempDir::new().unwrap();
-    let ws = tmp.path().to_path_buf();
-    let kz_home = ws.join(".kzhome");
+    let ws = tmp.path().join("repo");
+    let kz_home = tmp.path().join("home");
+    std::fs::create_dir_all(&ws).unwrap();
     let salt_hex = "00".repeat(32);
     let endpoint = format!("http://{}", addr);
     let (_data_dir, db, cfg) = {

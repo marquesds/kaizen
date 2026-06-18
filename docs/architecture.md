@@ -53,6 +53,10 @@ Each project has one canonical SQLite WAL database at
 feedback, experiments, and sync state live in that database. Read commands and
 the analytics query facade read SQLite directly.
 
+The target repository is a read-only input boundary. Kaizen-owned state,
+indexes, reports, hooks, backups, and migration markers live under Kaizen home
+or the user's agent configuration directories.
+
 Tantivy search and the GraphQLite code graph are rebuildable sidecars, not
 alternate event stores. Legacy hot-event and cold-partition artifacts are
 ignored. A legacy `hot/outbox.redb` is imported once into SQLite and archived.
