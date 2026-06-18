@@ -32,7 +32,7 @@ jobs:
       notes_section: ${{ steps.v.outputs.notes_section }}
       release_version: ${{ steps.v.outputs.release_version }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - id: v
         env:
           DISPATCH_VERSION: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.version || '' }}
@@ -102,7 +102,7 @@ jobs:
             os: macos-latest
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -138,7 +138,7 @@ jobs:
     needs: [verify, build]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/download-artifact@v4
         with:
           path: dist
@@ -199,7 +199,7 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ !contains(needs.verify.outputs.release_version, '-') }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/download-artifact@v4
         with:
           path: dist
@@ -247,7 +247,7 @@ jobs:
     if: ${{ !contains(needs.verify.outputs.release_version, '-') }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: v${{ needs.verify.outputs.release_version }}
       - uses: dtolnay/rust-toolchain@stable
