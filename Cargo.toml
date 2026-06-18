@@ -356,7 +356,7 @@ arboard = "3"
 anyhow = "1"
 tempfile = "3"
 tar = "0.4"
-rusqlite = { version = "0.39", features = ["bundled"] }
+rusqlite = { version = "0.40", features = ["bundled"] }
 rand = { version = "0.10", features = ["std_rng"] }
 tokio = { version = "1", features = ["full"] }
 notify = "8"
