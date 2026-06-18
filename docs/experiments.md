@@ -125,7 +125,7 @@ kaizen exp list
 kaizen exp status <id>
 kaizen exp tag <id> --variant treatment   # manual override
 kaizen exp report <id>                    # markdown + bootstrap CI + sequential decision
-kaizen exp report <id> --refresh         # optional: full transcript rescan first; can take a while
+kaizen exp report <id> --refresh         # optional: ingest changed transcript tails first
 kaizen exp conclude <id>                  # Running → Concluded
 kaizen exp archive <id>                   # Concluded → Archived
 ```

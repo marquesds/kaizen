@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Axum router for the local daemon web app.
 
-use super::{assets, features, snapshot, tools};
+use super::{assets, features, live::Subscription, snapshot, tools};
 use axum::Router;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Query, State};
@@ -35,6 +35,8 @@ enum ClientMessage {
     Subscribe {
         #[serde(default)]
         id: Option<String>,
+        #[serde(default)]
+        workspace: Option<String>,
     },
     Unsubscribe,
     Ping {
@@ -80,18 +82,19 @@ async fn ws(
 }
 
 async fn socket_loop(mut socket: WebSocket) {
-    let mut subscribed = false;
-    let mut tick = tokio::time::interval(std::time::Duration::from_secs(3));
+    let mut subscription = Subscription::default();
+    let mut tick = tokio::time::interval(std::time::Duration::from_millis(250));
     loop {
         tokio::select! {
             msg = socket.recv() => {
                 let Some(Ok(Message::Text(text))) = msg else { break; };
-                if !handle_text(&mut socket, &text, &mut subscribed).await {
+                if !handle_text(&mut socket, &text, &mut subscription).await {
                     break;
                 }
             }
-            _ = tick.tick(), if subscribed => {
-                if send(&mut socket, status_msg(None)).await.is_err() {
+            _ = tick.tick(), if subscription.is_active() => {
+                if let Some(value) = subscription.changed()
+                    && send(&mut socket, value).await.is_err() {
                     break;
                 }
             }
@@ -99,18 +102,25 @@ async fn socket_loop(mut socket: WebSocket) {
     }
 }
 
-async fn handle_text(socket: &mut WebSocket, text: &str, subscribed: &mut bool) -> bool {
+async fn handle_text(socket: &mut WebSocket, text: &str, subscription: &mut Subscription) -> bool {
     match serde_json::from_str::<ClientMessage>(text) {
         Ok(ClientMessage::Call { id, tool, args }) => {
             let value = call_msg(&id, &tool, args.unwrap_or_else(|| json!({}))).await;
             send(socket, value).await.is_ok()
         }
-        Ok(ClientMessage::Subscribe { id }) => {
-            *subscribed = true;
+        Ok(ClientMessage::Subscribe { id, workspace }) => {
+            if let Err(err) = subscription.set(workspace) {
+                return send(
+                    socket,
+                    json!({"type":"error","id":id,"error":err.to_string()}),
+                )
+                .await
+                .is_ok();
+            }
             send(socket, status_msg(id.as_deref())).await.is_ok()
         }
         Ok(ClientMessage::Unsubscribe) => {
-            *subscribed = false;
+            subscription.clear();
             send(
                 socket,
                 json!({"type":"result","output":{"kind":"json","value":{"subscribed":false}}}),

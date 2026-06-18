@@ -21,19 +21,27 @@ pub fn scan_claude_project_dir(
     project_dir: &Path,
     workspace: &Path,
 ) -> Result<Vec<(SessionRecord, Vec<Event>)>> {
+    scan_claude_project_dir_since(project_dir, workspace, 0)
+}
+
+pub(crate) fn scan_claude_project_dir_since(
+    project_dir: &Path,
+    workspace: &Path,
+    since_ms: u64,
+) -> Result<Vec<(SessionRecord, Vec<Event>)>> {
     if !project_dir.exists() {
         return Ok(Vec::new());
     }
     let target = crate::core::paths::canonical(workspace);
     let mut out = Vec::new();
-    for file in top_level_jsonl(project_dir)? {
+    for file in top_level_jsonl(project_dir, since_ms)? {
         push_if_target(
             &mut out,
             scan_claude_session_file(&file, None, Some(workspace))?,
             &target,
         );
     }
-    for (file, parent) in subagent_jsonl(project_dir)? {
+    for (file, parent) in subagent_jsonl(project_dir, since_ms)? {
         push_if_target(
             &mut out,
             scan_claude_session_file(&file, Some(parent), Some(workspace))?,
@@ -48,19 +56,25 @@ pub fn scan_claude_session_file(
     parent_session_id: Option<String>,
     workspace_fallback: Option<&Path>,
 ) -> Result<(SessionRecord, Vec<Event>)> {
-    let content = std::fs::read_to_string(path)
-        .with_context(|| format!("read claude file: {}", path.display()))?;
-    let mut meta = content.lines().fold(Meta::default(), read_meta);
+    let first = super::read_first_jsonl_line(path)
+        .with_context(|| format!("read claude metadata: {}", path.display()))?;
+    let (first_seq, content) = super::read_recent_jsonl(path)
+        .with_context(|| format!("read claude tail: {}", path.display()))?;
+    let mut meta = std::iter::once(first.as_str())
+        .chain(content.lines())
+        .fold(Meta::default(), read_meta);
     if meta.workspace.is_none() {
         meta.workspace = workspace_fallback.map(|p| p.to_string_lossy().to_string());
     }
-    let id = meta.id.clone().unwrap_or_else(|| file_stem(path));
-    let base = meta.started_ms.unwrap_or_else(|| file_mtime_ms(path));
+    let id = meta.id.clone().unwrap_or_else(|| super::file_stem(path));
+    let base = meta
+        .started_ms
+        .unwrap_or_else(|| super::file_mtime_ms(path));
     let events = content
         .lines()
         .enumerate()
         .filter_map(|(i, line)| {
-            crate::collect::tail::claude::parse_claude_line(&id, i as u64, base, line)
+            crate::collect::tail::claude::parse_claude_line(&id, first_seq + i as u64, base, line)
                 .ok()
                 .flatten()
         })
@@ -68,16 +82,15 @@ pub fn scan_claude_session_file(
     Ok((record(path, id, meta, base, parent_session_id), events))
 }
 
-fn top_level_jsonl(project_dir: &Path) -> Result<Vec<PathBuf>> {
-    let mut out = std::fs::read_dir(project_dir)?
+fn top_level_jsonl(project_dir: &Path, since_ms: u64) -> Result<Vec<PathBuf>> {
+    let out = std::fs::read_dir(project_dir)?
         .filter_map(|e| e.ok().map(|e| e.path()))
         .filter(|p| p.is_file() && p.extension().and_then(|x| x.to_str()) == Some("jsonl"))
         .collect::<Vec<_>>();
-    out.sort();
-    Ok(out)
+    Ok(super::newest_paths_since(out, since_ms))
 }
 
-fn subagent_jsonl(project_dir: &Path) -> Result<Vec<(PathBuf, String)>> {
+fn subagent_jsonl(project_dir: &Path, since_ms: u64) -> Result<Vec<(PathBuf, String)>> {
     let mut out = Vec::new();
     for entry in std::fs::read_dir(project_dir)? {
         let path = entry?.path();
@@ -86,8 +99,7 @@ fn subagent_jsonl(project_dir: &Path) -> Result<Vec<(PathBuf, String)>> {
         };
         collect_subagents(&path.join("subagents"), &parent, &mut out)?;
     }
-    out.sort();
-    Ok(out)
+    Ok(super::newest_by_path_since(out, |(path, _)| path, since_ms))
 }
 
 fn collect_subagents(dir: &Path, parent: &str, out: &mut Vec<(PathBuf, String)>) -> Result<()> {
@@ -175,23 +187,4 @@ fn line_ts(obj: &serde_json::Map<String, Value>) -> Option<u64> {
 
 fn text(v: &Value, key: &str) -> Option<String> {
     v.get(key).and_then(Value::as_str).map(ToOwned::to_owned)
-}
-
-fn file_stem(path: &Path) -> String {
-    path.file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("")
-        .to_string()
-}
-
-fn file_mtime_ms(path: &Path) -> u64 {
-    path.metadata()
-        .ok()
-        .and_then(|m| m.modified().ok())
-        .map(|t| {
-            t.duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as u64
-        })
-        .unwrap_or(0)
 }

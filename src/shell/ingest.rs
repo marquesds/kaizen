@@ -157,6 +157,9 @@ pub(crate) fn ingest_hook_with_store(
         )?;
     }
     store.append_event_with_sync(&ev, sync_ctx.as_ref())?;
+    if matches!(event.kind, collect::hooks::EventKind::Stop) {
+        store.flush_search()?;
+    }
     post_ingest_detached(&event, &cfg, ws)?;
     Ok(())
 }

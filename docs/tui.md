@@ -20,6 +20,8 @@ kaizen tui --workspace /path/to/project
 
 The TUI requires an interactive terminal. It watches the SQLite WAL and
 coalesces refreshes, so active sessions update without a busy polling loop.
+Hook-backed `PreToolUse` and `PostToolUse` rows appear as named tool calls and
+results; lifecycle hooks remain lifecycle events.
 
 ## Keys
 
@@ -54,4 +56,3 @@ help view instead of terminating the interface.
 | Wrong repository appears | Start with `--workspace /path/to/project`. |
 | Navigation seems stuck | Press `Esc` to close overlays, then `Tab` to select the intended pane. |
 | Terminal display is damaged after a crash | Run `reset`, then restart `kaizen tui`. |
-

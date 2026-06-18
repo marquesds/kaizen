@@ -41,10 +41,14 @@ pub(crate) fn clear_session_spans(conn: &Connection, session_id: &str) -> Result
     Ok(())
 }
 
-pub(crate) fn upsert_tool_span_record(conn: &Connection, span: &ToolSpanRecord) -> Result<()> {
+pub(crate) fn upsert_tool_span_record(
+    conn: &Connection,
+    span: &ToolSpanRecord,
+) -> Result<ToolSpanRecord> {
     let persisted = namespaced_record(span);
     upsert_span(conn, &persisted)?;
-    replace_paths(conn, &persisted)
+    replace_paths(conn, &persisted)?;
+    Ok(persisted)
 }
 
 fn namespaced_record(span: &ToolSpanRecord) -> ToolSpanRecord {

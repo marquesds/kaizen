@@ -56,6 +56,8 @@ mod artifact_windows;
 mod constants;
 mod contracts;
 mod evals;
+mod event_batch;
+mod event_extensions;
 mod event_projector;
 mod event_read;
 mod event_write;

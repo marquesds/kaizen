@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use crate::store::Store;
+use crate::store::tool_span_index::ToolSpanRecord;
 use anyhow::Result;
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
@@ -13,6 +14,23 @@ pub struct StepDiff {
     pub added_lines: u64,
     pub removed_lines: u64,
     pub raw_patch_stored: bool,
+}
+
+pub fn upsert_tool_span(store: &Store, span: &ToolSpanRecord) -> Result<()> {
+    if span.paths.is_empty() {
+        return Ok(());
+    }
+    insert(
+        store,
+        &StepDiff {
+            session_id: span.session_id.clone(),
+            span_id: span.span_id.clone(),
+            files: span.paths.clone(),
+            added_lines: 0,
+            removed_lines: 0,
+            raw_patch_stored: false,
+        },
+    )
 }
 
 pub fn refresh_session(

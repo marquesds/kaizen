@@ -36,3 +36,6 @@ pub mod sync;
 pub mod telemetry;
 pub mod telemetry_tail;
 pub mod upgrade;
+
+#[cfg(test)]
+mod cli_tests;

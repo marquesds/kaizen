@@ -22,14 +22,21 @@ pub fn scan_codex_sessions_root(
     root: &Path,
     workspace: &Path,
 ) -> Result<Vec<(SessionRecord, Vec<Event>)>> {
+    scan_codex_sessions_root_since(root, workspace, 0)
+}
+
+pub(crate) fn scan_codex_sessions_root_since(
+    root: &Path,
+    workspace: &Path,
+    since_ms: u64,
+) -> Result<Vec<(SessionRecord, Vec<Event>)>> {
     if !root.exists() {
         return Ok(Vec::new());
     }
     let target = crate::core::paths::canonical(workspace);
     let mut paths = Vec::new();
     collect_jsonl(root, &mut paths)?;
-    paths.sort();
-    Ok(paths
+    Ok(super::newest_paths_since(paths, since_ms)
         .into_iter()
         .filter_map(|p| scan_codex_session_file(&p).ok())
         .filter(|(r, _)| workspace_matches(&r.workspace, &target))
@@ -37,15 +44,23 @@ pub fn scan_codex_sessions_root(
 }
 
 pub fn scan_codex_session_file(path: &Path) -> Result<(SessionRecord, Vec<Event>)> {
-    let content = std::fs::read_to_string(path)
-        .with_context(|| format!("read codex file: {}", path.display()))?;
-    let meta = content.lines().fold(Meta::default(), read_meta);
-    let id = meta.id.clone().unwrap_or_else(|| file_stem(path));
-    let base = meta.started_ms.unwrap_or_else(|| file_mtime_ms(path));
+    let first = super::read_first_jsonl_line(path)
+        .with_context(|| format!("read codex metadata: {}", path.display()))?;
+    let (first_seq, content) = super::read_recent_jsonl(path)
+        .with_context(|| format!("read codex tail: {}", path.display()))?;
+    let meta = std::iter::once(first.as_str())
+        .chain(content.lines())
+        .fold(Meta::default(), read_meta);
+    let id = meta.id.clone().unwrap_or_else(|| super::file_stem(path));
+    let base = meta
+        .started_ms
+        .unwrap_or_else(|| super::file_mtime_ms(path));
     let events = content
         .lines()
         .enumerate()
-        .filter_map(|(i, line)| parse_modern_line(&id, i as u64, base, meta.model.as_deref(), line))
+        .filter_map(|(i, line)| {
+            parse_modern_line(&id, first_seq + i as u64, base, meta.model.as_deref(), line)
+        })
         .collect();
     Ok((record(path, id, meta, base), events))
 }
@@ -136,23 +151,4 @@ fn workspace_matches(found: &str, target: &Path) -> bool {
 
 fn text(v: &Value, key: &str) -> Option<String> {
     v.get(key).and_then(Value::as_str).map(ToOwned::to_owned)
-}
-
-fn file_stem(path: &Path) -> String {
-    path.file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("")
-        .to_string()
-}
-
-fn file_mtime_ms(path: &Path) -> u64 {
-    path.metadata()
-        .ok()
-        .and_then(|m| m.modified().ok())
-        .map(|t| {
-            t.duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as u64
-        })
-        .unwrap_or(0)
 }

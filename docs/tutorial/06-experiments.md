@@ -23,7 +23,7 @@ kaizen exp status <id>
 kaizen exp tag <id> --session <sid> --variant treatment
 kaizen exp report <id>
 kaizen exp report <id> --json
-kaizen exp report <id> --refresh   # full transcript rescan before report if the store may be stale
+kaizen exp report <id> --refresh   # ingest changed transcript tails if the store may be stale
 kaizen exp conclude <id>
 ```
 

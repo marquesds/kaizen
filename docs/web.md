@@ -23,16 +23,19 @@ kaizen open --no-browser
 
 The dashboard provides:
 
-- project selection, including a manual local path;
+- automatic selection of the most recently active valid project, plus a manual
+  local-path fallback;
 - session, active-session, error, and cost totals;
+- project-level tool, attention, and telemetry-coverage insights;
 - the latest 30 sessions for the selected project;
 - selected-session facts, recent events, nested tool spans, touched files, and
   top tools;
 - the exact bounded report under **Developer details**.
 
 Selected-session detail is capped at 40 events, 40 spans, and 40 files. Those
-limits keep refresh latency and memory use predictable. The page refreshes every
-20 seconds while connected; **Refresh now** requests an immediate snapshot.
+limits keep refresh latency and memory use predictable. The server watches the
+selected project's SQLite database and WAL; a committed change requests a new
+snapshot within one second. **Refresh now** remains available for manual checks.
 
 Web is an Observe-only surface. It cannot mutate experiments, guidance, sync,
 configuration, or local data. Use the CLI or MCP for those workflows.
@@ -55,6 +58,5 @@ for protocol and runtime-file details.
 | Browser did not open | Run `kaizen open --no-browser` and open the printed URL. |
 | Page says connection failed | Run `kaizen daemon status`; restart with `kaizen daemon stop` followed by `kaizen open`. |
 | URL has no valid token | Run `kaizen open --no-browser` again instead of editing the URL. |
-| Expected project is missing | Open its path manually or run `kaizen sessions list --refresh` from that repository. |
+| Expected project is missing | Run one Kaizen command from that repository to register it, then reload. Unsafe roots containing `KAIZEN_HOME` and missing paths are ignored. |
 | Default port is busy | Use the URL Kaizen prints; the daemon automatically chooses another loopback port. |
-

@@ -19,11 +19,11 @@ const MCP_CAPABILITIES: &str = r#"Kaizen MCP exposes most `kaizen` CLI workflows
 
 - kaizen_summary — Session counts, USD cost, by-agent/model, top tools. Use for spend and volume. Optional json=true.
 - kaizen_metrics — Code hotspots, slow tools (p95), token-heavy tools, churn. Use for **repository** and tool latency. Optional json.
-- kaizen_sessions_list / kaizen_session_show — Session list and one session metadata. Optional json on list; optional `limit` caps rows (newest first). `kaizen_exp_report` supports `refresh: true` for a full transcript rescan before computing the report (matches CLI `kaizen exp report --refresh`).
+- kaizen_sessions_list / kaizen_session_show — Session list and one session metadata. Optional json on list; optional `limit` caps rows (newest first). `kaizen_exp_report` supports `refresh: true` for bounded changed-tail ingest before computing the report (matches CLI `kaizen exp report --refresh`).
 - kaizen_search_sessions — BM25 event search over current workspace. Supports since, agent, kind, limit.
 - kaizen_insights — Activity dashboard (7d). kaizen_retro — weekly bets. kaizen_exp_* — experiments.
 - kaizen_query / kaizen_cases_* / kaizen_rules_* / kaizen_alerts_check / kaizen_review_* — local trace-to-case automation loop.
-- List/summary/insights/metrics/retro are cache-first; set refresh=true to force a full transcript rescan (matches CLI --refresh).
+- List/summary/insights/metrics/retro are cache-first; set refresh=true for bounded changed-tail ingest (matches CLI --refresh).
 - sessions_list/summary/insights/metrics also accept all_workspaces=true to aggregate across registered project DBs.
 - kaizen_ingest_hook — same as `kaizen ingest hook` (rare; hooks call this).
 - kaizen_init — idempotent user-level hooks and home project data; target repos stay read-only. kaizen_sync_* — outbox. kaizen_tui — not available (returns JSON stub).
@@ -83,7 +83,7 @@ struct WorkspaceJsonArg {
     /// When true, return the same pretty JSON as `kaizen sessions list --json` or `kaizen summary --json`.
     #[serde(default)]
     json: bool,
-    /// When true, run a full agent transcript rescan (matches `kaizen ... --refresh`).
+    /// When true, ingest bounded changed transcript tails (matches `kaizen ... --refresh`).
     #[serde(default)]
     refresh: bool,
     /// Cap sessions returned (newest first); only `kaizen_sessions_list` uses this.
@@ -148,7 +148,7 @@ struct MetricsArg {
     json: bool,
     #[serde(default)]
     force: bool,
-    /// When true, run a full agent transcript rescan (matches `kaizen metrics --refresh`).
+    /// When true, ingest bounded changed transcript tails (matches `kaizen metrics --refresh`).
     #[serde(default)]
     refresh: bool,
 }
@@ -190,7 +190,7 @@ struct RetroArg {
     json: bool,
     #[serde(default)]
     force: bool,
-    /// When true, run a full agent transcript rescan (matches `kaizen retro --refresh`).
+    /// When true, ingest bounded changed transcript tails (matches `kaizen retro --refresh`).
     #[serde(default)]
     refresh: bool,
 }
@@ -201,7 +201,7 @@ struct InsightsArg {
     ws: WorkspaceArg,
     #[serde(default)]
     all_workspaces: bool,
-    /// When true, run a full agent transcript rescan (matches `kaizen insights --refresh`).
+    /// When true, ingest bounded changed transcript tails (matches `kaizen insights --refresh`).
     #[serde(default)]
     refresh: bool,
 }
@@ -262,7 +262,7 @@ struct ExpReportArg {
     id: String,
     #[serde(default)]
     json: bool,
-    /// Full transcript rescan before computing the report.
+    /// Ingest bounded changed transcript tails before computing the report.
     #[serde(default)]
     refresh: bool,
 }
@@ -397,7 +397,7 @@ impl KaizenMcp {
 
     #[tool(
         name = "kaizen_sessions_list",
-        description = "List agent sessions in the workspace. Set json=true for structured output. Optional limit caps rows after sort (newest first). Use refresh=true for a full transcript rescan."
+        description = "List agent sessions in the workspace. Set json=true for structured output. Optional limit caps rows after sort (newest first). Use refresh=true to ingest bounded, recently changed transcript tails."
     )]
     async fn kaizen_sessions_list(
         &self,
@@ -917,7 +917,7 @@ impl KaizenMcp {
 
     #[tool(
         name = "kaizen_exp_report",
-        description = "Experiment report (kaizen exp report). Optional refresh: true forces a full transcript rescan before computing the report."
+        description = "Experiment report (kaizen exp report). Optional refresh: true ingests bounded, recently changed transcript tails before computing the report."
     )]
     async fn kaizen_exp_report(
         &self,

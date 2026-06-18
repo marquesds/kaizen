@@ -80,7 +80,6 @@ fn handle_request(request: DaemonRequest, stores: &mut StoreCache) -> Result<Dae
             let ws = workspace_path(workspace)?;
             let store = stores.workspace(&ws)?;
             crate::shell::ingest::ingest_hook_with_store(source, &payload, &ws, store)?;
-            store.flush_search().ok();
             Ok(DaemonResponse::Ack {
                 message: "ingested".to_string(),
             })

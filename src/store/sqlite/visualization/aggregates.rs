@@ -4,13 +4,18 @@ use crate::visualization::{DataQuality, TokenTotals, VisualizationTotals};
 use anyhow::Result;
 
 const TOTALS_SQL: &str = "
-WITH ws AS (SELECT id, status FROM sessions WHERE workspace = ?1)
+WITH ws AS (SELECT id, status FROM sessions WHERE workspace = ?1),
+last_events AS (
+ SELECT e.session_id, MAX(e.ts_ms) last_event_ms FROM events e
+ JOIN ws ON ws.id = e.session_id GROUP BY e.session_id
+)
 SELECT
   (SELECT COUNT(*) FROM ws),
-  (SELECT COUNT(*) FROM ws WHERE status IN ('Running', 'Waiting', 'Idle')),
+  (SELECT COUNT(*) FROM ws JOIN last_events l ON l.session_id = ws.id
+   WHERE ws.status IN ('Running', 'Waiting', 'Idle') AND l.last_event_ms >= ?2),
   COUNT(e.id),
   COALESCE(SUM(e.kind = 'Error'), 0),
-  COALESCE(SUM(e.kind = 'ToolCall'), 0),
+  (SELECT COUNT(*) FROM tool_spans t JOIN ws ON ws.id = t.session_id),
   COALESCE(SUM(e.cost_usd_e6), 0),
   COALESCE(SUM(e.tokens_in), 0),
   COALESCE(SUM(e.tokens_out), 0),
@@ -28,9 +33,13 @@ impl Store {
     pub(crate) fn visualization_totals(
         &self,
         workspace: &str,
+        active_since_ms: u64,
     ) -> Result<(VisualizationTotals, DataQuality)> {
         let mut statement = self.conn().prepare(TOTALS_SQL)?;
-        let row = statement.query_row([workspace], totals_row)?;
+        let row = statement.query_row(
+            rusqlite::params![workspace, active_since_ms as i64],
+            totals_row,
+        )?;
         Ok((totals(&row), quality(&row)))
     }
 }

@@ -50,7 +50,7 @@ When you pass **`--all-workspaces`** (or MCP `all_workspaces: true`), Kaizen loa
 | Key | Default | Purpose |
 |-----|---------|--------|
 | `roots` | `["~/.cursor/projects"]` | Transcript index roots (Cursor projects layout) |
-| `min_rescan_seconds` | `300` | Minimum seconds between full transcript rescans when a command is already in refresh mode (`--refresh` on the CLI or `refresh=true` over MCP). The daemon uses the same value for its workspace scanner loop after `kaizen init`. |
+| `min_rescan_seconds` | `300` | Minimum seconds between bounded incremental transcript scans in refresh mode (`--refresh` on the CLI or `refresh=true` over MCP). The daemon uses the same value after `kaizen init`; Claude, Codex, and Cursor discovery caps each source at 32 recent transcripts, while Claude and Codex growing JSONL reads are capped at 256 KiB. |
 
 ## `[retention]`
 

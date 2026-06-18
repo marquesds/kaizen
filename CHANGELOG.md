@@ -12,7 +12,7 @@ here explicitly.
 
 ### Changed
 
-- **Project data moved out of repo** — all per-workspace artifacts (SQLite DB, config, search index, reports, telemetry NDJSON, backups, sampler stop files) now live under `~/.kaizen/projects/<slug>/` instead of `<workspace>/.kaizen/`. Slug = canonical path with `/` → `-`. `KAIZEN_HOME` overrides `~/.kaizen`. Existing in-repo `.kaizen/` directories auto-migrate on first use; a `MIGRATED.txt` marker is left behind and the old directory is safe to delete. Identity (workspace key) is unchanged. See [ADR 007](docs/adr/007-project-data-in-home.md).
+- **Target repositories are read-only** — all per-workspace artifacts live under `~/.kaizen/projects/<slug>/`; `KAIZEN_HOME` overrides `~/.kaizen`. Legacy in-repo `.kaizen/` data is copied without moving, deleting, or marking the source. Host hooks live in user-level agent configuration. See [ADR 011](docs/adr/011-target-repositories-read-only.md).
 
 ### Added
 
@@ -32,9 +32,9 @@ here explicitly.
 
 ### Changed
 
-- **Machine-local project registry** lives in `~/.kaizen/machine.db` (SQLite) instead of `workspaces.json`; `kaizen init` upserts the current repo. Legacy `workspaces.json` is imported once and renamed to `workspaces.json.migrated`. `kaizen doctor` reports registry status. `--all-workspaces` still merges per-repo stores and now includes inited projects that do not yet have `.kaizen/kaizen.db`.
+- **Machine-local project registry** lives in `~/.kaizen/machine.db` (SQLite) instead of `workspaces.json`; `kaizen init` upserts the current repo. Legacy `workspaces.json` is imported once and renamed to `workspaces.json.migrated`. `kaizen doctor` reports registry status. `--all-workspaces` merges available project databases and ignores missing or unsafe roots.
 - **Telemetry wire format (third-party sinks):** PostHog capture is one event per canonical row (`kaizen.event`, `kaizen.tool_span`, `kaizen.repo_snapshot_chunk`, `kaizen.workspace_fact_snapshot`); Datadog uses the [Logs API v2](https://docs.datadoghq.com/api/latest/logs/) (`POST /api/v2/logs`) with one JSON log per canonical item instead of the Events API. OTLP remains a placeholder with `tracing::debug` of expanded item counts. Primary Kaizen `POST` ingest and outbox JSON shapes for `events` / `tool_spans` / `repo_snapshots` are unchanged; when sync is enabled, workspace skill/rule discovery can enqueue **`workspace_facts`** for the new `/v1/workspace-facts` path.
-- **CLI — read paths and telemetry:** `summary`, `insights`, `metrics`, `guidance`, and `retro` accept `--source local|provider|mixed` (default `local`). With `provider` or `mixed`, a background provider pull runs when `[telemetry.query].cache_ttl_seconds` has expired, or when you pass `--refresh` (in addition to transcript rescan where applicable). New `kaizen telemetry` subcommands: `init` (alias of `configure`), `doctor`, `pull --days`, and `print-schema`. MCP tools keep the previous local-only behavior.
+- **CLI — read paths and telemetry:** `summary`, `insights`, `metrics`, `guidance`, and `retro` accept `--source local|provider|mixed` (default `local`). With `provider` or `mixed`, a background provider pull runs when `[telemetry.query].cache_ttl_seconds` has expired, or when you pass `--refresh` (in addition to bounded local tail ingest where applicable). New `kaizen telemetry` subcommands: `init` (alias of `configure`), `doctor`, `pull --days`, and `print-schema`. MCP tools keep the previous local-only behavior.
 - `Cargo.toml` no longer excludes `assets/` so `cargo publish` / docs.rs builds resolve
   `include_str!` for embedded defaults and the retro skill template.
 - Release workflow **`update-homebrew-tap`**: `scripts/render-homebrew-tap-formula.sh` + push to
@@ -49,6 +49,10 @@ here explicitly.
 
 ### Fixed
 
+- The Web dashboard now selects the most recently active valid project, refreshes from SQLite/WAL changes within one second, preserves the selected session, and exposes bounded session details plus tool, attention, and telemetry-coverage insights.
+- Hook-backed tool activity appears as named `ToolCall` and `ToolResult` events in Web and TUI views; legacy stored hook rows are normalized at read time.
+- Hook ingestion no longer commits and merges the Tantivy index after every event. Search writes use one indexing worker and one merge worker, commit in bounded batches, and flush when a session stops.
+- Transcript refreshes cap recent files and growing Claude/Codex JSONL tails, append only unseen events in one transaction, and avoid repeated Git enrichment and full derived-row rebuilds.
 - `kaizen daemon status` now exits successfully with a stable `status: stopped` line after the
   daemon has been stopped, instead of surfacing a raw Unix socket connection error.
 - `kaizen sessions tree <id>` now prints a non-empty placeholder for existing sessions with no
@@ -72,9 +76,9 @@ here explicitly.
 
 ### Added
 
-- `kaizen init` now creates `.cursor/hooks.json` and `.claude/settings.json` from scratch when absent (in addition to patching them when present), so a single command is enough to instrument a fresh workspace for both Cursor and Claude Code.
+- `kaizen init` now creates or patches `~/.cursor/hooks.json` and `~/.claude/settings.json`, so one user-level setup covers every workspace without writing to the target repository.
 - Local retention: `[retention].hot_days` (default 30) prunes old sessions from SQLite after rescans (throttled to once per 24h); `hot_days = 0` disables auto-prune. `kaizen gc` with optional `--days` and `--vacuum`.
-- `[scan].min_rescan_seconds` (default 300) skips full transcript rescans; `--refresh` / `-r` on `sessions list`, `summary`, `insights`, `metrics`, and `retro` forces a rescan. MCP tools accept `refresh=true` for the same behavior.
+- `[scan].min_rescan_seconds` (default 300) throttles bounded transcript-tail ingestion; `--refresh` / `-r` on `sessions list`, `summary`, `insights`, `metrics`, and `retro` ingests recently changed tails. MCP tools accept `refresh=true` for the same behavior.
 - Composite index `sessions(workspace, started_at_ms)` for faster session listing.
 - `docs/telemetry-journey.md` — end-to-end “session → data” learning path; README and `docs/`
   index point to it. Root `README` clarifies that long-form docs live in the GitHub `docs/`

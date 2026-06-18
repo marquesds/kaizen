@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use crate::core::event::{Event, EventKind};
 use crate::store::Store;
 use anyhow::Result;
 use rusqlite::{OptionalExtension, params};
@@ -20,6 +21,50 @@ pub struct SessionAggregate {
     pub first_event_ms: Option<u64>,
     pub last_event_ms: Option<u64>,
     pub rebuilt_at_ms: u64,
+}
+
+const APPLY_EVENT_SQL: &str = "
+INSERT INTO session_aggregates (
+    session_id, event_count, tool_call_count, error_count, tokens_in,
+    tokens_out, reasoning_tokens, cache_read_tokens, cache_creation_tokens,
+    cost_usd_e6, first_event_ms, last_event_ms, rebuilt_at_ms
+) VALUES (?1,1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?10,?11)
+ON CONFLICT(session_id) DO UPDATE SET
+    event_count=session_aggregates.event_count + 1,
+    tool_call_count=session_aggregates.tool_call_count + excluded.tool_call_count,
+    error_count=session_aggregates.error_count + excluded.error_count,
+    tokens_in=session_aggregates.tokens_in + excluded.tokens_in,
+    tokens_out=session_aggregates.tokens_out + excluded.tokens_out,
+    reasoning_tokens=session_aggregates.reasoning_tokens + excluded.reasoning_tokens,
+    cache_read_tokens=session_aggregates.cache_read_tokens + excluded.cache_read_tokens,
+    cache_creation_tokens=session_aggregates.cache_creation_tokens + excluded.cache_creation_tokens,
+    cost_usd_e6=session_aggregates.cost_usd_e6 + excluded.cost_usd_e6,
+    first_event_ms=MIN(session_aggregates.first_event_ms, excluded.first_event_ms),
+    last_event_ms=MAX(session_aggregates.last_event_ms, excluded.last_event_ms),
+    rebuilt_at_ms=excluded.rebuilt_at_ms";
+
+pub fn apply_event(store: &Store, event: &Event) -> Result<()> {
+    if get(store, &event.session_id)?.is_none() {
+        upsert_session(store, &event.session_id)?;
+        return Ok(());
+    }
+    store.conn().execute(
+        APPLY_EVENT_SQL,
+        params![
+            event.session_id,
+            i64::from(event.kind == EventKind::ToolCall),
+            i64::from(event.kind == EventKind::Error),
+            i64::from(event.tokens_in.unwrap_or(0)),
+            i64::from(event.tokens_out.unwrap_or(0)),
+            i64::from(event.reasoning_tokens.unwrap_or(0)),
+            i64::from(event.cache_read_tokens.unwrap_or(0)),
+            i64::from(event.cache_creation_tokens.unwrap_or(0)),
+            event.cost_usd_e6.unwrap_or(0),
+            event.ts_ms as i64,
+            now_ms() as i64,
+        ],
+    )?;
+    Ok(())
 }
 
 pub fn rebuild_workspace(store: &Store, workspace: &str) -> Result<usize> {

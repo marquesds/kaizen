@@ -76,7 +76,8 @@ pub(super) fn event_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Event> {
         cache_creation_tokens: row.get::<_, Option<i64>>(19)?.map(|v| v as u32),
         cache_read_tokens: row.get::<_, Option<i64>>(20)?.map(|v| v as u32),
         system_prompt_tokens: row.get::<_, Option<i64>>(21)?.map(|v| v as u32),
-    })
+    }
+    .normalize_legacy_hook())
 }
 
 pub(super) fn search_tool_event_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<(String, Event)> {

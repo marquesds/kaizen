@@ -2,9 +2,9 @@
 
 [Back to CLI index](usage.md).
 
-These commands are cache-first. Pass `--refresh` when they should rescan local
-transcripts before rendering. With `--source provider|mixed`, refresh can also
-refresh a configured remote provider cache.
+These commands are cache-first. Pass `--refresh` to ingest recently changed,
+bounded local transcript tails before rendering. With
+`--source provider|mixed`, refresh can also refresh a configured remote cache.
 
 ## `kaizen sessions`
 
@@ -33,7 +33,10 @@ Text output shows a placeholder when no spans exist; JSON returns `[]`.
 
 `search` uses the rebuildable Tantivy index at
 `~/.kaizen/projects/<slug>/search/`. It indexes redacted event text. Payload
-bodies remain in SQLite and are not copied into the index. Rebuild with:
+bodies remain in SQLite and are not copied into the index. Daemon-backed hook
+sessions commit search batches at 256 documents, on the first event after a
+60-second batch window, or immediately when the session stops. SQLite session
+and event views remain live before that secondary-index commit. Rebuild with:
 
 ```bash
 kaizen search reindex

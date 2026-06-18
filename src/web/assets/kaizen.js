@@ -1,4 +1,4 @@
-import { AUTO_REFRESH_MS, chooseProject, decodeOutput, projectPaths } from "./kaizen-state.js";
+import { chooseProject, decodeOutput, projectPaths } from "./kaizen-state.js";
 import { bindRawReport, setRawReport } from "./kaizen-raw.js";
 import { createTransport } from "./kaizen-transport.js";
 import {
@@ -19,9 +19,8 @@ const state = {
   projects: [],
   workspace: "",
   selected: "",
-  snapshotPending: false,
-  refreshTimer: 0,
-  lastRefresh: 0,
+  snapshotPending: "",
+  refreshQueued: false,
 };
 const transport = createTransport({
   url: socketUrl,
@@ -46,7 +45,7 @@ function bindControls() {
   $("#project-select").addEventListener("change", event => activateProject(event.target.value));
   $("#session-rows").addEventListener("click", selectSession);
   $("#manual-form").addEventListener("submit", openManualPath);
-  document.addEventListener("visibilitychange", visibilityChanged);
+  document.addEventListener("visibilitychange", flushQueued);
 }
 function socketUrl() {
   const scheme = location.protocol === "https:" ? "wss" : "ws";
@@ -57,9 +56,8 @@ function connected() {
   discoverProjects();
 }
 function disconnected() {
-  state.snapshotPending = false;
+  state.snapshotPending = "";
   setBusy(false);
-  clearRefresh();
   setConnection("Reconnecting", "danger");
   setJourney("error", "Connection lost", "Trying the secure local connection again.");
 }
@@ -86,7 +84,8 @@ function receive(raw) {
   }
   if (message.type === "result") return receiveResult(message);
   if (message.type === "visualization_snapshot") return receiveSnapshot(message);
-  if (message.type === "error") return fail(message.error || "Request failed.");
+  if (message.type === "changed") return receiveChanged(message);
+  if (message.type === "error") return receiveError(message);
 }
 function receiveResult(message) {
   const purpose = state.pending.get(message.id);
@@ -111,19 +110,22 @@ function activateProject(workspace) {
   if (!workspace) return;
   state.workspace = workspace;
   state.selected = "";
+  state.snapshotPending = "";
+  state.refreshQueued = false;
   localStorage.kaizenWorkspace = workspace;
   $("#manual-path").value = workspace;
   renderProjects(state.projects.includes(workspace) ? state.projects : [workspace, ...state.projects], workspace);
+  transport.send({ type: "subscribe", workspace });
   requestSnapshot(true);
 }
 function requestSnapshot(announce) {
   if (!state.workspace || state.snapshotPending) return;
   if (!transport.isOpen()) return fail("Local connection is not ready.");
-  clearRefresh();
-  state.snapshotPending = true;
+  const request = snapshotRequest();
+  state.snapshotPending = request.id;
   setBusy(true);
   if (announce) setJourney("neutral", "Loading observations", "Reading recent local telemetry.");
-  transport.send(snapshotRequest());
+  if (!transport.send(request)) fail("Local connection is not ready.");
 }
 function snapshotRequest() {
   return {
@@ -134,15 +136,33 @@ function snapshotRequest() {
   };
 }
 function receiveSnapshot(message) {
+  if (message.id !== state.snapshotPending) return;
   const report = message.report || {};
-  state.snapshotPending = false;
+  state.snapshotPending = "";
   state.selected = report.selected?.session?.id || report.sessions?.[0]?.id || "";
-  state.lastRefresh = Date.now();
   setBusy(false);
   setRawReport(report);
   renderReport(report);
   report.sessions?.length ? ready(report) : empty(report);
-  scheduleRefresh();
+  if (state.refreshQueued) return refreshQueued();
+}
+function receiveError(message) {
+  if (String(message.id || "").startsWith("snapshot-") && message.id !== state.snapshotPending) return;
+  fail(message.error || "Request failed.");
+}
+function receiveChanged(message) {
+  if (message.workspace !== state.workspace) return;
+  if (document.hidden || state.snapshotPending) state.refreshQueued = true;
+  else requestSnapshot(false);
+}
+
+function refreshQueued() {
+  state.refreshQueued = false;
+  requestSnapshot(false);
+}
+
+function flushQueued() {
+  if (!document.hidden && state.refreshQueued && !state.snapshotPending) refreshQueued();
 }
 function ready(report) {
   const at = new Date(report.generated_at_ms || Date.now()).toLocaleTimeString();
@@ -167,27 +187,11 @@ function openManualPath(event) {
   if (!path) return fail("Project path is required.");
   activateProject(path);
 }
-function visibilityChanged() {
-  clearRefresh();
-  if (document.hidden || !state.workspace) return;
-  const remaining = AUTO_REFRESH_MS - (Date.now() - state.lastRefresh);
-  remaining <= 0 ? requestSnapshot(false) : scheduleRefresh(remaining);
-}
-function scheduleRefresh(delay = AUTO_REFRESH_MS) {
-  clearRefresh();
-  if (document.hidden || !state.workspace || !transport.isOpen()) return;
-  state.refreshTimer = setTimeout(() => requestSnapshot(false), Math.max(1_000, delay));
-}
-function clearRefresh() {
-  clearTimeout(state.refreshTimer);
-  state.refreshTimer = 0;
-}
 function fail(message) {
-  state.snapshotPending = false;
+  state.snapshotPending = "";
   setBusy(false);
   setJourney("error", "Could not load observations", message);
   showManual(state.workspace);
-  scheduleRefresh();
 }
 function showAuth(message) {
   setBusy(false);

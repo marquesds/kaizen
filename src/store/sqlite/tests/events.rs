@@ -1,5 +1,5 @@
 use super::super::Store;
-use super::{EventKind, SessionStatus, make_event, make_session};
+use super::{EventKind, EventSource, SessionStatus, make_event, make_session};
 use serde_json::json;
 use tempfile::TempDir;
 
@@ -31,6 +31,26 @@ fn list_events_for_session_round_trip() {
 }
 
 #[test]
+fn legacy_hook_rows_read_as_semantic_tool_events() {
+    let dir = TempDir::new().unwrap();
+    let store = Store::open(&dir.path().join("kaizen.db")).unwrap();
+    store.upsert_session(&make_session("legacy-hook")).unwrap();
+    let mut event = make_event("legacy-hook", 0);
+    event.kind = EventKind::Hook;
+    event.source = EventSource::Hook;
+    event.tool = None;
+    event.payload = json!({"hook_event_name":"PreToolUse","tool_name":"Read"});
+    store.append_event(&event).unwrap();
+
+    let event = store
+        .list_events_for_session("legacy-hook")
+        .unwrap()
+        .remove(0);
+    assert_eq!(event.kind, EventKind::ToolCall);
+    assert_eq!(event.tool.as_deref(), Some("Read"));
+}
+
+#[test]
 fn list_events_page_uses_inclusive_seq_cursor() {
     let dir = TempDir::new().unwrap();
     let store = Store::open(&dir.path().join("kaizen.db")).unwrap();
@@ -52,9 +72,44 @@ fn append_event_dedup() {
     let store = Store::open(&dir.path().join("kaizen.db")).unwrap();
     store.upsert_session(&make_session("s5")).unwrap();
     store.append_event(&make_event("s5", 0)).unwrap();
-    store.append_event(&make_event("s5", 0)).unwrap();
+    let mut duplicate = make_event("s5", 0);
+    duplicate.tokens_in = Some(42);
+    store.append_event(&duplicate).unwrap();
     let events = store.list_events_for_session("s5").unwrap();
     assert_eq!(events.len(), 1);
+    assert_eq!(events[0].tokens_in, None);
+    let aggregate = crate::extensions::aggregates::get(&store, "s5")
+        .unwrap()
+        .unwrap();
+    assert_eq!(aggregate.event_count, 1);
+}
+
+#[test]
+fn append_event_backfills_missing_aggregate_before_incrementing() {
+    let dir = TempDir::new().unwrap();
+    let store = Store::open(&dir.path().join("kaizen.db")).unwrap();
+    store
+        .upsert_session(&make_session("legacy-aggregate"))
+        .unwrap();
+    store
+        .append_event(&make_event("legacy-aggregate", 0))
+        .unwrap();
+    store
+        .conn()
+        .execute(
+            "DELETE FROM session_aggregates WHERE session_id = ?1",
+            ["legacy-aggregate"],
+        )
+        .unwrap();
+
+    store
+        .append_event(&make_event("legacy-aggregate", 1))
+        .unwrap();
+
+    let aggregate = crate::extensions::aggregates::get(&store, "legacy-aggregate")
+        .unwrap()
+        .unwrap();
+    assert_eq!(aggregate.event_count, 2);
 }
 
 #[test]

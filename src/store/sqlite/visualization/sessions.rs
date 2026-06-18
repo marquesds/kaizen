@@ -32,9 +32,9 @@ ORDER BY r.started_at_ms DESC, r.id ASC";
 const TOP_TOOLS_SQL: &str = "
 WITH recent AS MATERIALIZED (SELECT id FROM sessions WHERE workspace = ?1
  ORDER BY started_at_ms DESC, id ASC LIMIT ?2), counts AS (
- SELECT e.session_id, e.tool, COUNT(*) count FROM events e
- JOIN recent r ON r.id = e.session_id WHERE e.tool IS NOT NULL
- GROUP BY e.session_id, e.tool
+ SELECT t.session_id, t.tool, COUNT(*) count FROM tool_spans t
+ JOIN recent r ON r.id = t.session_id WHERE t.tool <> ''
+ GROUP BY t.session_id, t.tool
 ), ranked AS (
  SELECT session_id, tool, count, ROW_NUMBER() OVER (
   PARTITION BY session_id ORDER BY count DESC, tool ASC) rank FROM counts

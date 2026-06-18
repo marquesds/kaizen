@@ -4,11 +4,12 @@
 use crate::store::Store;
 use anyhow::Result;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 
 pub(super) async fn scanner_loop(ws: PathBuf) {
     loop {
-        scan_once(ws.clone()).await;
         tokio::time::sleep(scan_interval(&ws)).await;
+        scan_once(ws.clone()).await;
     }
 }
 
@@ -19,11 +20,19 @@ async fn scan_once(ws: PathBuf) {
 }
 
 fn scan_workspace(ws: &Path) -> Result<()> {
+    let _guard = scan_lock()
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     let cfg = crate::core::config::load(ws)?;
     let store = Store::open(&crate::core::workspace::db_path(ws)?)?;
     let ws_str = ws.to_string_lossy().to_string();
     crate::shell::cli::maybe_scan_all_agents(ws, &cfg, &ws_str, &store, true)?;
     crate::shell::cli::maybe_auto_prune_after_scan(&store, &cfg)
+}
+
+fn scan_lock() -> &'static Mutex<()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
 }
 
 fn scan_interval(ws: &Path) -> std::time::Duration {

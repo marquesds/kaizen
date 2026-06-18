@@ -5,7 +5,7 @@ pub(super) fn projector_legacy_mode() -> bool {
 }
 
 pub(super) fn is_stop_event(e: &Event) -> bool {
-    if !matches!(e.kind, EventKind::Hook) {
+    if !matches!(e.kind, EventKind::Hook | EventKind::Lifecycle) {
         return false;
     }
     e.payload

@@ -1,5 +1,3 @@
-export const AUTO_REFRESH_MS = 20_000;
-
 export function decodeOutput(output) {
   const value = output?.value;
   if (typeof value !== "string") return value || {};
