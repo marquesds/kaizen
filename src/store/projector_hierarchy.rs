@@ -35,7 +35,8 @@ pub(crate) fn detach_chain(
     spans: &mut HashMap<String, SpanBuilder>,
     span: &SpanBuilder,
 ) {
-    let Some(index) = order.iter().position(|id| id == &span.span_id) else {
+    // Nested traces close newest-first; search from stack top to keep that path linear.
+    let Some(index) = order.iter().rposition(|id| id == &span.span_id) else {
         return;
     };
     order.remove(index);
