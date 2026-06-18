@@ -1,4 +1,6 @@
 use crate::bin_kaizen::args::*;
+use anyhow::{Result, anyhow};
+use std::process::Command;
 
 pub(super) fn daemon(cmd: DaemonCommand) -> anyhow::Result<()> {
     match cmd {
@@ -9,6 +11,54 @@ pub(super) fn daemon(cmd: DaemonCommand) -> anyhow::Result<()> {
         }
         DaemonCommand::Status => daemon_status(),
     }
+}
+
+pub(super) fn open_web(no_browser: bool) -> Result<()> {
+    anyhow::ensure!(
+        kaizen::daemon::enabled(),
+        "dashboard requires the daemon; remove --no-daemon"
+    );
+    let started = kaizen::daemon::start_background()?;
+    let web = started
+        .web
+        .ok_or_else(|| anyhow!("dashboard unavailable"))?;
+    println!("Kaizen dashboard: {}", web.url);
+    if !no_browser && let Err(err) = launch_browser(&web.url) {
+        eprintln!("Could not open browser: {err}");
+    }
+    Ok(())
+}
+
+fn launch_browser(url: &str) -> Result<()> {
+    let status = browser_command(url)?.status()?;
+    anyhow::ensure!(status.success(), "browser launcher exited with {status}");
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn browser_command(url: &str) -> Result<Command> {
+    let mut command = Command::new("open");
+    command.arg(url);
+    Ok(command)
+}
+
+#[cfg(target_os = "linux")]
+fn browser_command(url: &str) -> Result<Command> {
+    let mut command = Command::new("xdg-open");
+    command.arg(url);
+    Ok(command)
+}
+
+#[cfg(target_os = "windows")]
+fn browser_command(url: &str) -> Result<Command> {
+    let mut command = Command::new("cmd");
+    command.args(["/C", "start", "", url]);
+    Ok(command)
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+fn browser_command(_url: &str) -> Result<Command> {
+    Err(anyhow!("browser launch unsupported on this platform"))
 }
 
 fn daemon_start(background: bool) -> anyhow::Result<()> {

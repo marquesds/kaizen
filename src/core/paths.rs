@@ -49,12 +49,17 @@ pub fn claude_code_slug(path: &Path) -> String {
     with_leading.replace(['/', '.'], "-")
 }
 
-/// `~/.kaizen/projects/<slug>/` (or `$KAIZEN_HOME/projects/<slug>/`), created on demand.
-pub fn project_data_dir(workspace: &Path) -> Result<PathBuf> {
+/// `~/.kaizen/projects/<slug>/` (or `$KAIZEN_HOME/projects/<slug>/`) without I/O.
+pub fn project_data_path(workspace: &Path) -> Result<PathBuf> {
     let home = kaizen_dir().ok_or_else(|| anyhow::anyhow!("KAIZEN_HOME / HOME unset"))?;
     let canon = std::fs::canonicalize(workspace).unwrap_or_else(|_| workspace.to_path_buf());
     let slug = workspace_slug(&canon);
-    let dir = home.join("projects").join(slug);
+    Ok(home.join("projects").join(slug))
+}
+
+/// Project data path, created on demand for write-capable callers.
+pub fn project_data_dir(workspace: &Path) -> Result<PathBuf> {
+    let dir = project_data_path(workspace)?;
     std::fs::create_dir_all(&dir)?;
     Ok(dir)
 }

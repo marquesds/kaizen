@@ -1,186 +1,196 @@
-const $ = (sel, root = document) => root.querySelector(sel);
-const state = { ws: null, seq: 0, selected: null, history: [], reconnect: 0 };
-document.addEventListener("DOMContentLoaded", () => {
-  bindControls();
-  bindDeveloper();
-  restoreWorkspace();
-  connect();
+import { AUTO_REFRESH_MS, chooseProject, decodeOutput, projectPaths } from "./kaizen-state.js";
+import { bindRawReport, setRawReport } from "./kaizen-raw.js";
+import { createTransport } from "./kaizen-transport.js";
+import {
+  renderProjects,
+  renderReport,
+  setBusy,
+  setConnection,
+  setJourney,
+  showManual,
+} from "./kaizen-render.js";
+const $ = selector => document.querySelector(selector);
+const params = new URLSearchParams(location.search);
+const token = params.get("token") || localStorage.kaizenToken || "";
+const requestedWorkspace = params.get("workspace") || "";
+const state = {
+  seq: 0,
+  pending: new Map(),
+  projects: [],
+  workspace: "",
+  selected: "",
+  snapshotPending: false,
+  refreshTimer: 0,
+  lastRefresh: 0,
+};
+const transport = createTransport({
+  url: socketUrl,
+  onOpen: connected,
+  onDisconnect: disconnected,
+  onAuthFailure: () => showAuth("Authorization failed. Reopen Kaizen from daemon output."),
+  onMessage: receive,
 });
+document.addEventListener("DOMContentLoaded", start);
+function start() {
+  bindControls();
+  $("#manual-path").value = requestedWorkspace;
+  if (!token) return showAuth("Authorization required. Reopen Kaizen from daemon output.");
+  localStorage.kaizenToken = token;
+  setConnection("Connecting", "neutral");
+  setJourney("neutral", "Connecting", "Opening a secure local connection.");
+  transport.connect();
+}
 function bindControls() {
-  $("#snapshot-form").addEventListener("submit", event => {
-    event.preventDefault();
-    requestSnapshot();
-  });
+  bindRawReport();
+  $("#refresh-report").addEventListener("click", () => requestSnapshot(true));
+  $("#project-select").addEventListener("change", event => activateProject(event.target.value));
   $("#session-rows").addEventListener("click", selectSession);
+  $("#manual-form").addEventListener("submit", openManualPath);
+  document.addEventListener("visibilitychange", visibilityChanged);
 }
-function bindDeveloper() {
-  $("#open-dev").addEventListener("click", () => $("#developer-drawer").showModal());
-  $("#dev-filter").addEventListener("input", renderHistory);
-}
-function restoreWorkspace() {
-  const params = new URLSearchParams(location.search);
-  $("#workspace-input").value = params.get("workspace") || localStorage.kaizenWorkspace || "";
-}
-function connect() {
-  const token = new URLSearchParams(location.search).get("token") || localStorage.kaizenToken || "";
-  if (token) localStorage.kaizenToken = token;
+function socketUrl() {
   const scheme = location.protocol === "https:" ? "wss" : "ws";
-  state.ws = new WebSocket(`${scheme}://${location.host}/ws?token=${encodeURIComponent(token)}`);
-  state.ws.addEventListener("open", onOpen);
-  state.ws.addEventListener("close", onClose);
-  state.ws.addEventListener("message", event => receive(JSON.parse(event.data)));
+  return `${scheme}://${location.host}/ws?token=${encodeURIComponent(token)}`;
 }
-function onOpen() {
-  pill("connected", "");
-  send({ type: "subscribe", id: "status" });
-  if ($("#workspace-input").value.trim()) requestSnapshot();
+function connected() {
+  setConnection("Connected", "ready");
+  discoverProjects();
 }
-function onClose() {
-  pill("disconnected", "danger");
-  clearTimeout(state.reconnect);
-  state.reconnect = setTimeout(connect, 1600);
-}
-function requestSnapshot() {
-  const workspace = $("#workspace-input").value.trim();
-  if (!workspace) return showError("Workspace required.");
-  const id = `v${++state.seq}`;
-  const request = { type: "visualization_snapshot", id, workspace, selected_session_id: state.selected };
-  localStorage.kaizenWorkspace = workspace;
-  setBusy(true);
-  if (!send(request)) return showError("WebSocket not connected.");
-  record({ id, label: "visualization snapshot", status: "pending", workspace });
-}
-function receive(msg) {
-  updateHistory(msg.id, msg);
-  if (msg.type === "status") return receiveStatus(msg);
-  if (msg.type === "visualization_snapshot") return receiveSnapshot(msg);
-  if (msg.type === "error") return showError(msg.error || "Request failed.");
-}
-function receiveStatus(msg) {
-  $("#tool-count").textContent = `MCP tools: ${(msg.tools || []).length}`;
-}
-function receiveSnapshot(msg) {
+function disconnected() {
+  state.snapshotPending = false;
   setBusy(false);
-  clearError();
-  state.selected = msg.report?.selected?.session?.id || state.selected;
-  renderReport(msg.report);
+  clearRefresh();
+  setConnection("Reconnecting", "danger");
+  setJourney("error", "Connection lost", "Trying the secure local connection again.");
+}
+function discoverProjects() {
+  setBusy(true);
+  setJourney("neutral", "Finding project", "Checking current and recently observed projects.");
+  sendCall("kaizen_sessions_list", {
+    all_workspaces: true,
+    json: true,
+    limit: 50,
+  }, "projects");
+}
+function sendCall(tool, args, purpose) {
+  const id = `call-${++state.seq}`;
+  state.pending.set(id, purpose);
+  if (!transport.send({ type: "call", id, tool, args })) fail("Local connection is not ready.");
+}
+function receive(raw) {
+  let message;
+  try {
+    message = JSON.parse(raw);
+  } catch {
+    return fail("Unreadable response from local Kaizen server.");
+  }
+  if (message.type === "result") return receiveResult(message);
+  if (message.type === "visualization_snapshot") return receiveSnapshot(message);
+  if (message.type === "error") return fail(message.error || "Request failed.");
+}
+function receiveResult(message) {
+  const purpose = state.pending.get(message.id);
+  state.pending.delete(message.id);
+  if (purpose === "projects") receiveProjects(decodeOutput(message.output));
+}
+function receiveProjects(value) {
+  const fallback = requestedWorkspace || (!value?.count ? localStorage.kaizenWorkspace || "" : "");
+  state.projects = projectPaths(value, fallback);
+  const selected = chooseProject(value, state.projects, requestedWorkspace);
+  if (!selected) return noProjects();
+  renderProjects(state.projects, selected);
+  activateProject(selected);
+}
+function noProjects() {
+  setBusy(false);
+  renderProjects([], "");
+  showManual();
+  setJourney("neutral", "No project found", "Use a project path to begin observing local sessions.");
+}
+function activateProject(workspace) {
+  if (!workspace) return;
+  state.workspace = workspace;
+  state.selected = "";
+  localStorage.kaizenWorkspace = workspace;
+  $("#manual-path").value = workspace;
+  renderProjects(state.projects.includes(workspace) ? state.projects : [workspace, ...state.projects], workspace);
+  requestSnapshot(true);
+}
+function requestSnapshot(announce) {
+  if (!state.workspace || state.snapshotPending) return;
+  if (!transport.isOpen()) return fail("Local connection is not ready.");
+  clearRefresh();
+  state.snapshotPending = true;
+  setBusy(true);
+  if (announce) setJourney("neutral", "Loading observations", "Reading recent local telemetry.");
+  transport.send(snapshotRequest());
+}
+function snapshotRequest() {
+  return {
+    type: "visualization_snapshot",
+    id: `snapshot-${++state.seq}`,
+    workspace: state.workspace,
+    selected_session_id: state.selected || null,
+  };
+}
+function receiveSnapshot(message) {
+  const report = message.report || {};
+  state.snapshotPending = false;
+  state.selected = report.selected?.session?.id || report.sessions?.[0]?.id || "";
+  state.lastRefresh = Date.now();
+  setBusy(false);
+  setRawReport(report);
+  renderReport(report);
+  report.sessions?.length ? ready(report) : empty(report);
+  scheduleRefresh();
+}
+function ready(report) {
+  const at = new Date(report.generated_at_ms || Date.now()).toLocaleTimeString();
+  const visible = report.sessions?.length || 0;
+  const total = report.totals?.session_count || visible;
+  const scope = visible === total ? `${total}` : `${visible} of ${total}`;
+  setJourney("ready", "Observations current", `Showing ${scope} recent sessions. Updated ${at}.`);
+}
+function empty(report) {
+  const project = report.workspace?.split("/").filter(Boolean).at(-1) || "this project";
+  setJourney("neutral", "No sessions yet", `No captured agent work for ${project}.`);
 }
 function selectSession(event) {
   const button = event.target.closest("button[data-session-id]");
   if (!button) return;
   state.selected = button.dataset.sessionId;
-  $("#selected-session").textContent = shortId(state.selected);
-  requestSnapshot();
+  requestSnapshot(true);
 }
-function renderReport(report) {
-  renderTotals(report.totals || {});
-  renderActivity(report.activity?.day_bins || []);
-  renderSessions(report.sessions || []);
-  renderSelected(report.selected);
-  renderQuality(report.quality || {});
-  $("#report-status").textContent = `Snapshot generated for ${report.workspace || "workspace"}.`;
+function openManualPath(event) {
+  event.preventDefault();
+  const path = $("#manual-path").value.trim();
+  if (!path) return fail("Project path is required.");
+  activateProject(path);
 }
-function renderTotals(totals) {
-  $("#total-sessions").textContent = fmt(totals.session_count);
-  $("#total-events").textContent = fmt(totals.event_count);
-  $("#total-tokens").textContent = fmt(totals.tokens?.total);
-  $("#total-cost").textContent = cost(totals.cost_usd_e6);
-  $("#running-sessions").textContent = fmt(totals.running_count);
-  $("#total-errors").textContent = fmt(totals.error_count);
+function visibilityChanged() {
+  clearRefresh();
+  if (document.hidden || !state.workspace) return;
+  const remaining = AUTO_REFRESH_MS - (Date.now() - state.lastRefresh);
+  remaining <= 0 ? requestSnapshot(false) : scheduleRefresh(remaining);
 }
-function renderActivity(bins) {
-  const active = bins.filter(bin => !bin.is_break || bin.event_count).slice(-48);
-  $("#activity-bars").replaceChildren(...active.map(activityBar));
+function scheduleRefresh(delay = AUTO_REFRESH_MS) {
+  clearRefresh();
+  if (document.hidden || !state.workspace || !transport.isOpen()) return;
+  state.refreshTimer = setTimeout(() => requestSnapshot(false), Math.max(1_000, delay));
 }
-function activityBar(bin) {
-  const li = el("li", "activity-bar");
-  li.style.setProperty("--heat", Math.max(0.04, bin.heat || 0));
-  li.append(el("span", "mono", time(bin.start_ms)), el("strong", "", fmt(bin.event_count)));
-  li.title = `${fmt(bin.event_count)} events`;
-  return li;
+function clearRefresh() {
+  clearTimeout(state.refreshTimer);
+  state.refreshTimer = 0;
 }
-function renderSessions(sessions) {
-  $("#session-rows").replaceChildren(...sessions.map(sessionRow));
-  $("#session-empty").hidden = sessions.length > 0;
-}
-function sessionRow(session) {
-  const row = document.createElement("tr");
-  const button = el("button", "link-btn", "Inspect");
-  button.type = "button";
-  button.dataset.sessionId = session.id;
-  row.replaceChildren(td(shortId(session.id)), td(session.status), td(fmt(session.event_count)), td(fmt(session.tokens?.total)), td(button));
-  return row;
-}
-function renderSelected(selected) {
-  const target = $("#selected-detail");
-  if (!selected) return emptySelected(target);
-  const items = selected.events.slice(-12).map(eventLine);
-  target.classList.remove("empty");
-  target.replaceChildren(el("p", "meta", selected.session.id), ...items);
-}
-function emptySelected(target) {
-  target.classList.add("empty");
-  target.replaceChildren(text("No session selected."));
-}
-function eventLine(event) {
-  const line = el("div", "event-line");
-  line.append(el("span", "mono", time(event.ts_ms)), el("strong", "", event.kind), text(event.tool || ""));
-  return line;
-}
-function renderQuality(quality) {
-  const rows = [["Token coverage", pct(quality.token_coverage_pct)], ["Cost coverage", pct(quality.cost_coverage_pct)], ["Partial cost sessions", fmt(quality.partial_cost_sessions)]];
-  $("#quality-list").replaceChildren(...rows.flatMap(metricRow));
-  $("#quality-warnings").replaceChildren(...(quality.warnings || []).map(warn));
-}
-function metricRow([name, value]) {
-  return [el("dt", "", name), el("dd", "", value)];
-}
-function warn(message) {
-  return el("li", "", message);
-}
-function showError(message) {
+function fail(message) {
+  state.snapshotPending = false;
   setBusy(false);
-  $("#report-status").textContent = message;
-  $("#report-status").setAttribute("role", "alert");
+  setJourney("error", "Could not load observations", message);
+  showManual(state.workspace);
+  scheduleRefresh();
 }
-function clearError() {
-  $("#report-status").removeAttribute("role");
+function showAuth(message) {
+  setBusy(false);
+  setConnection("Authorization required", "danger");
+  setJourney("auth", "Authorization required", message);
 }
-function setBusy(on) {
-  $("#refresh-report").setAttribute("aria-busy", String(on));
-}
-function record(entry) {
-  state.history.unshift({ at: new Date().toLocaleTimeString(), ...entry });
-  state.history = state.history.slice(0, 80);
-  renderHistory();
-}
-function updateHistory(id, response) {
-  const item = state.history.find(row => row.id === id);
-  if (item) Object.assign(item, { status: response.type, response });
-  renderHistory();
-}
-function renderHistory() {
-  const term = $("#dev-filter").value.toLowerCase();
-  const rows = state.history.filter(row => JSON.stringify(row).toLowerCase().includes(term));
-  $("#dev-list").replaceChildren(...rows.map(historyButton));
-}
-function historyButton(row) {
-  const btn = el("button", "btn", `${row.at} ${row.label || row.status}`);
-  btn.type = "button";
-  btn.addEventListener("click", () => $("#dev-raw").textContent = JSON.stringify(row, null, 2));
-  return btn;
-}
-function td(value) {
-  const cell = document.createElement("td");
-  value instanceof Node ? cell.append(value) : cell.textContent = value;
-  return cell;
-}
-const send = value => state.ws?.readyState === WebSocket.OPEN ? (state.ws.send(JSON.stringify(value)), true) : false;
-const pill = (textValue, tone) => ($("#socket-pill").textContent = textValue, $("#socket-pill").className = `pill ${tone || ""}`);
-const fmt = value => Number(value || 0).toLocaleString();
-const cost = value => `$${(Number(value || 0) / 1_000_000).toFixed(4)}`;
-const pct = value => `${Number(value || 0).toFixed(0)}%`;
-const shortId = id => id ? id.slice(0, 12) : "-";
-const time = ms => ms ? new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "-";
-const text = value => document.createTextNode(value);
-const el = (tag, className, value) => Object.assign(document.createElement(tag), { className, textContent: value || "" });

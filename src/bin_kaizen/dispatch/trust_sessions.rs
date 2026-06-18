@@ -87,10 +87,42 @@ pub(super) fn sessions(cmd: SessionsCommand) -> anyhow::Result<()> {
     }
 }
 
-pub(super) fn search(cmd: SearchCommand) -> anyhow::Result<()> {
-    let SearchCommand::Reindex { workspace, project } = cmd;
+pub(super) fn search(mut cmd: SearchCommand) -> anyhow::Result<()> {
+    match cmd.subcmd.take() {
+        Some(SearchMaintenanceCommand::Reindex { workspace, project }) => {
+            search_reindex(workspace, project)
+        }
+        None => search_query(&cmd),
+    }
+}
+
+fn search_reindex(workspace: Option<PathBuf>, project: Option<String>) -> anyhow::Result<()> {
     let ws = resolve_ws(workspace.as_deref(), project.as_deref())?;
     kaizen::shell::search::cmd_search_reindex(ws.as_deref())
+}
+
+fn search_query(cmd: &SearchCommand) -> anyhow::Result<()> {
+    let query = cmd
+        .query
+        .as_deref()
+        .ok_or_else(|| anyhow::anyhow!("search query required"))?;
+    let ws = resolve_ws(cmd.ws.workspace.as_deref(), cmd.ws.project.as_deref())?;
+    run_search(ws.as_deref(), query, cmd)
+}
+
+fn run_search(
+    ws: Option<&std::path::Path>,
+    query: &str,
+    cmd: &SearchCommand,
+) -> anyhow::Result<()> {
+    kaizen::shell::search::cmd_sessions_search(
+        ws,
+        query,
+        cmd.since.as_deref(),
+        cmd.agent.as_deref(),
+        cmd.kind.as_deref(),
+        cmd.limit,
+    )
 }
 
 pub(super) fn query(

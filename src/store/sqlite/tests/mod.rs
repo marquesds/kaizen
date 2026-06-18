@@ -3,6 +3,10 @@ use serde_json::json;
 
 mod events;
 mod maintenance;
+mod outbox_migration;
+mod outbox_migration_failures;
+mod outbox_runtime;
+mod outbox_support;
 mod reports;
 mod schema;
 mod sessions;

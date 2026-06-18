@@ -1,34 +1,35 @@
 use super::*;
 
 impl Store {
+    pub(super) fn append_outbox_row(
+        &self,
+        owner_id: &str,
+        kind: &str,
+        payload: &str,
+    ) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO sync_outbox (session_id, kind, payload, sent)
+             VALUES (?1, ?2, ?3, 0)",
+            params![owner_id, kind, payload],
+        )?;
+        Ok(())
+    }
+
     pub fn list_outbox_pending(&self, limit: usize) -> Result<Vec<(i64, String, String)>> {
-        let rows = self.outbox()?.list_pending(limit)?;
-        if !rows.is_empty() {
-            return Ok(rows);
-        }
         let mut stmt = self.conn.prepare(
             "SELECT id, kind, payload FROM sync_outbox WHERE sent = 0 ORDER BY id ASC LIMIT ?1",
         )?;
-        let rows = stmt.query_map(params![limit as i64], |row| {
-            Ok((
-                row.get::<_, i64>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-            ))
-        })?;
-        let mut out = Vec::new();
-        for r in rows {
-            out.push(r?);
-        }
-        Ok(out)
+        let rows = stmt.query_map(params![limit as i64], read_outbox_row)?;
+        rows.collect::<rusqlite::Result<_>>().map_err(Into::into)
     }
 
     pub fn mark_outbox_sent(&self, ids: &[i64]) -> Result<()> {
-        self.outbox()?.delete_ids(ids)?;
-        for id in ids {
-            self.conn
-                .execute("UPDATE sync_outbox SET sent = 1 WHERE id = ?1", params![id])?;
-        }
+        let tx = rusqlite::Transaction::new_unchecked(&self.conn, TransactionBehavior::Immediate)?;
+        ids.iter().try_for_each(|id| {
+            tx.execute("UPDATE sync_outbox SET sent = 1 WHERE id = ?1", [id])
+                .map(|_| ())
+        })?;
+        tx.commit()?;
         Ok(())
     }
 
@@ -38,25 +39,17 @@ impl Store {
         kind: &str,
         payloads: &[String],
     ) -> Result<()> {
-        self.outbox()?.replace(owner_id, kind, payloads)?;
-        self.conn.execute(
+        let tx = rusqlite::Transaction::new_unchecked(&self.conn, TransactionBehavior::Immediate)?;
+        tx.execute(
             "DELETE FROM sync_outbox WHERE session_id = ?1 AND kind = ?2 AND sent = 0",
             params![owner_id, kind],
         )?;
-        for payload in payloads {
-            self.conn.execute(
-                "INSERT INTO sync_outbox (session_id, kind, payload, sent) VALUES (?1, ?2, ?3, 0)",
-                params![owner_id, kind, payload],
-            )?;
-        }
+        insert_outbox_payloads(&tx, owner_id, kind, payloads)?;
+        tx.commit()?;
         Ok(())
     }
 
     pub fn outbox_pending_count(&self) -> Result<u64> {
-        let redb = self.outbox()?.pending_count()?;
-        if redb > 0 {
-            return Ok(redb);
-        }
         let c: i64 =
             self.conn
                 .query_row("SELECT COUNT(*) FROM sync_outbox WHERE sent = 0", [], |r| {
@@ -162,4 +155,24 @@ impl Store {
         )?;
         Ok(())
     }
+}
+
+fn read_outbox_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<(i64, String, String)> {
+    Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+}
+
+fn insert_outbox_payloads(
+    tx: &rusqlite::Transaction<'_>,
+    owner_id: &str,
+    kind: &str,
+    payloads: &[String],
+) -> rusqlite::Result<()> {
+    payloads.iter().try_for_each(|payload| {
+        tx.execute(
+            "INSERT INTO sync_outbox (session_id, kind, payload, sent)
+             VALUES (?1, ?2, ?3, 0)",
+            params![owner_id, kind, payload],
+        )
+        .map(|_| ())
+    })
 }

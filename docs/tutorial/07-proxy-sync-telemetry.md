@@ -30,7 +30,7 @@ Contract for operators: [ingest-contract.md](../ingest-contract.md).
 
 ## Pluggable telemetry
 
-Sinks (including **`file`**, PostHog, Datadog, OTLP, or `dev`) receive the same redaction story as sync. Exported batches include a `project_name` label from GitHub origin or workspace folder so providers can facet by repo while `workspace_hash` stays stable for joins. The **file** exporter appends one JSON summary line per batch to **`.kaizen/telemetry.ndjson`** in the workspace (no extra build feature).
+Sinks (including **`file`**, PostHog, Datadog, OTLP, or `dev`) receive the same redaction story as sync. Exported batches include a `project_name` label from GitHub origin or workspace folder so providers can facet by repo while `workspace_hash` stays stable for joins. The **file** exporter appends one JSON summary line per batch to **`~/.kaizen/projects/<slug>/telemetry.ndjson`** (no extra build feature).
 
 ```bash
 kaizen telemetry configure
@@ -39,7 +39,7 @@ kaizen telemetry print-effective-config
 kaizen telemetry tail
 ```
 
-Templates and env resolution: [config.md](../config.md#telemetry) and [usage.md](../usage.md#kaizen-telemetry).
+Templates and env resolution: [config.md](../config.md#telemetry) and [telemetry usage](../usage-telemetry.md).
 
 **CLI-only:** telemetry subcommands are not MCP tools.
 

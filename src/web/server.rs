@@ -6,7 +6,6 @@ use axum::Router;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Query, State};
 use axum::http::StatusCode;
-use axum::http::header::CONTENT_TYPE;
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use serde::Deserialize;
@@ -55,36 +54,18 @@ pub fn router(token: String) -> Router {
         token: Arc::from(token),
     };
     Router::new()
-        .route("/", get(index))
-        .route("/dashboard", get(index))
-        .route("/session-detail", get(index))
-        .route("/analysis", get(index))
-        .route("/experiments", get(index))
-        .route("/settings", get(index))
-        .route("/assets/kaizen.css", get(css))
-        .route("/assets/kaizen.js", get(js))
-        .route("/assets/kaizen-render.js", get(render_js))
+        .route("/", get(assets::index))
+        .route("/assets/kaizen-tokens.css", get(assets::tokens))
+        .route("/assets/kaizen.css", get(assets::css))
+        .route("/assets/kaizen.js", get(assets::js))
+        .route("/assets/kaizen-state.js", get(assets::state_js))
+        .route("/assets/kaizen-transport.js", get(assets::transport_js))
+        .route("/assets/kaizen-render.js", get(assets::render_js))
+        .route("/assets/kaizen-raw.js", get(assets::raw_js))
+        .route("/assets/kaizen-detail.js", get(assets::detail_js))
+        .route("/assets/kaizen-format.js", get(assets::format_js))
         .route("/ws", get(ws))
         .with_state(state)
-}
-
-async fn index() -> impl IntoResponse {
-    ([(CONTENT_TYPE, "text/html; charset=utf-8")], assets::INDEX)
-}
-
-async fn css() -> impl IntoResponse {
-    ([(CONTENT_TYPE, "text/css; charset=utf-8")], assets::CSS)
-}
-
-async fn js() -> impl IntoResponse {
-    ([(CONTENT_TYPE, "application/javascript")], assets::JS)
-}
-
-async fn render_js() -> impl IntoResponse {
-    (
-        [(CONTENT_TYPE, "application/javascript")],
-        assets::RENDER_JS,
-    )
 }
 
 async fn ws(

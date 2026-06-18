@@ -41,25 +41,26 @@ or `cargo install --path . --locked`. Detailed install notes live in
 cargo install kaizen-cli --locked
 cd my-repo
 kaizen init
+kaizen open
 # use your coding agent for a day...
 kaizen summary
 kaizen retro
 ```
 
-`kaizen init` creates local storage under `.kaizen/` and wires supported
-agent hooks idempotently. Re-running it is safe; originals back up under
-`.kaizen/backup/`.
+`kaizen init` creates local storage under
+`~/.kaizen/projects/<slug>/` and wires supported agent hooks idempotently.
+Re-running it is safe; originals back up under the project data directory.
 
 ## How the Loop Works
 
-**Observe.** Kaizen tails agent transcripts and hook events into
-workspace-local SQLite. It can watch Cursor, Claude Code, Codex, OpenClaw,
+**Observe.** Kaizen tails agent transcripts and hook events into one local
+SQLite database per workspace. It can watch Cursor, Claude Code, Codex, OpenClaw,
 Goose, OpenCode, and Copilot without running the model itself.
 
-**Summarise.** `kaizen summary` and `kaizen metrics` roll sessions up by
-agent, model, cost, tool use, and repo facts. The metrics pass also indexes
-file-level and graph facts so retros can talk about this codebase, not only
-token totals.
+**Understand.** `kaizen open`, `kaizen summary`, and `kaizen metrics` turn
+sessions into a local dashboard, cost rollups, tool timing, and repo facts.
+The metrics pass indexes file-level and graph facts so retros can talk about
+this codebase, not only token totals.
 
 **Propose.** `kaizen retro` runs deterministic heuristics and groups bets by
 confidence and action type: one high-confidence bet, up to two investigations,
@@ -79,11 +80,11 @@ redact secrets, env vars, absolute paths, and git emails before upload.
 | Cost per session for Cursor | Manual transcript work | Best-effort token and model recovery from transcript tails |
 | One local view across agents | Glue scripts | Unified store, one CLI, one MCP surface |
 | Repo-aware improvement bets | Dashboards only | Weekly retro with evidence, confidence, and apply steps |
-| Local-first data | Hosted account | SQLite by default; sync is opt-in and redacted |
+| Local-first data | Hosted account | SQLite-only local store; sync is opt-in and redacted |
 | Measure whether a fix worked | Spreadsheets | Git-bound A/B experiments and bootstrap reports |
 
-Kaizen is not a dashboard. It is an opinionated feedback loop:
-**capture → summarise → propose change → measure**.
+Kaizen is a local feedback loop with a dashboard, TUI, and CLI:
+**capture → understand → improve → measure**.
 
 ## Advanced Features
 
@@ -107,7 +108,7 @@ Kaizen is not a dashboard. It is an opinionated feedback loop:
 |---|---|
 | [docs/install.md](docs/install.md) | Install, build from source, uninstall |
 | [docs/tutorial/README.md](docs/tutorial/README.md) | Hands-on tutorial |
-| [docs/usage.md](docs/usage.md) | CLI reference |
+| [docs/usage.md](docs/usage.md) | CLI reference index |
 | [docs/concepts.md](docs/concepts.md) | Sessions, events, retro, experiments |
 | [docs/retro.md](docs/retro.md) | Heuristic retro engine |
 | [docs/experiments.md](docs/experiments.md) | A/B experiment workflow |

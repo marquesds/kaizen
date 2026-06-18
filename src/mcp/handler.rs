@@ -20,7 +20,7 @@ const MCP_CAPABILITIES: &str = r#"Kaizen MCP exposes most `kaizen` CLI workflows
 - kaizen_summary — Session counts, USD cost, by-agent/model, top tools. Use for spend and volume. Optional json=true.
 - kaizen_metrics — Code hotspots, slow tools (p95), token-heavy tools, churn. Use for **repository** and tool latency. Optional json.
 - kaizen_sessions_list / kaizen_session_show — Session list and one session metadata. Optional json on list; optional `limit` caps rows (newest first). `kaizen_exp_report` supports `refresh: true` for a full transcript rescan before computing the report (matches CLI `kaizen exp report --refresh`).
-- mcp/search_sessions — BM25 event search over current workspace. Supports since, agent, kind, limit.
+- kaizen_search_sessions — BM25 event search over current workspace. Supports since, agent, kind, limit.
 - kaizen_insights — Activity dashboard (7d). kaizen_retro — weekly bets. kaizen_exp_* — experiments.
 - kaizen_query / kaizen_cases_* / kaizen_rules_* / kaizen_alerts_check / kaizen_review_* — local trace-to-case automation loop.
 - List/summary/insights/metrics/retro are cache-first; set refresh=true to force a full transcript rescan (matches CLI --refresh).
@@ -432,7 +432,7 @@ impl KaizenMcp {
     }
 
     #[tool(
-        name = "mcp/search_sessions",
+        name = "kaizen_search_sessions",
         description = "BM25 full-text search over session events. Args match `kaizen sessions search`: query, since, agent, kind, limit, workspace."
     )]
     async fn search_sessions(
@@ -1071,13 +1071,21 @@ fn workspace_store(
     Ok((ws, store))
 }
 
+fn workspace_read_store(
+    w: Option<std::path::PathBuf>,
+) -> anyhow::Result<(std::path::PathBuf, crate::store::Store)> {
+    let ws = crate::shell::cli::workspace_path(w.as_deref())?;
+    let store = crate::shell::cli::open_workspace_read_store(&ws, false)?;
+    Ok((ws, store))
+}
+
 fn query_value(
     w: Option<std::path::PathBuf>,
     expr: &str,
     since: Option<&str>,
     limit: usize,
 ) -> anyhow::Result<serde_json::Value> {
-    let (ws, store) = workspace_store(w)?;
+    let (ws, store) = workspace_read_store(w)?;
     let start = crate::core_loop::time::parse_window(since, 7)?;
     let hits = crate::core_loop::query::run(&store, &ws.to_string_lossy(), expr, start, limit)?;
     Ok(serde_json::json!({ "count": hits.len(), "hits": hits }))
@@ -1122,13 +1130,13 @@ fn cases_list_value(
     w: Option<std::path::PathBuf>,
     status: Option<&str>,
 ) -> anyhow::Result<serde_json::Value> {
-    let (_, store) = workspace_store(w)?;
+    let (_, store) = workspace_read_store(w)?;
     let rows = crate::core_loop::cases::list(&store, case_status(status))?;
     Ok(serde_json::json!({ "count": rows.len(), "cases": rows }))
 }
 
 fn case_show_value(w: Option<std::path::PathBuf>, id: &str) -> anyhow::Result<serde_json::Value> {
-    let (_, store) = workspace_store(w)?;
+    let (_, store) = workspace_read_store(w)?;
     let row = crate::core_loop::cases::get(&store, id)?;
     let refs = crate::core_loop::cases::refs(&store, id)?;
     Ok(serde_json::json!({ "case": row, "refs": refs }))
@@ -1157,7 +1165,7 @@ fn rule_create_value(
 }
 
 fn rules_list_value(w: Option<std::path::PathBuf>) -> anyhow::Result<serde_json::Value> {
-    let rows = crate::core_loop::rules::list(&workspace_store(w)?.1)?;
+    let rows = crate::core_loop::rules::list(&workspace_read_store(w)?.1)?;
     Ok(serde_json::json!({ "count": rows.len(), "rules": rows }))
 }
 
@@ -1197,12 +1205,12 @@ fn review_list_value(
     w: Option<std::path::PathBuf>,
     status: Option<&str>,
 ) -> anyhow::Result<serde_json::Value> {
-    let rows = crate::core_loop::review::list(&workspace_store(w)?.1, review_status(status))?;
+    let rows = crate::core_loop::review::list(&workspace_read_store(w)?.1, review_status(status))?;
     Ok(serde_json::json!({ "count": rows.len(), "items": rows }))
 }
 
 fn review_show_value(w: Option<std::path::PathBuf>, id: &str) -> anyhow::Result<serde_json::Value> {
-    let row = crate::core_loop::review::get(&workspace_store(w)?.1, id)?;
+    let row = crate::core_loop::review::get(&workspace_read_store(w)?.1, id)?;
     Ok(serde_json::json!({ "item": row }))
 }
 

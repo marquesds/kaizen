@@ -4,7 +4,7 @@ use kaizen::DataSource;
 use kaizen::feedback::types::FeedbackLabel;
 use std::path::PathBuf;
 
-const LONG_ABOUT: &str = "Deploy and share kaizen: real-time-tailable agent sessions, retros, and experiments to improve your repo, across Cursor, Claude Code, Codex, and Mistral Vibe. One SQLite store; redact before any sync. Docs: https://github.com/marquesds/kaizen/blob/main/docs/README.md";
+const LONG_ABOUT: &str = "Capture and understand AI coding sessions locally.\n\nStart with `kaizen init`, then `kaizen open`. Data stays in one SQLite store; sync is opt-in. Docs: https://github.com/marquesds/kaizen/blob/main/docs/README.md";
 
 mod experiment;
 mod improve;
@@ -28,7 +28,8 @@ pub(crate) use trust::*;
     about = "AI agent session telemetry and insights",
     long_about = LONG_ABOUT,
     version,
-    propagate_version = true
+    propagate_version = true,
+    arg_required_else_help = true
 )]
 pub(crate) struct Cli {
     /// Keep Phase 0-2 direct SQLite mode for this invocation.
@@ -41,13 +42,13 @@ pub(crate) struct Cli {
 #[derive(Subcommand)]
 pub(crate) enum Command {
     /// Ingest events from hooks or other sources.
-    #[command(next_help_heading = "Operate")]
+    #[command(next_help_heading = "Operate", hide = true)]
     Ingest {
         #[command(subcommand)]
         subcmd: IngestCommand,
     },
     /// Manage the local Kaizen daemon.
-    #[command(next_help_heading = "Operate")]
+    #[command(next_help_heading = "Operate", hide = true)]
     Daemon {
         #[command(subcommand)]
         subcmd: DaemonCommand,
@@ -61,11 +62,11 @@ pub(crate) enum Command {
     /// Search indexed session events.
     #[command(next_help_heading = "Trust & observe")]
     Search {
-        #[command(subcommand)]
+        #[command(flatten)]
         subcmd: SearchCommand,
     },
     /// Structured trace query over local session events.
-    #[command(next_help_heading = "Trust & observe")]
+    #[command(next_help_heading = "Trust & observe", hide = true)]
     Query {
         expr: String,
         #[arg(long)]
@@ -111,6 +112,13 @@ pub(crate) enum Command {
         #[arg(long, conflicts_with = "workspace")]
         project: Option<String>,
     },
+    /// Open the local Kaizen dashboard.
+    #[command(next_help_heading = "Trust & observe")]
+    Open {
+        /// Print the dashboard URL without launching a browser.
+        #[arg(long)]
+        no_browser: bool,
+    },
     /// Idempotent workspace setup (writes config, patches hooks, installs skill).
     #[command(next_help_heading = "Trust & observe")]
     Init {
@@ -148,7 +156,7 @@ pub(crate) enum Command {
         json: bool,
     },
     /// Prune local sessions older than retention window (see `[retention].hot_days` or `--days`).
-    #[command(next_help_heading = "Operate")]
+    #[command(next_help_heading = "Operate", hide = true)]
     Gc {
         /// workspace root (default: cwd)
         #[arg(long)]
@@ -162,12 +170,6 @@ pub(crate) enum Command {
         /// Run VACUUM after delete (slow; reclaims file space).
         #[arg(long)]
         vacuum: bool,
-    },
-    /// Migrate local store between SQLite-only and tiered storage.
-    #[command(next_help_heading = "Operate")]
-    Migrate {
-        #[command(subcommand)]
-        subcmd: MigrateCommand,
     },
     /// Rich session insights: activity by day, top tools, recent sessions.
     #[command(next_help_heading = "Trust & observe")]
@@ -189,7 +191,7 @@ pub(crate) enum Command {
         source: DataSource,
     },
     /// Skill and Cursor rule adoption from observed path refs in payloads (not silent injection).
-    #[command(next_help_heading = "Trust & observe")]
+    #[command(next_help_heading = "Trust & observe", hide = true)]
     Guidance {
         #[command(subcommand)]
         subcmd: Option<GuidanceCommand>,
@@ -243,7 +245,11 @@ pub(crate) enum Command {
         source: DataSource,
     },
     /// Run an agent command with Kaizen proxy/session env.
-    #[command(next_help_heading = "Trust & observe", trailing_var_arg = true)]
+    #[command(
+        next_help_heading = "Trust & observe",
+        trailing_var_arg = true,
+        hide = true
+    )]
     Observe {
         /// Agent profile: claude, codex, cursor, or auto.
         #[arg(long, default_value = "auto")]
@@ -259,61 +265,61 @@ pub(crate) enum Command {
         command: Vec<String>,
     },
     /// Flush local outbox to the configured ingest endpoint.
-    #[command(next_help_heading = "Operate")]
+    #[command(next_help_heading = "Operate", hide = true)]
     Sync {
         #[command(subcommand)]
         subcmd: SyncCommand,
     },
     /// Optional telemetry sinks (file NDJSON, PostHog, Datadog, OTLP, dev) alongside Kaizen sync.
-    #[command(next_help_heading = "Operate")]
+    #[command(next_help_heading = "Operate", hide = true)]
     Telemetry {
         #[command(subcommand)]
         subcmd: TelemetrySubcommand,
     },
     /// Export local telemetry into interchange formats.
-    #[command(next_help_heading = "Integrations")]
+    #[command(next_help_heading = "Integrations", hide = true)]
     Export {
         #[command(subcommand)]
         subcmd: ExportCommand,
     },
     /// Import local telemetry from interchange formats.
-    #[command(next_help_heading = "Integrations")]
+    #[command(next_help_heading = "Integrations", hide = true)]
     Import {
         #[command(subcommand)]
         subcmd: ImportCommand,
     },
     /// Verify local audit invariants.
-    #[command(next_help_heading = "Integrations")]
+    #[command(next_help_heading = "Integrations", hide = true)]
     Verify {
         #[command(subcommand)]
         subcmd: VerifyCommand,
     },
     /// Experiment binding + report.
-    #[command(next_help_heading = "Improve")]
+    #[command(next_help_heading = "Improve", hide = true)]
     Exp {
         #[command(subcommand)]
         subcmd: ExpCommand,
     },
     /// Mine and manage local regression cases.
-    #[command(next_help_heading = "Improve")]
+    #[command(next_help_heading = "Improve", hide = true)]
     Cases {
         #[command(subcommand)]
         subcmd: CasesCommand,
     },
     /// Local automation rules over trace queries.
-    #[command(next_help_heading = "Improve")]
+    #[command(next_help_heading = "Improve", hide = true)]
     Rules {
         #[command(subcommand)]
         subcmd: RulesCommand,
     },
     /// Built-in local health alerts.
-    #[command(next_help_heading = "Improve")]
+    #[command(next_help_heading = "Improve", hide = true)]
     Alerts {
         #[command(subcommand)]
         subcmd: AlertsCommand,
     },
     /// Local review queue from rules and cases.
-    #[command(next_help_heading = "Improve")]
+    #[command(next_help_heading = "Improve", hide = true)]
     Review {
         #[command(subcommand)]
         subcmd: ReviewCommand,
@@ -348,11 +354,11 @@ pub(crate) enum Command {
     /// List registered workspaces on this machine.
     #[command(next_help_heading = "Trust & observe")]
     Projects {
-        #[command(subcommand)]
+        #[command(flatten)]
         subcmd: ProjectsCommand,
     },
     /// Model Context Protocol server (stdio) — see docs/mcp.md.
-    #[command(next_help_heading = "Integrations")]
+    #[command(next_help_heading = "Integrations", hide = true)]
     Mcp,
     /// Upgrade kaizen to the latest release.
     #[command(next_help_heading = "Operate")]
@@ -362,37 +368,37 @@ pub(crate) enum Command {
         from_source: bool,
     },
     /// Print shell completion script to stdout; redirect or eval to install.
-    #[command(next_help_heading = "Shell")]
+    #[command(next_help_heading = "Shell", hide = true)]
     Completions {
         #[arg(value_enum)]
         shell: CompletionShell,
     },
     /// Local HTTP forwarder for Anthropic-style APIs + proxy telemetry. See docs/llm-proxy.md.
-    #[command(next_help_heading = "Operate")]
+    #[command(next_help_heading = "Operate", hide = true)]
     Proxy {
         #[command(subcommand)]
         subcmd: ProxyCommand,
     },
     /// LLM-as-a-Judge evaluations for agent sessions. See docs/usage.md.
-    #[command(next_help_heading = "Improve")]
+    #[command(next_help_heading = "Improve", hide = true)]
     Eval {
         #[command(subcommand)]
         subcmd: EvalCommand,
     },
     /// Prompt/system-prompt version tracking. See docs/usage.md.
-    #[command(next_help_heading = "Improve")]
+    #[command(next_help_heading = "Improve", hide = true)]
     Prompt {
         #[command(subcommand)]
         subcmd: PromptCommand,
     },
     /// Human feedback on agent sessions (score/label/note).
-    #[command(next_help_heading = "Improve")]
+    #[command(next_help_heading = "Improve", hide = true)]
     Feedback {
         #[command(subcommand)]
         subcmd: FeedbackCommand,
     },
     /// Post-stop test/lint outcomes (opt-in). See docs/outcomes.md.
-    #[command(next_help_heading = "Trust & observe")]
+    #[command(next_help_heading = "Trust & observe", hide = true)]
     Outcomes {
         #[command(subcommand)]
         subcmd: OutcomesCommand,
@@ -417,5 +423,14 @@ mod cli_parser_tests {
     #[test]
     fn clap_cli_debug_assert() {
         Cli::command().debug_assert();
+    }
+
+    #[test]
+    fn root_help_leads_with_core_journey() {
+        let help = Cli::command().render_long_help().to_string();
+        assert!(help.contains("\n  open "));
+        assert!(!help.contains("\n  proxy "));
+        assert!(!help.contains("\n  telemetry "));
+        assert!(!help.contains("\n  exp "));
     }
 }

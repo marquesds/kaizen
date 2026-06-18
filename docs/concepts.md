@@ -129,7 +129,7 @@ At `SessionStart`, Kaizen computes a Blake3 fingerprint over the sorted contents
 
 At `SessionStop`, the prompt files are re-captured. If the fingerprint changed during the session, a `prompt_changed` event is appended with `{from_fingerprint, to_fingerprint}`.
 
-This lets `kaizen retro` compare session outcomes (cost, error rate) across prompt versions via heuristic **H16**. See `kaizen prompt --help` and [usage.md#kaizen-prompt](usage.md#kaizen-prompt).
+This lets `kaizen retro` compare session outcomes (cost, error rate) across prompt versions via heuristic **H16**. See `kaizen prompt --help` and [prompt usage](usage-improve.md#kaizen-prompt).
 
 ## Core Loop Cases And Rules
 

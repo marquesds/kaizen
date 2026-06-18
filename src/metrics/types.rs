@@ -54,7 +54,7 @@ pub struct RepoSnapshotRecord {
     pub graph_path: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ToolSpanView {
     pub span_id: String,
     pub tool: String,

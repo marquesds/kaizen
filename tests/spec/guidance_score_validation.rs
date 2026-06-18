@@ -8,8 +8,11 @@ use serde_json::{Value, json};
 
 const DAY_MS: u64 = 86_400_000;
 
+mod test_home;
+
 #[test]
 fn score_json_reports_validation_regression() -> anyhow::Result<()> {
+    let _home = test_home::TestHome::new()?;
     let tmp = tempfile::tempdir()?;
     let ws = tmp.path().canonicalize()?;
     seed_skill(&ws)?;

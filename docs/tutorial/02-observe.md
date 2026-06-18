@@ -2,7 +2,12 @@
 
 ## Cache-first reads
 
-Most read commands use the **local** `.kaizen/kaizen.db` immediately. They do not rescan every agent transcript directory on every invocation — that keeps the CLI snappy. When you need the latest lines from disk, pass **`--refresh`** (`-r`). See [usage.md](../usage.md) and `[scan].min_rescan_seconds` in [config.md](../config.md).
+Most read commands use the local
+`~/.kaizen/projects/<slug>/kaizen.db` immediately. They do not rescan every
+agent transcript directory on every invocation — that keeps the CLI snappy.
+When you need the latest lines from disk, pass **`--refresh`** (`-r`). See
+[usage.md](../usage.md) and `[scan].min_rescan_seconds` in
+[config.md](../config.md).
 
 ## List sessions
 
@@ -34,7 +39,7 @@ kaizen summary
 kaizen summary --json
 ```
 
-The JSON shape includes rollups by agent and model, total cost, and when available a **hotspot** file and **slowest_tool** hint — useful when you want one object for dashboards or agents. If sessions exist but rollup cost is **$0.00**, Kaizen may add optional **`cost_note`** in JSON (and a short note in plain text) because stored events have no **`cost_usd_e6`**; see [usage.md — When cost rollup is zero](usage.md#cost-shows-zero).
+The JSON shape includes rollups by agent and model, total cost, and when available a **hotspot** file and **slowest_tool** hint — useful when you want one object for dashboards or agents. If sessions exist but rollup cost is **$0.00**, Kaizen may add optional **`cost_note`** in JSON (and a short note in plain text) because stored events have no **`cost_usd_e6`**; see [When cost rollup is zero](../usage-observe.md#cost-shows-zero).
 
 ## Data source: local, provider, or mixed
 

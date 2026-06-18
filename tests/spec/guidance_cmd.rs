@@ -9,8 +9,11 @@ use kaizen::guidance::{ArtifactKind, ArtifactRef, CandidateAction, CandidateStat
 use kaizen::store::Store;
 use serde_json::json;
 
+mod test_home;
+
 #[test]
 fn guidance_json_empty_workspace() -> anyhow::Result<()> {
+    let _home = test_home::TestHome::new()?;
     let tmp = tempfile::tempdir()?;
     let text = kaizen::shell::guidance::guidance_text(
         Some(tmp.path()),
@@ -30,6 +33,7 @@ fn guidance_json_empty_workspace() -> anyhow::Result<()> {
 
 #[test]
 fn guidance_score_json_empty_workspace() -> anyhow::Result<()> {
+    let _home = test_home::TestHome::new()?;
     let tmp = tempfile::tempdir()?;
     let text = kaizen::shell::guidance_science::score_text(Some(tmp.path()), 30, 30, true)?;
     assert!(text.contains("\"rows\": []"), "{text}");
@@ -38,6 +42,7 @@ fn guidance_score_json_empty_workspace() -> anyhow::Result<()> {
 
 #[test]
 fn guidance_propose_apply_backs_up_rule() -> anyhow::Result<()> {
+    let _home = test_home::TestHome::new()?;
     let tmp = tempfile::tempdir()?;
     let rules = tmp.path().join(".cursor/rules");
     std::fs::create_dir_all(&rules)?;
@@ -57,6 +62,7 @@ fn guidance_propose_apply_backs_up_rule() -> anyhow::Result<()> {
 
 #[test]
 fn guidance_validate_uses_experiment_gate() -> anyhow::Result<()> {
+    let _home = test_home::TestHome::new()?;
     let tmp = tempfile::tempdir()?;
     let ws = tmp.path().canonicalize()?;
     let store = Store::open(&kaizen::core::workspace::db_path(&ws)?)?;

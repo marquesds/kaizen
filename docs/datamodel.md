@@ -14,13 +14,13 @@
   (`stop_reason`, `latency_ms`, `ttft_ms`, `retry_count`, context and cache
   token splits), and `EventKind::Lifecycle` for `payload.type`-discriminated
   behavior signals.
-- HOT event log
-  `.kaizen/hot/log.bin` stores append-only rkyv event records with length and
-  CRC framing. `.kaizen/hot/index.redb` maps session metadata and `(session_id,
-  seq)` lookups to byte offsets.
-- COLD event partitions
-  `.kaizen/cold/events/YYYY-MM-DD.parquet` stores daily UTC event partitions
-  with `kaizen_schema_v` Parquet metadata for analytical scans.
+- SQLite store
+  `~/.kaizen/projects/<slug>/kaizen.db` is the canonical store for sessions,
+  raw events, derived facts, feedback, experiments, and sync state. WAL mode
+  supports concurrent reads while the daemon or direct-mode caller owns writes.
+- Search index
+  `~/.kaizen/projects/<slug>/search/` is a rebuildable Tantivy index over
+  redacted event text. It is not a second source of truth.
 - `tool_spans`
   derived per-tool spans. One row per closed or orphaned correlated tool
   execution. Open spans live in the incremental projector until close/flush.
@@ -61,8 +61,9 @@
 - Guidance candidates move through `proposed`, `applied`, `validated`,
   `rejected`, or `archived`; `--apply` records a backup path before mutation.
   Validation is evidence-gated by the candidate's prompt-bound experiment.
-- During tiered migration, `Event` remains the source of truth across SQLite,
-  the hot log, and Parquet writers.
+- SQLite `events` are the only canonical raw event history. Legacy hot-event
+  and cold-partition artifacts are ignored. A legacy sync outbox is imported
+  once into SQLite and archived.
 - Incremental projector owns hot derived writes for `tool_spans`, `files_touched`,
   `skills_used`, and `rules_used`; `KAIZEN_PROJECTOR=legacy` restores full
   per-session span rebuild.

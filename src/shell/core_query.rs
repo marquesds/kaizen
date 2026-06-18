@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use crate::core_loop::time;
-use crate::shell::cli::workspace_path;
-use crate::store::Store;
+use crate::shell::cli::{open_workspace_read_store, workspace_path};
 use anyhow::Result;
 use std::path::Path;
 
@@ -13,7 +12,7 @@ pub fn cmd_query(
     json: bool,
 ) -> Result<()> {
     let ws = workspace_path(workspace)?;
-    let store = Store::open(&crate::core::workspace::db_path(&ws)?)?;
+    let store = open_workspace_read_store(&ws, false)?;
     let start = time::parse_window(since, 7)?;
     let hits = crate::core_loop::query::run(&store, &ws.to_string_lossy(), expr, start, limit)?;
     if json {

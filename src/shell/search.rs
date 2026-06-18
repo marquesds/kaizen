@@ -90,7 +90,7 @@ pub fn sessions_search_hits(
         kind: kind.map(str::to_string),
         limit,
     };
-    let data_dir = crate::core::paths::project_data_dir(&ws)?;
+    let data_dir = crate::core::paths::project_data_path(&ws)?;
     if let Some(hits) = exact_tool_hits(&store, &ws, &opts, &salt)? {
         return Ok((hits, false));
     }

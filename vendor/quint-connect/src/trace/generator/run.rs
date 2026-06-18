@@ -26,9 +26,9 @@ impl Config for RunConfig {
         let mut cmd = Command::new("quint");
         cmd.arg("run")
             .arg(Path::new(&self.spec))
-            // TS simulator can exit 1 on GHA macOS; Rust backend is reliable for `quint run` + --mbt.
+            // Built-in backend keeps model tests offline on clean machines.
             .arg("--backend")
-            .arg("rust")
+            .arg("typescript")
             // Default n-threads=10 from Quint can be flaky on GHA `macos-latest` (worker contention).
             .arg("--n-threads")
             .arg("1")
@@ -79,7 +79,7 @@ mod tests {
         assert_eq!(
             to_string(config),
             "quint run foo.qnt \
-             --backend rust \
+             --backend typescript \
              --n-threads 1 \
              --seed 42 \
              --max-samples 100 \
@@ -98,7 +98,7 @@ mod tests {
         assert_eq!(
             to_string(config),
             "quint run foo.qnt \
-             --backend rust \
+             --backend typescript \
              --n-threads 1 \
              --seed 42 \
              --max-samples 100 \
@@ -118,7 +118,7 @@ mod tests {
         assert_eq!(
             to_string(config),
             "quint run foo.qnt \
-             --backend rust \
+             --backend typescript \
              --n-threads 1 \
              --seed 42 \
              --max-samples 100 \
@@ -138,7 +138,7 @@ mod tests {
         assert_eq!(
             to_string(config),
             "quint run foo.qnt \
-             --backend rust \
+             --backend typescript \
              --n-threads 1 \
              --seed 42 \
              --max-samples 100 \
@@ -158,7 +158,7 @@ mod tests {
         assert_eq!(
             to_string(config),
             "quint run foo.qnt \
-             --backend rust \
+             --backend typescript \
              --n-threads 1 \
              --seed 42 \
              --max-samples 42 \
@@ -177,7 +177,7 @@ mod tests {
         assert_eq!(
             to_string(config),
             "quint run foo.qnt \
-             --backend rust \
+             --backend typescript \
              --n-threads 1 \
              --seed 42 \
              --max-samples 100 \

@@ -1,7 +1,7 @@
 # ADR 006: Performance Redesign — Tiered Storage + Daemon
 
 ## Status
-Accepted
+Superseded by [ADR 010: SQLite-Only Local Storage](010-sqlite-only-local-storage.md).
 
 ## Context
 

@@ -39,37 +39,11 @@ async fn websocket_auth_and_tool_calls() -> anyhow::Result<()> {
         .await?;
     assert_eq!(recv_type(&mut ws).await?, "error");
 
-    ws.send(Message::Text(
-        call("cap", "kaizen_capabilities", json!({})).into(),
-    ))
-    .await?;
-    let msg = recv_json(&mut ws).await?;
-    assert_eq!(msg["type"], "result");
-    assert_eq!(msg["output"]["kind"], "text");
-
-    ws.send(Message::Text(call("tui", "kaizen_tui", json!({})).into()))
-        .await?;
-    let msg = recv_json(&mut ws).await?;
-    assert_eq!(msg["type"], "error");
-    assert!(msg["error"].as_str().unwrap_or("").contains("interactive"));
-
-    ws.send(Message::Text(
-        call(
-            "init",
-            "kaizen_init",
-            json!({ "workspace": workspace.to_string_lossy() }),
-        )
-        .into(),
-    ))
-    .await?;
-    let msg = recv_json(&mut ws).await?;
-    assert_eq!(msg["type"], "result");
-    assert!(
-        msg["output"]["value"]
-            .as_str()
-            .unwrap_or("")
-            .contains("kaizen init complete")
-    );
+    for tool in ["kaizen_capabilities", "kaizen_tui", "kaizen_init"] {
+        ws.send(Message::Text(call("blocked", tool, json!({})).into()))
+            .await?;
+        assert_error(&recv_json(&mut ws).await?, "unknown web tool");
+    }
 
     ws.send(Message::Text(
         call(
@@ -84,6 +58,17 @@ async fn websocket_auth_and_tool_calls() -> anyhow::Result<()> {
     assert_eq!(msg["type"], "result");
     assert_eq!(msg["output"]["kind"], "json");
 
+    let args = json!({
+        "workspace": workspace.to_string_lossy(),
+        "json": true,
+        "refresh": true
+    });
+    ws.send(Message::Text(
+        call("refresh", "kaizen_sessions_list", args).into(),
+    ))
+    .await?;
+    assert_error(&recv_json(&mut ws).await?, "refresh scans");
+
     let store = Store::open(&kaizen::core::workspace::db_path(&workspace)?)?;
     store.upsert_session(&session(
         "web-session",
@@ -93,8 +78,7 @@ async fn websocket_auth_and_tool_calls() -> anyhow::Result<()> {
         json!({
             "type": "visualization_snapshot",
             "id": "viz",
-            "workspace": workspace.to_string_lossy(),
-            "selected_session_id": "web-session"
+            "workspace": workspace.to_string_lossy()
         })
         .to_string()
         .into(),
@@ -112,15 +96,25 @@ async fn websocket_auth_and_tool_calls() -> anyhow::Result<()> {
     .await?;
     let msg = recv_json(&mut ws).await?;
     assert_eq!(msg["type"], "status");
-    assert_eq!(msg["features"].as_array().unwrap().len(), 40);
-    assert!(msg["features"].as_array().unwrap().iter().any(|feature| {
-        feature["tool"] == "get_session_span_tree" && feature["label"] == "Show span tree"
-    }));
-    assert!(msg["features"].as_array().unwrap().iter().all(|f| {
-        f["label"]
-            .as_str()
-            .is_some_and(|label| !label.contains("kaizen_"))
-    }));
+    assert_eq!(msg["tools"], json!(["kaizen_sessions_list"]));
+    assert_eq!(msg["features"].as_array().unwrap().len(), 1);
+    assert_eq!(msg["features"][0]["route"], "/");
+    assert_eq!(msg["features"][0]["label"], "Discover projects");
+    assert_eq!(msg["features"][0]["tool"], "kaizen_sessions_list");
+    Ok(())
+}
+
+#[tokio::test]
+async fn fake_feature_routes_are_not_served() -> anyhow::Result<()> {
+    let listener = TcpListener::bind("127.0.0.1:0").await?;
+    let (endpoint, _task) = kaizen::web::start_with_listener(listener).await?;
+    let raw = format!("http://{}/assets/kaizen-raw.js", endpoint.listen);
+    let response = reqwest::get(raw).await?;
+    assert_eq!(response.status(), 200);
+    assert_eq!(response.headers()["cache-control"], "no-store");
+    assert!(response.text().await?.contains("setRawReport"));
+    let url = format!("http://{}/dashboard", endpoint.listen);
+    assert_eq!(reqwest::get(url).await?.status(), 404);
     Ok(())
 }
 
@@ -134,6 +128,11 @@ async fn assert_rejected(url: &str) -> anyhow::Result<()> {
 
 fn call(id: &str, tool: &str, args: Value) -> String {
     json!({ "type": "call", "id": id, "tool": tool, "args": args }).to_string()
+}
+
+fn assert_error(message: &Value, expected: &str) {
+    assert_eq!(message["type"], "error");
+    assert!(message["error"].as_str().unwrap_or("").contains(expected));
 }
 
 fn session(id: &str, workspace: &str) -> SessionRecord {

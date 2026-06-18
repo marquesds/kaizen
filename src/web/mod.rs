@@ -5,6 +5,7 @@ mod assets;
 pub mod features;
 mod server;
 mod snapshot;
+mod token;
 pub mod tools;
 
 use crate::ipc::WebEndpoint;
@@ -12,18 +13,17 @@ use anyhow::{Context, Result};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
-use uuid::Uuid;
 
 const DEFAULT_LISTEN: &str = "127.0.0.1:7878";
 
 pub async fn start() -> Result<(WebEndpoint, JoinHandle<()>)> {
+    let token = token::load_or_create()?;
     let listener = bind_loopback().await?;
-    start_with_listener(listener).await
+    start_with_token(listener, token).await
 }
 
 pub async fn start_with_listener(listener: TcpListener) -> Result<(WebEndpoint, JoinHandle<()>)> {
-    let token = Uuid::now_v7().simple().to_string();
-    start_with_token(listener, token).await
+    start_with_token(listener, token::ephemeral()).await
 }
 
 pub async fn start_with_token(

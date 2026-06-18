@@ -13,8 +13,7 @@ Config is TOML. **Paths:**
 
 - **`[sync]`, `[proxy]`, `[telemetry]`:** field-by-field merge. Workspace is applied first, then the user file overwrites (non-empty strings, set numbers, and so on). Nested **`[telemetry.query]`** and **`[telemetry.query.identity_allowlist]`** merge the same way (per-key; see below).
 - **`[scan]`:** `roots` — if the user file sets a non-default `roots` list, that wins; otherwise the workspace’s `[scan].roots` is used. `min_rescan_seconds` merges the same way (user non-default wins, else workspace).
-- **`[retention]`:** field-by-field merge: for each of `hot_days` and `warm_days`, if the user file value differs from the schema default, the user value wins; otherwise the workspace value is kept.
-- **`[storage]`:** field-by-field merge for tiered storage boundaries. The legacy `[retention]` values remain accepted during the migration window.
+- **`[retention]`:** field-by-field merge. If the user file sets a non-default `hot_days`, that value wins; otherwise the project value is kept.
 - **`[sources]`:** `cursor` and `tail.*` merge like `[retention]`: for each key, if the user file’s value still equals the type default, the workspace value is kept; otherwise the user value wins. Use the user file for machine-wide toggles; workspace file for repo-specific overrides.
 - **`[collect.outcomes]`, `[collect.system_sampler]`:** same pattern as `[retention]` (user non-default wins per key; otherwise workspace).
 
@@ -53,18 +52,10 @@ When you pass **`--all-workspaces`** (or MCP `all_workspaces: true`), Kaizen loa
 | Key | Default | Purpose |
 |-----|---------|--------|
 | `hot_days` | `30` | Local SQLite keeps sessions started within the last **hot_days** days. Older sessions and dependent rows are removed when auto-prune runs (after a rescan, at most once per 24h) or when you run `kaizen gc`. **`0`** disables automatic pruning. |
-| `warm_days` | `90` | Reserved for future tiered retention; not used for local purge today. |
 
-## `[storage]`
-
-Tiered storage keeps recent rows in a hot append log, analytical history in Parquet, and SQLite for transactional metadata.
-
-| Key | Default | Meaning |
-|---|---:|---|
-| `hot_max_bytes` | `"1GB"` | Target size for the hot log before compaction. |
-| `cold_after_days` | `7` | Events older than this move to cold Parquet partitions. |
-| `retention_days` | `90` | Cold partitions older than this can be removed with file deletion. |
-| `flush_hour_utc` | `0` | UTC hour for daemon cold-flush scheduling. |
+Older config files may still contain `[storage]` or
+`[retention].warm_days`. The parser accepts those keys for compatibility, but
+the SQLite-only runtime ignores them. Remove them when cleaning up config.
 
 ## `[sources]`
 
@@ -105,7 +96,7 @@ provider selection, and `context_policy` examples: [llm-proxy.md](llm-proxy.md).
 
 ## `[telemetry]`
 
-Optional fan-out to local and third-party sinks: **`file`** (append-only NDJSON under the workspace), PostHog, Datadog, OTLP, or `dev` tracing, with the same redaction as Kaizen sync. The default Cargo build now ships PostHog, Datadog, and OTLP support so `kaizen telemetry configure` works out of the box; the `dev` tracing sink stays opt-in behind `--features telemetry-dev`. See [Cargo features](../Cargo.toml) and [usage](usage.md#kaizen-telemetry).
+Optional fan-out to local and third-party sinks: **`file`** (append-only NDJSON in the project data directory), PostHog, Datadog, OTLP, or `dev` tracing, with the same redaction as Kaizen sync. The default Cargo build now ships PostHog, Datadog, and OTLP support so `kaizen telemetry configure` works out of the box; the `dev` tracing sink stays opt-in behind `--features telemetry-dev`. See [Cargo features](../Cargo.toml) and [telemetry usage](usage-telemetry.md).
 
 | Key | Default | Purpose |
 |-----|---------|--------|

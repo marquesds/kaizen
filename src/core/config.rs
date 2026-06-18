@@ -687,7 +687,7 @@ pub struct Config {
 /// Load config: `~/.kaizen/projects/<slug>/config.toml` then `~/.kaizen/config.toml`.
 /// User config wins on overlap. Missing files → defaults, not error.
 pub fn load(workspace: &Path) -> Result<Config> {
-    let project_cfg = crate::core::paths::project_data_dir(workspace)
+    let project_cfg = crate::core::paths::project_data_path(workspace)
         .ok()
         .map(|d| d.join("config.toml"));
     let user_path = crate::core::paths::kaizen_dir()

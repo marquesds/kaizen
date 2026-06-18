@@ -196,16 +196,14 @@ fn workspace_names(roots: &[PathBuf]) -> Vec<String> {
         .collect()
 }
 
-fn open_workspace_store(workspace: &Path) -> Result<Store> {
-    Store::open(&crate::core::workspace::db_path(workspace)?)
-}
-
 pub(crate) fn open_workspace_read_store(workspace: &Path, refresh: bool) -> Result<Store> {
     let db_path = crate::core::workspace::db_path(workspace)?;
-    if refresh || !db_path.exists() {
+    if refresh {
         Store::open(&db_path)
-    } else {
+    } else if db_path.exists() {
         Store::open_query(&db_path)
+    } else {
+        Store::open_empty(db_path.parent().unwrap_or(workspace))
     }
 }
 
@@ -349,7 +347,7 @@ pub fn cmd_sessions_list(
 /// `kaizen sessions show` — same output as CLI stdout.
 pub fn session_show_text(id: &str, workspace: Option<&Path>) -> Result<String> {
     let ws = workspace_path(workspace)?;
-    let store = open_workspace_store(&ws)?;
+    let store = open_workspace_read_store(&ws, false)?;
     use std::fmt::Write;
     let mut out = String::new();
     match store.get_session(id)? {
@@ -425,20 +423,44 @@ pub fn cmd_session_show(id: &str, workspace: Option<&Path>) -> Result<()> {
 
 pub fn sessions_tree_text(id: &str, max_depth: u32, workspace: Option<&Path>) -> Result<String> {
     let ws = workspace_path(workspace)?;
-    let store = open_workspace_store(&ws)?;
+    let store = open_workspace_read_store(&ws, false)?;
+    require_session(&store, id)?;
     let nodes = store.session_span_tree(id)?;
     if nodes.is_empty() {
-        if store.get_session(id)?.is_none() {
-            anyhow::bail!("session not found: {id}");
-        }
         return Ok(format!("(no tool spans for session {id})\n"));
     }
+    Ok(render_span_tree(&nodes, max_depth))
+}
+
+fn require_session(store: &Store, id: &str) -> Result<()> {
+    anyhow::ensure!(session_exists(store, id)?, "session not found: {id}");
+    Ok(())
+}
+
+fn session_exists(store: &Store, id: &str) -> Result<bool> {
+    let ids = [id.to_owned()];
+    match store.session_statuses(&ids) {
+        Ok(rows) => Ok(!rows.is_empty()),
+        Err(error) if missing_sessions_table(&error) => Ok(false),
+        Err(error) => Err(error),
+    }
+}
+
+fn missing_sessions_table(error: &anyhow::Error) -> bool {
+    matches!(
+        error.downcast_ref::<rusqlite::Error>(),
+        Some(rusqlite::Error::SqliteFailure(_, Some(message)))
+            if message == "no such table: sessions"
+    )
+}
+
+fn render_span_tree(nodes: &[crate::store::span_tree::SpanNode], max_depth: u32) -> String {
     let total_cost: i64 = nodes.iter().map(|n| n.subtree_cost_usd_e6).sum();
     let mut out = String::new();
-    for node in &nodes {
-        render_node(&mut out, node, 0, max_depth, total_cost);
-    }
-    Ok(out)
+    nodes
+        .iter()
+        .for_each(|node| render_node(&mut out, node, 0, max_depth, total_cost));
+    out
 }
 
 fn render_node(
@@ -576,7 +598,7 @@ pub fn summary_text(
         maybe_refresh_store(workspace, &store, refresh)?;
         let ws_str = workspace.to_string_lossy().to_string();
         let read_store = open_workspace_read_store(workspace, false)?;
-        let query = crate::store::query::QueryStore::open(&crate::core::paths::project_data_dir(
+        let query = crate::store::query::QueryStore::open(&crate::core::paths::project_data_path(
             workspace,
         )?)?;
         let mut stats = query.summary_stats(&read_store, &ws_str)?;
@@ -897,7 +919,7 @@ where
 }
 
 pub(crate) fn workspace_path(workspace: Option<&Path>) -> Result<PathBuf> {
-    crate::core::workspace::resolve(workspace)
+    crate::core::workspace::resolve_read(workspace)
 }
 
 /// Resolve workspace from `--workspace` or `--project` (mutually exclusive at clap level).
@@ -912,7 +934,7 @@ pub fn resolve_target(
         let path = crate::core::workspace::resolve_project_name(name)?;
         return Ok((path, ScopeOrigin::ExplicitProject(name.to_owned())));
     }
-    let path = crate::core::workspace::resolve(workspace)?;
+    let path = crate::core::workspace::resolve_read(workspace)?;
     let origin = if workspace.is_some() {
         ScopeOrigin::ExplicitWorkspace
     } else {

@@ -4,10 +4,13 @@
 use crate::ipc::{DaemonRequest, DaemonResponse, SessionDetail};
 use crate::store::Store;
 use anyhow::Result;
-use std::path::PathBuf;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use tokio::sync::{mpsc, oneshot};
+
+const MAX_CACHED_STORES: usize = 8;
 
 pub(super) struct Job {
     pub(super) request: DaemonRequest,
@@ -20,8 +23,9 @@ pub(super) fn spawn_worker(
     last_error: Arc<Mutex<Option<String>>>,
 ) {
     std::thread::spawn(move || {
+        let mut stores = StoreCache::default();
         while let Some(job) = rx.blocking_recv() {
-            let response = worker_response(job.request, &last_error);
+            let response = worker_response(job.request, &last_error, &mut stores);
             queue_depth.fetch_sub(1, Ordering::Relaxed);
             let _ = job.reply.send(response);
         }
@@ -31,8 +35,9 @@ pub(super) fn spawn_worker(
 fn worker_response(
     request: DaemonRequest,
     last_error: &Arc<Mutex<Option<String>>>,
+    stores: &mut StoreCache,
 ) -> DaemonResponse {
-    match handle_request(request) {
+    match handle_request(request, stores) {
         Ok(response) => response,
         Err(err) => {
             let message = format!("{err:#}");
@@ -48,7 +53,7 @@ fn worker_response(
     }
 }
 
-fn handle_request(request: DaemonRequest) -> Result<DaemonResponse> {
+fn handle_request(request: DaemonRequest, stores: &mut StoreCache) -> Result<DaemonResponse> {
     match request {
         DaemonRequest::Stop => Ok(DaemonResponse::Ack {
             message: "stopping".to_string(),
@@ -59,24 +64,23 @@ fn handle_request(request: DaemonRequest) -> Result<DaemonResponse> {
             limit,
             filter,
         } => {
-            let store = Store::open(&crate::core::workspace::db_path(&PathBuf::from(
-                &workspace,
-            ))?)?;
-            let page = store.list_sessions_page(&workspace, offset, limit, filter)?;
+            let page = stores
+                .workspace_read(&PathBuf::from(&workspace))?
+                .map(|store| store.list_sessions_page(&workspace, offset, limit, filter))
+                .transpose()?
+                .unwrap_or_else(empty_page);
             Ok(DaemonResponse::Sessions(page))
         }
-        DaemonRequest::GetSessionDetail { id, workspace } => load_detail(id, workspace),
+        DaemonRequest::GetSessionDetail { id, workspace } => load_detail(id, workspace, stores),
         DaemonRequest::IngestHook {
             source,
             payload,
             workspace,
         } => {
-            let workspace = workspace.map(|p| crate::core::paths::canonical(&PathBuf::from(p)));
-            crate::shell::ingest::ingest_hook_text(source, &payload, workspace.clone())?;
-            if let Some(ws) = workspace {
-                let store = Store::open(&crate::core::workspace::db_path(&ws)?)?;
-                store.flush_search().ok();
-            }
+            let ws = workspace_path(workspace)?;
+            let store = stores.workspace(&ws)?;
+            crate::shell::ingest::ingest_hook_with_store(source, &payload, &ws, store)?;
+            store.flush_search().ok();
             Ok(DaemonResponse::Ack {
                 message: "ingested".to_string(),
             })
@@ -89,13 +93,19 @@ fn handle_request(request: DaemonRequest) -> Result<DaemonResponse> {
     }
 }
 
-fn load_detail(id: String, workspace: Option<String>) -> Result<DaemonResponse> {
+fn load_detail(
+    id: String,
+    workspace: Option<String>,
+    stores: &mut StoreCache,
+) -> Result<DaemonResponse> {
     let roots = workspace
         .map(PathBuf::from)
         .map(|p| vec![p])
         .unwrap_or_else(|| crate::core::machine_registry::list_paths().unwrap_or_default());
     for ws in roots {
-        let store = Store::open(&crate::core::workspace::db_path(&ws)?)?;
+        let Some(store) = stores.workspace_read(&ws)? else {
+            continue;
+        };
         if let Some(session) = store.get_session(&id)? {
             return Ok(DaemonResponse::Detail(Box::new(SessionDetail {
                 session: Some(session),
@@ -110,3 +120,79 @@ fn load_detail(id: String, workspace: Option<String>) -> Result<DaemonResponse> 
         spans: Vec::new(),
     })))
 }
+
+fn empty_page() -> crate::store::SessionPage {
+    crate::store::SessionPage {
+        rows: Vec::new(),
+        total: 0,
+        next_offset: None,
+    }
+}
+
+fn workspace_path(workspace: Option<String>) -> Result<PathBuf> {
+    let path = workspace
+        .map(PathBuf::from)
+        .unwrap_or(std::env::current_dir()?);
+    Ok(crate::core::paths::canonical(&path))
+}
+
+#[derive(Default)]
+struct StoreCache {
+    stores: HashMap<PathBuf, CachedStore>,
+}
+
+struct CachedStore {
+    store: Store,
+    writable: bool,
+}
+
+impl StoreCache {
+    fn workspace(&mut self, workspace: &Path) -> Result<&Store> {
+        let path = crate::core::workspace::db_path(workspace)?;
+        self.open_write(&path)
+    }
+
+    fn workspace_read(&mut self, workspace: &Path) -> Result<Option<&Store>> {
+        let path = crate::core::workspace::db_path(workspace)?;
+        if !path.exists() {
+            return Ok(None);
+        }
+        self.open_read(&path).map(Some)
+    }
+
+    fn open_write(&mut self, path: &Path) -> Result<&Store> {
+        if !self.stores.get(path).is_some_and(|entry| entry.writable) {
+            self.insert(path.to_path_buf(), true)?;
+        }
+        Ok(&self.stores.get(path).expect("cached store").store)
+    }
+
+    fn open_read(&mut self, path: &Path) -> Result<&Store> {
+        if !self.stores.contains_key(path) {
+            self.insert(path.to_path_buf(), false)?;
+        }
+        Ok(&self.stores.get(path).expect("cached store").store)
+    }
+
+    fn insert(&mut self, path: PathBuf, writable: bool) -> Result<()> {
+        if !self.stores.contains_key(&path) && self.stores.len() >= MAX_CACHED_STORES {
+            self.evict_one();
+        }
+        let store = if writable {
+            Store::open(&path)?
+        } else {
+            Store::open_query(&path)?
+        };
+        self.stores.insert(path, CachedStore { store, writable });
+        Ok(())
+    }
+
+    fn evict_one(&mut self) {
+        if let Some(path) = self.stores.keys().next().cloned() {
+            self.stores.remove(&path);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests;

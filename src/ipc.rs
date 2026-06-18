@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Daemon IPC protocol. JSON control frames now; payload marker leaves room for Arrow IPC batches.
+//! Daemon IPC protocol. Length-prefixed JSON keeps local clients simple and portable.
 
 use crate::core::event::{Event, SessionRecord};
 use crate::store::{SessionFilter, SessionPage, SpanNode};
@@ -7,6 +7,8 @@ use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 pub const PROTO_VERSION: u32 = 1;
+/// Maximum accepted daemon IPC payload size. Larger frames fail before allocation.
+pub const MAX_FRAME_SIZE: usize = 16 * 1024 * 1024;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -159,6 +161,10 @@ where
     R: AsyncRead + Unpin,
 {
     let len = reader.read_u32().await? as usize;
+    anyhow::ensure!(
+        len <= MAX_FRAME_SIZE,
+        "IPC frame length {len} exceeds maximum {MAX_FRAME_SIZE} bytes"
+    );
     let mut buf = vec![0_u8; len];
     reader.read_exact(&mut buf).await?;
     Ok(serde_json::from_slice(&buf)?)

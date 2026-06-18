@@ -1,67 +1,115 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use super::rollup::{counts, first_count, kind_name, token_totals};
 use super::types::{ActivityBin, ActivityMetric, ActivityReport};
-use crate::core::event::{Event, SessionRecord};
-use std::collections::HashSet;
+use crate::store::Store;
+use anyhow::Result;
 
 const DAY_MS: u64 = 86_400_000;
+const DAY_BIN_MS: u64 = 5 * 60_000;
+const WEEK_BIN_MS: u64 = 30 * 60_000;
 
-pub(super) fn activity(pairs: &[(SessionRecord, Event)], now_ms: u64) -> ActivityReport {
-    let mut day_bins = bins(pairs, now_ms.saturating_sub(DAY_MS), now_ms, 5 * 60_000);
-    let mut week_bins = bins(
-        pairs,
-        now_ms.saturating_sub(7 * DAY_MS),
-        now_ms,
-        30 * 60_000,
-    );
-    normalize(&mut day_bins);
-    normalize(&mut week_bins);
-    ActivityReport {
+pub(super) fn activity(store: &Store, workspace: &str, now_ms: u64) -> Result<ActivityReport> {
+    Ok(ActivityReport {
         metric: ActivityMetric::Events,
-        day_bins,
-        week_bins,
-    }
+        day_bins: bins(
+            store,
+            workspace,
+            now_ms.saturating_sub(DAY_MS),
+            now_ms,
+            DAY_BIN_MS,
+        )?,
+        week_bins: bins(
+            store,
+            workspace,
+            now_ms.saturating_sub(7 * DAY_MS),
+            now_ms,
+            WEEK_BIN_MS,
+        )?,
+    })
 }
 
-fn bins(pairs: &[(SessionRecord, Event)], start: u64, end: u64, width: u64) -> Vec<ActivityBin> {
+fn bins(
+    store: &Store,
+    workspace: &str,
+    start: u64,
+    end: u64,
+    width: u64,
+) -> Result<Vec<ActivityBin>> {
+    let read = store.visualization_activity(workspace, start, end, width)?;
+    let mut bins = states(start, end, width);
+    read.totals.into_iter().for_each(|row| {
+        set_total(
+            &mut bins,
+            row.bin,
+            row.event_count,
+            row.session_count,
+            row.token_total,
+            row.cost_usd_e6,
+        )
+    });
+    read.agents
+        .into_iter()
+        .for_each(|row| push_agent(&mut bins, row.bin, row.name, row.count));
+    let mut kinds = vec![Vec::new(); bins.len()];
+    read.kinds
+        .into_iter()
+        .for_each(|row| push_count(&mut kinds, row.bin, row.name, row.count));
+    finish(&mut bins, kinds);
+    Ok(bins)
+}
+
+fn states(start: u64, end: u64, width: u64) -> Vec<ActivityBin> {
     (start..end)
         .step_by(width as usize)
-        .map(|s| bin(pairs, s, s.saturating_add(width)))
+        .map(|start_ms| ActivityBin {
+            start_ms,
+            end_ms: start_ms.saturating_add(width),
+            is_break: true,
+            ..Default::default()
+        })
         .collect()
 }
 
-fn bin(pairs: &[(SessionRecord, Event)], start: u64, end: u64) -> ActivityBin {
-    let scoped: Vec<_> = pairs
-        .iter()
-        .filter(|(_, e)| e.ts_ms >= start && e.ts_ms < end)
-        .collect();
-    let agents = counts(scoped.iter().map(|(s, _)| s.agent.as_str()));
-    ActivityBin {
-        start_ms: start,
-        end_ms: end,
-        event_count: scoped.len() as u64,
-        session_count: session_count(&scoped),
-        token_total: token_totals(scoped.iter().map(|(_, e)| e)).total,
-        cost_usd_e6: scoped.iter().filter_map(|(_, e)| e.cost_usd_e6).sum(),
-        dominant_agent: first_count(&agents),
-        dominant_kind: first_count(&counts(scoped.iter().map(|(_, e)| kind_name(&e.kind)))),
-        active_by_agent: agents,
-        heat: 0.0,
-        is_break: scoped.is_empty(),
+fn set_total(
+    bins: &mut [ActivityBin],
+    index: usize,
+    events: u64,
+    sessions: u64,
+    tokens: u64,
+    cost: i64,
+) {
+    let Some(bin) = bins.get_mut(index) else {
+        return;
+    };
+    bin.event_count = events;
+    bin.session_count = sessions;
+    bin.token_total = tokens;
+    bin.cost_usd_e6 = cost;
+    bin.is_break = false;
+}
+
+fn push_agent(bins: &mut [ActivityBin], index: usize, name: String, count: u64) {
+    if let Some(bin) = bins.get_mut(index) {
+        bin.active_by_agent.push((name, count));
     }
 }
 
-fn normalize(bins: &mut [ActivityBin]) {
-    let max = bins.iter().map(|b| b.event_count).max().unwrap_or(0).max(1);
-    bins.iter_mut()
-        .for_each(|b| b.heat = b.event_count as f64 / max as f64);
+fn push_count(counts: &mut [Vec<(String, u64)>], index: usize, name: String, count: u64) {
+    if let Some(bin) = counts.get_mut(index) {
+        bin.push((name, count));
+    }
 }
 
-fn session_count(scoped: &[&(SessionRecord, Event)]) -> u64 {
-    scoped
+fn finish(bins: &mut [ActivityBin], kinds: Vec<Vec<(String, u64)>>) {
+    let max = bins
         .iter()
-        .map(|(s, _)| s.id.as_str())
-        .collect::<HashSet<_>>()
-        .len() as u64
+        .map(|bin| bin.event_count)
+        .max()
+        .unwrap_or(0)
+        .max(1);
+    bins.iter_mut().zip(kinds).for_each(|(bin, kinds)| {
+        bin.dominant_agent = bin.active_by_agent.first().map(|row| row.0.clone());
+        bin.dominant_kind = kinds.first().map(|row| row.0.clone());
+        bin.heat = bin.event_count as f64 / max as f64;
+    });
 }

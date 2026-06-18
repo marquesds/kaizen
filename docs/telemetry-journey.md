@@ -126,7 +126,7 @@ kaizen telemetry pull --days 1   # Datadog Logs Search v2; requires DD_APP_KEY t
 
 - [architecture.md](architecture.md) — module names and boundary list.
 - [config.md](config.md) — `~/.kaizen` vs workspace, tail sources, sync, proxy, telemetry exporters.
-- [usage.md#kaizen-telemetry](usage.md#kaizen-telemetry) — full CLI reference for the telemetry subcommands.
+- [usage-telemetry.md](usage-telemetry.md) — full CLI reference for the telemetry subcommands.
 - [../AGENTS.md](../AGENTS.md) — note on Cursor cost telemetry limitations.
 
 Long-form documentation is maintained in the **GitHub** tree under `docs/`. The [docs.rs](https://docs.rs/kaizen-cli) page documents the Rust library API for the published crate, not the full markdown book.

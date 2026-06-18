@@ -13,8 +13,6 @@ When to add or extend a spec: see [`.cursor/rules/quint-before-code.mdc`](../.cu
 | [`specs/session-lifecycle.qnt`](../specs/session-lifecycle.qnt) | `tests/spec/session_lifecycle.rs` | session states (abstract) |
 | [`specs/init-setup.qnt`](../specs/init-setup.qnt) | `tests/spec/init_setup.rs` | `init` (global wiring, legacy-local detection) |
 | [`specs/project-lookup.qnt`](../specs/project-lookup.qnt) | `tests/spec/project_lookup.rs` | `--project` / `kaizen projects list` resolution |
-| [`specs/retention.qnt`](../specs/retention.qnt) | `tests/spec/retention.rs` | tier aging |
-| [`specs/event-log-hot.qnt`](../specs/event-log-hot.qnt) | unit tests in `src/store/hot_log.rs` | hot log append, replay, index |
 | [`specs/sync-backpressure.qnt`](../specs/sync-backpressure.qnt) | `tests/spec/sync_backpressure.rs` | sync |
 | [`specs/daemon-handshake.qnt`](../specs/daemon-handshake.qnt) | `tests/spec/daemon_lifecycle.rs` | daemon lifecycle, background start readiness, protocol retry |
 | [`specs/telemetry-exporters.qnt`](../specs/telemetry-exporters.qnt) | `tests/spec/telemetry_exporters.rs` | telemetry (query authority + N-way fan-out + Datadog log records carry `timestamp`, `hostname`, `project_name`, and span metrics for event/tool_span canonical kinds) |
@@ -68,7 +66,18 @@ When to add or extend a spec: see [`.cursor/rules/quint-before-code.mdc`](../.cu
 
 - **`completions`** — static codegen; low value for formal modeling.
 
-**Ingest** and **sync** are covered by hook / ingest idempotency and sync-backpressure specs. **Retro** has `retro-pipeline` for pipeline phases; heuristic-specific gates include **`h33-automation`** (H33). Not every heuristic in [`src/retro/`](../src/retro/) has a Quint module. **`retention.qnt`** models tier **aging**, not every `gc` edge case; **`gc-prune.qnt`** captures refuse / prune / vacuum ordering.
+**Ingest** and **sync** are covered by hook / ingest idempotency and
+sync-backpressure specs. **Retro** has `retro-pipeline` for pipeline phases;
+heuristic-specific gates include **`h33-automation`** (H33). Not every
+heuristic in [`src/retro/`](../src/retro/) has a Quint module.
+**`gc-prune.qnt`** captures current SQLite refuse / prune / vacuum ordering.
+
+## Legacy storage models
+
+`specs/event-log-hot.qnt` and `specs/retention.qnt` describe the retired tiered
+storage design. They remain in the tree for historical reference and Quint
+type-checking, but they do not describe current runtime behavior.
+`tests/spec/retention.rs` is likewise legacy model coverage pending removal.
 
 ## When to close a gap
 

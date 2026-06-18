@@ -2,11 +2,13 @@
 
 Run the [Model Context Protocol](https://modelcontextprotocol.io) server so agents (Cursor, Claude Code, Goose, OpenCode, GitHub Copilot, and other MCP hosts) can call **most** `kaizen` workflows without shelling. **Not on MCP (use the real CLI):** `doctor`, `guidance`, `gc`, `completions`, `proxy run`, and all `kaizen telemetry` subcommands (including `configure`, `print-effective-config`, `push`, and `tail`).
 
-The MCP tools are cache-first by default. They read the local `.kaizen/kaizen.db` immediately, and only rescan external agent transcript stores when you pass `refresh: true`.
+The MCP tools are cache-first by default. They read
+`~/.kaizen/projects/<slug>/kaizen.db` immediately and only rescan external
+agent transcript stores when you pass `refresh: true`.
 
 ## Quint specification
 
-Behavioral invariants for MCP-specific edges (TUI stub, `sync run` once vs continuous) are model-checked in [specs/mcp-server.qnt](specs/mcp-server.qnt) and replayed in CI via `quint-connect` in [`tests/spec/mcp_server.rs`](../tests/spec/mcp_server.rs). Run `quint typecheck specs/mcp-server.qnt` (see [../CONTRIBUTING.md](../CONTRIBUTING.md) for the pinned Quint version) after editing the spec.
+Behavioral invariants for MCP-specific edges (TUI stub, `sync run` once vs continuous) are model-checked in [specs/mcp-server.qnt](../specs/mcp-server.qnt) and replayed in CI via `quint-connect` in [`tests/spec/mcp_server.rs`](../tests/spec/mcp_server.rs). Run `quint typecheck specs/mcp-server.qnt` (see [../CONTRIBUTING.md](../CONTRIBUTING.md) for the pinned Quint version) after editing the spec.
 
 ## Start
 
@@ -95,7 +97,7 @@ If you use `COPILOT_HOME` or `--config-dir`, place the file under that directory
 
 ## Disabling tier-1 sources
 
-In `.kaizen/config.toml`:
+In `~/.kaizen/projects/<slug>/config.toml`:
 
 ```toml
 [sources.tail]
@@ -120,7 +122,7 @@ Set any value to `false` to skip that agent’s local scan (useful if a VS Code 
 | `kaizen_ingest_hook` | `kaizen ingest hook` | Pass hook JSON in `payload` (not stdin). `source`: `cursor` or `claude`. |
 | `kaizen_sessions_list` | `kaizen sessions list` | Optional `json: true`, `refresh: true` (full transcript rescan; matches `--refresh`), `all_workspaces: true`, `limit` (cap rows, newest first). |
 | `kaizen_session_show` | `kaizen sessions show` | `id` + optional `workspace`. |
-| `mcp/search_sessions` | `kaizen sessions search` | Structured BM25 event search. Args: `query`, optional `since`, `agent`, `kind`, `limit`, `workspace`. Returns `hits[]` with session id, seq, ts, score, snippet, paths, skills, and `tokens_total`. |
+| `kaizen_search_sessions` | `kaizen search` | Structured BM25 event search. Args: `query`, optional `since`, `agent`, `kind`, `limit`, `workspace`. `kaizen sessions search` remains a compatible CLI alias. Returns `hits[]` with session id, seq, ts, score, snippet, paths, skills, and `tokens_total`. |
 | `kaizen_query` | `kaizen query` | Structured trace query. |
 | `kaizen_cases_mine` / `kaizen_cases_create` / `kaizen_cases_list` / `kaizen_cases_show` / `kaizen_cases_archive` | `kaizen cases ...` | Local regression cases from evals, feedback, or manual session references. |
 | `kaizen_rules_create` / `kaizen_rules_list` / `kaizen_rules_run` / `kaizen_rules_enable` / `kaizen_rules_disable` | `kaizen rules ...` | Local-only rule actions: create case, queue review, emit alert. |
@@ -148,9 +150,9 @@ Set any value to `false` to skip that agent’s local scan (useful if a VS Code 
 
 ## Behavior notes
 
-- **Workspace**: most tools accept optional `workspace` (string path) or `project` (short project name — resolved via `kaizen projects list`; mutually exclusive with `workspace`). If neither is given, the server uses the process current directory, matching CLI defaults.
+- **Workspace**: most tools accept optional `workspace` (string path) or `project` (short project name — resolved from existing rows shown by `kaizen projects`; mutually exclusive with `workspace`). If neither is given, the server uses the process current directory, matching CLI defaults. Use `kaizen projects --include-missing` to inspect stale registry rows; MCP workspace reads ignore them.
 - **Data source**: `kaizen_summary`, `kaizen_insights`, `kaizen_metrics`, and `kaizen_retro` use the local DB only (`DataSource::Local`), matching CLI default `--source local`. The MCP server does not expose CLI `--source` switches; use the CLI if you need another source.
 - **Rescan**: list/summary/insights/metrics/retro stay on the cached local DB unless you pass `refresh: true` (same as CLI `--refresh`). `kaizen_exp_report` defaults to cache-first as well; set `refresh: true` to force a full transcript rescan before computing the report.
-- **Aggregation**: `kaizen_sessions_list`, `kaizen_summary`, `kaizen_insights`, and `kaizen_metrics` accept `all_workspaces: true`. Kaizen opens each registered workspace DB separately and merges the results in memory.
+- **Aggregation**: `kaizen_sessions_list`, `kaizen_summary`, `kaizen_insights`, and `kaizen_metrics` accept `all_workspaces: true`. Kaizen opens each existing registered workspace DB separately and merges the results in memory.
 - **Blocking work** is run on a blocking thread pool so the async MCP runtime is not starved; long `retro` or metrics runs may take time.
 - **Version** in the MCP `initialize` response is the built-in string configured for the server (keep in sync with releases when using strict client checks).

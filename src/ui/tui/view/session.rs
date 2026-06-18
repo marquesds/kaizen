@@ -68,6 +68,14 @@ impl SessionView {
         self.window.get(&self.cursor)
     }
 
+    pub fn loaded_once(&self) -> bool {
+        self.loaded_once
+    }
+
+    pub fn loaded_count(&self) -> usize {
+        self.window.len()
+    }
+
     pub fn visible_rows(&self, height: usize) -> Vec<(usize, Option<&SessionRecord>)> {
         let start = self.viewport_start(height);
         let end = start.saturating_add(height).min(self.total.max(start));

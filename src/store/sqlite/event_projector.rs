@@ -2,6 +2,17 @@ use super::events::*;
 use super::*;
 
 impl Store {
+    pub(super) fn sync_projector_session(
+        &self,
+        session_id: &str,
+        last_seq: Option<u64>,
+    ) -> Result<()> {
+        if self.projector.borrow().last_seq(session_id) == last_seq {
+            return Ok(());
+        }
+        self.replay_projector_session(session_id)
+    }
+
     pub fn flush_projector_session(&self, session_id: &str, now_ms: u64) -> Result<()> {
         if projector_legacy_mode() {
             rebuild_tool_spans_for_session(&self.conn, session_id)?;
@@ -62,10 +73,6 @@ impl Store {
                         paths = ?sample.paths,
                         "tool span closed"
                     );
-                    changed = true;
-                }
-                ProjectorEvent::SpanPatched(span) => {
-                    upsert_tool_span_record(&self.conn, span)?;
                     changed = true;
                 }
                 ProjectorEvent::FileTouched { session, path } => {

@@ -189,7 +189,6 @@ pub(super) fn observe(
 }
 
 pub(super) fn projects(cmd: ProjectsCommand) -> anyhow::Result<()> {
-    match cmd {
-        ProjectsCommand::List => kaizen::shell::projects::cmd_projects_list(),
-    }
+    let _ = cmd.subcmd;
+    kaizen::shell::projects::cmd_projects_list(cmd.json, cmd.include_missing)
 }

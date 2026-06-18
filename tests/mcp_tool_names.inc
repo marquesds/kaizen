@@ -36,11 +36,11 @@ pub const KAIZEN_MCP_TOOL_NAMES: &[&str] = &[
     "kaizen_rules_enable",
     "kaizen_rules_list",
     "kaizen_rules_run",
+    "kaizen_search_sessions",
     "kaizen_session_show",
     "kaizen_sessions_list",
     "kaizen_summary",
     "kaizen_sync_run",
     "kaizen_sync_status",
     "kaizen_tui",
-    "mcp/search_sessions",
 ];
