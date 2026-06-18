@@ -1315,9 +1315,9 @@ dependencies = [
 
 [[package]]
 name = "graphqlite"
-version = "0.4.4"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9d88630ba1b3ba5d6c1bd934f4b826a32b52362b719d7b402071512dbad5f4fc"
+checksum = "2b163cac4816272b011be5aecaf9a5e86228ddb54752e21236ea396f58b17d1c"
 dependencies = [
  "rusqlite",
  "serde",
