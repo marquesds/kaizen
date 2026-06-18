@@ -381,7 +381,7 @@ pub(super) fn apply_pragmas(conn: &Connection, mode: StoreOpenMode) -> Result<()
         PRAGMA journal_mode=WAL;
         PRAGMA busy_timeout=5000;
         PRAGMA synchronous=NORMAL;
-        PRAGMA cache_size=-65536;
+        PRAGMA cache_size=-{DEFAULT_CACHE_KIB};
         PRAGMA mmap_size={mmap_size};
         PRAGMA temp_store=MEMORY;
         PRAGMA wal_autocheckpoint=1000;

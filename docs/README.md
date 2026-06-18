@@ -16,7 +16,9 @@ glossary. For a **guided tour** with exercises, start at [tutorial/README.md](tu
 | [install.md](install.md) | `cargo install` from crates.io, build from source, uninstall |
 | [telemetry-journey.md](telemetry-journey.md) | How agent sessions map to data (ingest → events → facts) |
 | [tutorial/README.md](tutorial/README.md) | Hands-on tutorial (all major features + exercises) |
-| [usage.md](usage.md) | CLI reference |
+| [usage.md](usage.md) | CLI reference index |
+| [web.md](web.md) | Read-only local dashboard, auth, limits, troubleshooting |
+| [tui.md](tui.md) | Terminal UI controls, bounded loading, troubleshooting |
 | [mcp.md](mcp.md) | MCP stdio server (agent hosts; most commands as tools) |
 | [daemon.md](daemon.md) | Local daemon lifecycle and direct-mode fallback |
 | [llm-proxy.md](llm-proxy.md) | Local HTTP forwarder for LLM APIs (Anthropic) |
@@ -38,7 +40,7 @@ glossary. For a **guided tour** with exercises, start at [tutorial/README.md](tu
 | [datamodel.md](datamodel.md) | Data structs, relationships, invariants |
 | [patterns.md](patterns.md) | Conventions, design patterns |
 | [ingest-contract.md](ingest-contract.md) | HTTP ingest API |
-| [adr/](adr/) | Architecture decision records |
+| [adr/README.md](adr/README.md) | Architecture decision records |
 
 ## Keep docs current
 
@@ -49,13 +51,13 @@ glossary. For a **guided tour** with exercises, start at [tutorial/README.md](tu
 | New module | `architecture.md` |
 | New env var | `config.md` |
 | `kaizen proxy` or proxy config | [llm-proxy.md](llm-proxy.md), [config.md](config.md) |
-| `kaizen telemetry` or `[[telemetry.exporters]]` | [usage](usage.md), [config](config.md#telemetry) |
+| `kaizen telemetry` or `[[telemetry.exporters]]` | [telemetry usage](usage-telemetry.md), [config](config.md#telemetry) |
 | New pattern or decision | `patterns.md` or new ADR |
 | Directory layout change | `structure.md` |
 | Ingest / sync contract | `ingest-contract.md` |
 | Retro / experiments product spec | `retro.md` / `experiments.md` |
-| New CLI command or flag | `usage.md` |
-| New user-facing feature or meaningful flag / behavior | `usage.md` and the relevant [tutorial](tutorial/README.md) part (or new part) |
+| New CLI command or flag | `usage.md` and the relevant `usage-*.md` page |
+| New user-facing feature or meaningful flag / behavior | The relevant usage page and [tutorial](tutorial/README.md) part (or new part) |
 | New Quint spec or change to spec/test pairing | [quint-coverage.md](quint-coverage.md) |
 | User-facing learning story or pipeline change | [telemetry-journey.md](telemetry-journey.md), [architecture.md](architecture.md), [tutorial](tutorial/README.md) as needed |
 

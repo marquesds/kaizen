@@ -1,10 +1,9 @@
 use super::*;
 
-#[derive(Subcommand)]
-pub(crate) enum ProjectsCommand {
-    /// List registered workspaces.
-    List,
-}
+mod compat;
+mod metrics;
+pub(crate) use compat::*;
+pub(crate) use metrics::*;
 
 #[derive(Subcommand)]
 pub(crate) enum FeedbackCommand {
@@ -86,13 +85,11 @@ pub(crate) enum GuidanceCommand {
         #[arg(long)]
         llm: bool,
         #[arg(long)]
-        apply: bool,
-        #[arg(long)]
         json: bool,
         #[command(flatten)]
         ws: WorkspaceFlags,
     },
-    /// List, show, reject, validate, or archive guidance candidates.
+    /// List, show, reject, or archive guidance candidates.
     Candidates {
         #[command(subcommand)]
         subcmd: GuidanceCandidatesCommand,
@@ -115,7 +112,6 @@ pub(crate) enum GuidanceCandidatesCommand {
         ws: WorkspaceFlags,
     },
     Reject(IdOnly),
-    Validate(IdOnly),
     Archive(IdOnly),
 }
 
@@ -223,19 +219,6 @@ pub(crate) enum SessionsCommand {
 }
 
 #[derive(Subcommand)]
-pub(crate) enum SearchCommand {
-    /// Drop and rebuild the workspace search index.
-    Reindex {
-        /// workspace root (default: cwd)
-        #[arg(long)]
-        workspace: Option<PathBuf>,
-        /// project name shorthand for --workspace (mutually exclusive)
-        #[arg(long, conflicts_with = "workspace")]
-        project: Option<String>,
-    },
-}
-
-#[derive(Subcommand)]
 pub(crate) enum OutcomesCommand {
     /// Show stored JSON row for a session.
     Show {
@@ -261,6 +244,8 @@ pub(crate) enum OutcomesCommand {
 
 #[derive(Subcommand)]
 pub(crate) enum MetricsCommand {
+    /// Render the metrics report.
+    Report(MetricsReportArgs),
     /// Rebuild repo snapshot and Ladybug sidecar.
     Index {
         /// workspace root (default: cwd)

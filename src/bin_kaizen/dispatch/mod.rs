@@ -22,7 +22,6 @@ pub(crate) fn run(cli: Cli) -> anyhow::Result<()> {
             days,
             vacuum,
         } => operate::gc(workspace, project, days, vacuum),
-        Command::Migrate { subcmd } => operate::migrate(subcmd),
         Command::Completions { shell } => operate::completions(shell),
         Command::Sync { subcmd } => operate::sync(subcmd),
         Command::Telemetry { subcmd } => operate_telemetry::telemetry(subcmd),
@@ -57,6 +56,7 @@ pub(crate) fn run(cli: Cli) -> anyhow::Result<()> {
             source,
         } => trust::summary(workspace, project, all_workspaces, json, refresh, source),
         Command::Tui { workspace, project } => trust::tui(workspace, project),
+        Command::Open { no_browser } => operate_daemon::open_web(no_browser),
         Command::Init {
             workspace,
             project,
@@ -96,7 +96,7 @@ pub(crate) fn run(cli: Cli) -> anyhow::Result<()> {
             source,
         } => trust_metrics::metrics(trust_metrics::MetricsRequest {
             subcmd,
-            report: trust_metrics::MetricsReportRequest {
+            report: MetricsReportArgs {
                 days,
                 json,
                 force,

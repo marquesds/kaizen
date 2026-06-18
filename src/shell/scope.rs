@@ -16,7 +16,7 @@ pub enum ScopeOrigin {
 }
 
 pub fn resolve(workspace: Option<&Path>, all_workspaces: bool) -> Result<Vec<PathBuf>> {
-    let primary = crate::core::workspace::resolve(workspace)?;
+    let primary = crate::core::workspace::resolve_read(workspace)?;
     if all_workspaces {
         return crate::core::workspace::machine_workspaces(Some(&primary));
     }

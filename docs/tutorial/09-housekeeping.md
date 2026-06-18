@@ -10,7 +10,7 @@ kaizen gc --days 14
 kaizen gc --vacuum
 ```
 
-`hot_days = 0` disables automatic pruning; you can still run `gc` with **`--days`** set. See [config.md](../config.md#retention) and [usage.md](../usage.md#kaizen-gc).
+`hot_days = 0` disables automatic pruning; you can still run `gc` with **`--days`** set. See [config.md](../config.md#retention) and [GC usage](../usage-operate.md#kaizen-gc).
 
 **CLI-only:** no MCP tool for `gc`.
 
@@ -24,7 +24,7 @@ kaizen completions elvish
 kaizen completions powershell
 ```
 
-Redirect stdout to the path your shell expects. Examples: [usage.md](../usage.md#kaizen-completions).
+Redirect stdout to the path your shell expects. Examples: [completion usage](../usage-operate.md#kaizen-completions).
 
 ## ingest hook (rare)
 

@@ -26,7 +26,9 @@ You should see paths like `~/.kaizen/projects/<slug>/config.toml`, `~/.cursor/ho
 kaizen doctor
 ```
 
-Use this after init or in CI. Exit code **1** means a hard problem (for example store open failure or `.kaizen/` not writable). Partial hook wiring is reported in text but is not always a hard failure — follow the printed hint to re-run `kaizen init` if needed.
+Use this after init or in CI. Exit code **1** means a hard problem, such as a
+store-open failure or unwritable Kaizen home. Partial hook wiring is reported
+with a hint to rerun `kaizen init`.
 
 ## Exercise
 

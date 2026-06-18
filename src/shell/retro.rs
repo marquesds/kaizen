@@ -64,7 +64,7 @@ fn compute_retro(
         team_id,
         workspace_hash.as_deref(),
     )?;
-    let reports_dir = crate::core::paths::project_data_dir(workspace)?.join("reports");
+    let reports_dir = crate::core::paths::project_data_child(workspace, Path::new("reports"))?;
     let week_label = iso_week_label_utc();
     let prior = inputs::prior_bet_fingerprints(&reports_dir)?;
     let mut report = engine::run(&inputs, &prior);
@@ -97,7 +97,8 @@ pub fn retro_stdout(
     let ws = workspace_path(workspace)?;
     let (reports_dir, report) = compute_retro(&ws, days, refresh, source)?;
     let week_label = report.meta.week_label.clone();
-    let out_path = reports_dir.join(format!("{week_label}.md"));
+    let relative = PathBuf::from("reports").join(format!("{week_label}.md"));
+    let out_path = crate::core::paths::project_file_for_write(&ws, &relative)?;
 
     if !force && !dry_run && !json_out && out_path.exists() {
         return Ok(format!(

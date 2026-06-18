@@ -24,6 +24,8 @@ impl Config for TestConfig {
         let mut cmd = Command::new("quint");
         cmd.arg("test")
             .arg(Path::new(&self.spec))
+            .arg("--backend")
+            .arg("typescript")
             .arg("--seed")
             .arg(&self.seed)
             .arg("--match")
@@ -61,6 +63,7 @@ mod tests {
         assert_eq!(
             to_string(config),
             "quint test foo.qnt \
+             --backend typescript \
              --seed 42 \
              --match ^happyTest$ \
              --max-samples 100 \
@@ -77,6 +80,7 @@ mod tests {
         assert_eq!(
             to_string(config),
             "quint test foo.qnt \
+             --backend typescript \
              --seed 42 \
              --match ^happyTest$ \
              --max-samples 100 \
@@ -94,6 +98,7 @@ mod tests {
         assert_eq!(
             to_string(config),
             "quint test foo.qnt \
+             --backend typescript \
              --seed 42 \
              --match ^happyTest$ \
              --max-samples 42 \

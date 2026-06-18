@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Shared activity report for web and TUI.
+//! Shared read-only report for local visualization surfaces.
 
 mod activity;
 mod build;
-mod rollup;
 mod types;
 
-pub use build::{VisualizationQuery, build_report};
+pub(crate) use build::{BuiltReport, build_report_observed, derive_status};
+pub use build::{VisualizationLimits, VisualizationQuery, build_report};
 pub use types::*;

@@ -50,9 +50,19 @@ pub fn ensure_indexed(store: &Store, workspace: &Path, force: bool) -> Result<Re
     edges.extend(deps.clone());
     let fan = fan_counts(&deps);
     let mut symbols = vec![];
-    let graph_path = crate::core::paths::project_data_dir(workspace)
-        .map(|d| d.join("codegraph.db"))
-        .unwrap_or_else(|_| workspace.join("codegraph.db"));
+    let graph_path = crate::core::paths::project_file_for_write(
+        workspace,
+        std::path::Path::new("codegraph.db"),
+    )?;
+    [
+        "codegraph.db-journal",
+        "codegraph.db-wal",
+        "codegraph.db-shm",
+    ]
+    .into_iter()
+    .try_for_each(|name| {
+        crate::core::paths::project_data_child(workspace, std::path::Path::new(name)).map(drop)
+    })?;
     let snapshot = RepoSnapshotRecord {
         id: snapshot_id,
         workspace: workspace_str.clone(),

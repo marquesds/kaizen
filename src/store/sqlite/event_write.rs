@@ -24,6 +24,9 @@ impl Store {
         } else {
             self.last_event_seq_for_session(&e.session_id)?
         };
+        if !projector_legacy_mode() {
+            self.sync_projector_session(&e.session_id, last_before)?;
+        }
         let payload = serde_json::to_string(&e.payload)?;
         self.conn.execute(
             "INSERT INTO events (
@@ -85,7 +88,6 @@ impl Store {
         if self.conn.changes() == 0 {
             return Ok(());
         }
-        self.append_hot_event(e)?;
         if projector_legacy_mode() {
             index_event_derived(&self.conn, e)?;
             rebuild_tool_spans_for_session(&self.conn, &e.session_id)?;
@@ -137,7 +139,7 @@ impl Store {
         let mut outbound = outbound_event_from_row(e, &session, &salt);
         redact_payload(&mut outbound.payload, ctx.workspace_root(), &salt);
         let row = serde_json::to_string(&outbound)?;
-        self.outbox()?.append(&e.session_id, "events", &row)?;
+        self.append_outbox_row(&e.session_id, "events", &row)?;
         enqueue_tool_spans_for_session(self, &e.session_id, ctx)?;
         Ok(())
     }
@@ -147,20 +149,6 @@ impl Store {
         crate::extensions::aggregates::upsert_session(self, &e.session_id)?;
         if let Err(err) = crate::extensions::diffs::refresh_session(self, &e.session_id, false) {
             tracing::warn!(session_id = %e.session_id, "step diff attribution skipped: {err:#}");
-        }
-        Ok(())
-    }
-
-    pub(super) fn append_hot_event(&self, e: &Event) -> Result<()> {
-        if std::env::var("KAIZEN_HOT_LOG").as_deref() == Ok("0") {
-            return Ok(());
-        }
-        let mut slot = self.hot_log.borrow_mut();
-        if slot.is_none() {
-            *slot = Some(HotLog::open(&self.root)?);
-        }
-        if let Some(log) = slot.as_mut() {
-            log.append(e)?;
         }
         Ok(())
     }

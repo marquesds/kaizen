@@ -40,25 +40,6 @@ pub(crate) enum DaemonCommand {
 }
 
 #[derive(Subcommand)]
-pub(crate) enum MigrateCommand {
-    /// Export SQLite rows into hot log + cold Parquet.
-    V2 {
-        /// workspace root (default: cwd)
-        #[arg(long)]
-        workspace: Option<PathBuf>,
-        /// Keep future/skewed timestamps instead of failing validation.
-        #[arg(long)]
-        allow_skew: bool,
-    },
-    /// Restore raw SQLite events from hot log + cold Parquet.
-    V1 {
-        /// workspace root (default: cwd)
-        #[arg(long)]
-        workspace: Option<PathBuf>,
-    },
-}
-
-#[derive(Subcommand)]
 pub(crate) enum IngestCommand {
     /// Read hook event from stdin and log it.
     Hook {

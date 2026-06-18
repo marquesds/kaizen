@@ -1,125 +1,154 @@
-export function renderOutput(target, output, renderer = "detail") {
-  if (!target) return;
-  target.classList.remove("empty");
-  const value = output?.kind === "json" ? output.value : output?.value;
-  const mode = renderer === "summary" ? "cards" : renderer;
-  target.replaceChildren();
-  if (mode === "toast") return target.append(card("Done", stringify(value || "Saved")));
-  if (mode === "table") return target.append(table(rows(value)));
-  if (mode === "tree") return target.append(tree(value));
-  if (mode === "cards" || mode === "metrics" || mode === "report") return target.append(...cards(value));
-  if (mode === "markdown" || mode === "live") return target.append(pre(stringify(value)));
-  target.append(detail(value));
+import { renderDetail } from "./kaizen-detail.js";
+import { count, dateTime, label, money, shortId, statusTone } from "./kaizen-format.js";
+
+const $ = selector => document.querySelector(selector);
+const MAX_SESSION_ROWS = 30;
+let renderedSessions = "";
+
+export function setConnection(text, tone = "neutral") {
+  const target = $("#connection-state");
+  target.textContent = text;
+  target.dataset.tone = tone;
 }
 
-function rows(value) {
-  if (Array.isArray(value)) return value;
-  if (!value || typeof value !== "object") return [{ value }];
-  const found = Object.values(value).find(Array.isArray);
-  return found || Object.entries(value).map(([key, val]) => ({ key, value: val }));
+export function setJourney(tone, title, message) {
+  const isError = tone === "error" || tone === "auth";
+  $("#journey-state").dataset.tone = tone;
+  $("#journey-state-title").textContent = title;
+  $("#journey-status").hidden = isError;
+  $("#journey-error").hidden = !isError;
+  (isError ? $("#journey-error") : $("#journey-status")).textContent = message;
 }
 
-function table(items) {
-  if (!items.length) return empty("No rows.");
-  const columns = [...new Set(items.flatMap(item => Object.keys(flat(item))).slice(0, 8))];
-  const el = document.createElement("table");
-  el.append(thead(columns), tbody(items, columns));
-  return el;
+export function setBusy(busy) {
+  $("#observe-screen").setAttribute("aria-busy", String(busy));
+  $("#refresh-report").disabled = busy || !$("#project-select").value;
 }
 
-function thead(columns) {
-  const head = document.createElement("thead");
+export function renderProjects(projects, selected) {
+  const select = $("#project-select");
+  select.replaceChildren(...projects.map(path => option(path, path === selected)));
+  select.disabled = projects.length === 0;
+  if (selected) select.value = selected;
+  setBusy(false);
+}
+
+export function showManual(path = "") {
+  $("#manual-workspace").open = true;
+  $("#manual-path").value = path;
+}
+
+export function renderReport(report) {
+  renderTotals(report?.totals || {});
+  renderSessions(
+    report?.sessions || [],
+    report?.selected?.session?.id,
+    report?.totals?.session_count,
+  );
+  renderDetail(report);
+}
+
+function renderTotals(totals) {
+  $("#total-sessions").textContent = count(totals.session_count);
+  $("#active-sessions").textContent = count(totals.running_count);
+  $("#total-errors").textContent = count(totals.error_count);
+  $("#total-cost").textContent = money(totals.cost_usd_e6);
+}
+
+function renderSessions(sessions, selectedId, totalCount) {
+  const visible = sessions.slice(0, MAX_SESSION_ROWS);
+  const total = totalCount || sessions.length;
+  const signature = sessionSignature(visible);
+  if (signature !== renderedSessions) replaceSessionRows(visible, selectedId, signature);
+  markSelected(selectedId);
+  $("#session-empty").hidden = sessions.length > 0;
+  $("#session-count-note").textContent = sessionCountNote(visible.length, total);
+}
+
+function replaceSessionRows(sessions, selectedId, signature) {
+  $("#session-rows").replaceChildren(...sessions.map(row => sessionRow(row, selectedId)));
+  renderedSessions = signature;
+}
+
+function markSelected(selectedId) {
+  $("#session-rows").querySelectorAll("button[data-session-id]").forEach(button =>
+    button.setAttribute("aria-current", String(button.dataset.sessionId === selectedId)));
+}
+
+function sessionSignature(sessions) {
+  return JSON.stringify(sessions.map(session => [
+    session.id, session.agent, session.model, session.started_at_ms, session.status,
+    session.status_reason, session.cost_usd_e6, session.error_count,
+  ]));
+}
+
+function sessionCountNote(visible, total) {
+  if (!total) return "No sessions";
+  if (visible === total) return `${count(total)} newest`;
+  return `${count(visible)} of ${count(total)} newest`;
+}
+
+function sessionRow(session, selectedId) {
   const row = document.createElement("tr");
-  columns.forEach(col => row.append(cell("th", col)));
-  head.append(row);
-  return head;
+  row.append(
+    cell(identity(session)),
+    cell(session.model || "Unknown"),
+    cell(dateTime(session.started_at_ms)),
+    cell(status(session)),
+    cell(money(session.cost_usd_e6)),
+    cell(count(session.error_count)),
+    cell(inspect(session, selectedId)),
+  );
+  return row;
 }
 
-function tbody(items, columns) {
-  const body = document.createElement("tbody");
-  items.forEach(item => {
-    const row = document.createElement("tr");
-    const data = flat(item);
-    columns.forEach(col => row.append(cell("td", stringify(data[col]))));
-    body.append(row);
-  });
-  return body;
-}
-
-function cards(value) {
-  const items = rows(value);
-  if (!items.length) return [empty("Nothing to show yet.")];
-  return items.slice(0, 12).map((item, index) => card(titleFor(item, index), stringify(item)));
-}
-
-function detail(value) {
-  if (!value || typeof value !== "object") return pre(stringify(value));
-  const dl = document.createElement("dl");
-  Object.entries(flat(value)).slice(0, 24).forEach(([key, val]) => {
-    dl.append(Object.assign(document.createElement("dt"), { textContent: key }));
-    dl.append(Object.assign(document.createElement("dd"), { textContent: stringify(val) }));
-  });
-  return dl;
-}
-
-function tree(value) {
+function identity(session) {
   const box = document.createElement("div");
-  box.className = "tree";
-  treeRows(value).forEach((row, depth) => {
-    const span = document.createElement("span");
-    span.style.setProperty("--depth", row.depth ?? depth);
-    span.textContent = row.label || stringify(row);
-    box.append(span);
-  });
+  box.append(strong(label(session.agent)));
+  const id = element("span", "session-id", shortId(session.id));
+  box.append(id);
   return box;
 }
 
-function treeRows(value) {
-  if (Array.isArray(value)) return value;
-  if (typeof value === "string") return value.split("\n").filter(Boolean).map(label => ({ label }));
-  return rows(value);
-}
-
-function card(title, text) {
-  const article = document.createElement("article");
-  article.className = "mini-card";
-  article.append(Object.assign(document.createElement("b"), { textContent: title }));
-  article.append(Object.assign(document.createElement("p"), { textContent: text }));
-  return article;
-}
-
-function pre(text) {
-  const node = document.createElement("pre");
-  node.className = "output";
-  node.textContent = text;
+function status(session) {
+  const node = element("span", "status-label", label(session.status));
+  node.dataset.tone = statusTone(session.status);
+  node.title = session.status_reason || "";
   return node;
 }
 
-function empty(text) {
-  const node = document.createElement("p");
-  node.className = "empty";
-  node.textContent = text;
+function inspect(session, selectedId) {
+  const button = element("button", "inspect-button", "Inspect");
+  button.type = "button";
+  button.dataset.sessionId = session.id;
+  button.setAttribute("aria-current", String(session.id === selectedId));
+  button.setAttribute("aria-label", `Inspect ${session.agent} session ${shortId(session.id)}`);
+  return button;
+}
+
+function option(path, selected) {
+  return Object.assign(document.createElement("option"), {
+    value: path,
+    textContent: projectName(path),
+    selected,
+  });
+}
+
+function projectName(path) {
+  const name = path.split("/").filter(Boolean).at(-1) || path;
+  return `${name} - ${path}`;
+}
+
+function cell(value) {
+  const node = document.createElement("td");
+  value instanceof Node ? node.append(value) : node.textContent = value;
   return node;
 }
 
-function cell(tag, text) {
-  return Object.assign(document.createElement(tag), { textContent: text });
+function strong(text) {
+  return Object.assign(document.createElement("strong"), { textContent: text });
 }
 
-function flat(value, prefix = "") {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return { [prefix || "value"]: value };
-  return Object.entries(value).reduce((out, [key, val]) => {
-    const name = prefix ? `${prefix}.${key}` : key;
-    if (val && typeof val === "object" && !Array.isArray(val)) return { ...out, ...flat(val, name) };
-    return { ...out, [name]: val };
-  }, {});
-}
-
-function titleFor(item, index) {
-  return item.title || item.name || item.id || item.key || `Item ${index + 1}`;
-}
-
-function stringify(value) {
-  if (value === undefined || value === null) return "";
-  return typeof value === "string" ? value : JSON.stringify(value, null, 2);
+function element(tag, className, text) {
+  return Object.assign(document.createElement(tag), { className, textContent: text });
 }

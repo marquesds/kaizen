@@ -41,9 +41,47 @@
 
 `src/store/projector.rs` is the hot ingest path. It keeps open tool spans and
 per-session file/skill/rule dedup in memory, emits small deltas, and persists
-only terminal span rows. Store startup warms this state by replaying events for
-non-`Done` sessions. Done sessions are frozen unless the legacy rebuild path is
-requested with `KAIZEN_PROJECTOR=legacy`.
+only terminal span rows. Store startup does no projector replay. The first new
+event for a session lazily replays only that session before applying the delta.
+Done sessions are frozen unless the legacy rebuild path is requested with
+`KAIZEN_PROJECTOR=legacy`.
+
+## Storage Topology
+
+Each project has one canonical SQLite WAL database at
+`~/.kaizen/projects/<slug>/kaizen.db`. Raw events, sessions, derived facts,
+feedback, experiments, and sync state live in that database. Read commands and
+the analytics query facade read SQLite directly.
+
+The target repository is a read-only input boundary. Kaizen-owned state,
+indexes, reports, hooks, backups, and migration markers live under Kaizen home
+or the user's agent configuration directories.
+
+Tantivy search and the GraphQLite code graph are rebuildable sidecars, not
+alternate event stores. Legacy hot-event and cold-partition artifacts are
+ignored. A legacy `hot/outbox.redb` is imported once into SQLite and archived.
+Kaizen does not use DuckDB, Arrow, Parquet, or an rkyv hot log, and it has no
+user-facing storage migration command. See
+[ADR 010](adr/010-sqlite-only-local-storage.md).
+
+The daemon can own writes for supported paths. Direct mode opens the same
+SQLite database in-process, so both modes share one persistence model.
+
+## Performance Gates
+
+Performance budgets for representative local project data:
+
+| Surface | Gate |
+|---|---:|
+| Release binary | under 35 MiB |
+| Session list | under 50 ms |
+| Session detail | under 100 ms |
+| Session search | under 250 ms |
+| Idle daemon CPU | under 0.5% |
+
+Current project scale is far below the old 100,000-session assumption. Revisit
+storage architecture only when representative measurements consistently miss
+these gates or active data materially approaches that scale.
 
 ## External Boundaries
 

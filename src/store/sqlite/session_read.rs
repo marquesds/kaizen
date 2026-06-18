@@ -95,14 +95,6 @@ impl Store {
         rows.map(|r| r.map_err(anyhow::Error::from)).collect()
     }
 
-    pub(super) fn running_session_ids(&self) -> Result<Vec<String>> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT id FROM sessions WHERE status != 'Done' ORDER BY started_at_ms ASC")?;
-        let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
-        rows.map(|r| r.map_err(anyhow::Error::from)).collect()
-    }
-
     pub fn get_session(&self, id: &str) -> Result<Option<SessionRecord>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, agent, model, workspace, started_at_ms, ended_at_ms, status, trace_path,

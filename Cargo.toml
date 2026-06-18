@@ -188,8 +188,8 @@ name = "upgrade"
 path = "tests/spec/upgrade.rs"
 
 [[test]]
-name = "query_duckdb"
-path = "tests/spec/query_duckdb.rs"
+name = "query_sqlite"
+path = "tests/spec/query_sqlite.rs"
 
 [[test]]
 name = "multi_workspace"
@@ -300,6 +300,18 @@ name = "daemon_lifecycle"
 path = "tests/spec/daemon_lifecycle.rs"
 
 [[test]]
+name = "ipc_frame"
+path = "tests/spec/ipc_frame.rs"
+
+[[test]]
+name = "daemon_web_token"
+path = "tests/spec/daemon_web_token.rs"
+
+[[test]]
+name = "daemon_detach"
+path = "tests/spec/daemon_detach.rs"
+
+[[test]]
 name = "web_server"
 path = "tests/spec/web_server.rs"
 
@@ -312,20 +324,14 @@ name = "perf_projector_phase2"
 path = "tests/perf/projector_phase2.rs"
 
 [[test]]
-name = "perf_migrate_v2"
-path = "tests/perf/migrate_v2.rs"
-
-[[test]]
 name = "perf_read_report"
 path = "tests/perf/read_report.rs"
 
 [features]
-# Default is the full end-user build. Contributors should use `dev-fast`
-# through the task runner for the common no-DuckDB loop.
+# Default and contributor builds use the same lightweight local stack.
 default = ["full"]
-full = ["analytics-duckdb", "telemetry-prod"]
+full = ["telemetry-prod"]
 dev-fast = ["telemetry-prod"]
-analytics-duckdb = ["dep:duckdb", "duckdb/bundled", "duckdb/parquet"]
 telemetry-dev = []
 telemetry-posthog = []
 telemetry-datadog = []
@@ -384,14 +390,11 @@ tower = { version = "0.5", features = ["util"] }
 tower-http = { version = "0.6", features = ["limit", "set-header"] }
 sysinfo = { version = "0.39.1", default-features = false, features = ["system"] }
 redb = "4.1"
-rkyv = "0.8"
-crc32fast = "1.5"
-memmap2 = "0.9"
-arrow = { version = "58.1", default-features = false }
-parquet = { version = "58.1", default-features = false, features = ["arrow", "zstd"] }
-duckdb = { version = "1.10502.0", optional = true }
 tantivy = "0.26.1"
 gethostname = "1"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 [dev-dependencies]
 quint-connect = "0.1"

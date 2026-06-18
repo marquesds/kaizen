@@ -1,5 +1,5 @@
 use super::super::Store;
-use super::{EventKind, make_event, make_session};
+use super::{EventKind, SessionStatus, make_event, make_session};
 use serde_json::json;
 use tempfile::TempDir;
 
@@ -82,6 +82,15 @@ fn append_event_indexes_rules_from_payload() {
 }
 
 #[test]
+fn append_event_does_not_create_hot_mirror() {
+    let dir = TempDir::new().unwrap();
+    let store = Store::open(&dir.path().join("kaizen.db")).unwrap();
+    store.upsert_session(&make_session("single-copy")).unwrap();
+    store.append_event(&make_event("single-copy", 0)).unwrap();
+    assert!(!dir.path().join("hot").exists());
+}
+
+#[test]
 fn span_tree_cache_hits_empty_and_invalidates_on_append() {
     let dir = TempDir::new().unwrap();
     let store = Store::open(&dir.path().join("kaizen.db")).unwrap();
@@ -100,4 +109,25 @@ fn span_tree_cache_hits_empty_and_invalidates_on_append() {
     store.append_event(&result).unwrap();
     assert!(store.span_tree_cache.borrow().is_none());
     assert_eq!(store.session_span_tree("tree").unwrap().len(), 1);
+}
+
+#[test]
+fn reopen_defers_projector_replay_until_next_write() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("kaizen.db");
+    let mut session = make_session("lazy");
+    session.status = SessionStatus::Running;
+    let call = make_event("lazy", 0);
+    let store = Store::open(&path).unwrap();
+    store.upsert_session(&session).unwrap();
+    store.append_event(&call).unwrap();
+    drop(store);
+
+    let store = Store::open(&path).unwrap();
+    assert_eq!(store.projector.borrow().last_seq("lazy"), None);
+    let mut result = make_event("lazy", 1);
+    result.kind = EventKind::ToolResult;
+    result.tool_call_id = call.tool_call_id;
+    store.append_event(&result).unwrap();
+    assert_eq!(store.tool_spans_for_session("lazy").unwrap().len(), 1);
 }

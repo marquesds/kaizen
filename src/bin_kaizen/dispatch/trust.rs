@@ -99,7 +99,6 @@ fn guidance_subcmd(ws: Option<PathBuf>, cmd: GuidanceCommand) -> anyhow::Result<
             artifact,
             max_ops,
             llm,
-            apply,
             json,
             ws: f,
         } => {
@@ -112,7 +111,6 @@ fn guidance_subcmd(ws: Option<PathBuf>, cmd: GuidanceCommand) -> anyhow::Result<
                 &artifact,
                 max_ops,
                 llm,
-                apply,
                 json,
             )
         }
@@ -144,7 +142,6 @@ fn guidance_candidates(
         GuidanceCandidatesCommand::Reject(a) => {
             candidate_set(parent_ws, a, CandidateStatus::Rejected)
         }
-        GuidanceCandidatesCommand::Validate(a) => candidate_validate(parent_ws, a),
         GuidanceCandidatesCommand::Archive(a) => {
             candidate_set(parent_ws, a, CandidateStatus::Archived)
         }
@@ -167,17 +164,6 @@ fn candidate_set(
     kaizen::shell::guidance_candidates::cmd(ws.as_deref(), op)
 }
 
-fn candidate_validate(parent_ws: Option<PathBuf>, args: IdOnly) -> anyhow::Result<()> {
-    let ws = resolve_ws(
-        args.ws.workspace.as_deref().or(parent_ws.as_deref()),
-        args.ws.project.as_deref(),
-    )?;
-    kaizen::shell::guidance_candidates::cmd(
-        ws.as_deref(),
-        kaizen::shell::guidance_candidates::CandidateOp::Validate { id: args.id },
-    )
-}
-
 pub(super) fn observe(
     agent: String,
     workspace: Option<PathBuf>,
@@ -189,7 +175,6 @@ pub(super) fn observe(
 }
 
 pub(super) fn projects(cmd: ProjectsCommand) -> anyhow::Result<()> {
-    match cmd {
-        ProjectsCommand::List => kaizen::shell::projects::cmd_projects_list(),
-    }
+    let _ = cmd.subcmd;
+    kaizen::shell::projects::cmd_projects_list(cmd.json, cmd.include_missing)
 }

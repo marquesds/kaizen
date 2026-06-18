@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Shell-only happy paths via `CARGO_BIN_EXE_kaizen` (MCP bypass). Uses an
-//! isolated `HOME` so telemetry config helpers do not touch the real profile.
+//! isolated home so config and registry helpers do not touch real profile state.
 
 use kaizen::shell::init::{KAIZEN_CLAUDE_HOOK_CMD, KAIZEN_CURSOR_HOOK_CMD};
 use std::path::Path;
@@ -32,7 +32,6 @@ fn prepare_ws(tmp: &Path) -> anyhow::Result<()> {
             "c",
         ],
     )?;
-    kaizen::shell::init::init_text(Some(tmp))?;
     Ok(())
 }
 
@@ -40,6 +39,8 @@ fn spawn(bin: &str, home: &Path, cwd: &Path, args: &[&str]) -> std::process::Out
     Command::new(bin)
         .current_dir(cwd)
         .env("HOME", home)
+        .env("KAIZEN_HOME", home.join(".kaizen"))
+        .arg("--no-daemon")
         .args(args)
         .output()
         .unwrap_or_else(|e| panic!("spawn: {e}"))
@@ -86,6 +87,8 @@ fn shell_only_smoke_matrix() -> anyhow::Result<()> {
     std::fs::create_dir_all(&ws)?;
     prepare_ws(&ws)?;
     let b = bin();
+    let init = spawn(b, &home, &ws, &["init"]);
+    anyhow::ensure!(init.status.success(), "init failed");
     let cases: &[&[&str]] = &[
         &["doctor"],
         &["guidance", "--json"],
@@ -144,7 +147,8 @@ fn shell_only_smoke_matrix() -> anyhow::Result<()> {
     let plain = tmp.path().join("plain");
     std::fs::create_dir_all(&plain)?;
     std::fs::write(plain.join("main.rs"), b"fn main() {}\n")?;
-    kaizen::shell::init::init_text(Some(&plain))?;
+    let init = spawn(b, &home, &plain, &["init"]);
+    anyhow::ensure!(init.status.success(), "plain init failed");
     let out = spawn(b, &home, &plain, &["metrics", "index"]);
     assert!(
         out.status.success(),

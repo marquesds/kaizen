@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Config loading: workspace `.kaizen/config.toml` then `~/.kaizen/config.toml`.
+//! Config loading: project data config, then user config.
 //! Missing files → defaults. User config wins on overlap.
 
 use anyhow::Result;
@@ -238,11 +238,8 @@ fn generate_local_salt() -> [u8; 32] {
 }
 
 fn write_local_salt(path: &std::path::Path, bytes: &[u8; 32]) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
     let hex_s = hex::encode(bytes);
-    std::fs::write(path, hex_s.as_bytes())?;
+    crate::core::safe_fs::write_atomic(path, hex_s.as_bytes())?;
     set_user_only_perms(path)?;
     Ok(())
 }
@@ -448,7 +445,7 @@ impl Default for TelemetryConfig {
 pub enum ExporterConfig {
     /// No-op row for sparse tables / templates.
     None,
-    /// Append summary JSON lines to a local NDJSON file (default `<workspace>/.kaizen/telemetry.ndjson`).
+    /// Append summaries under project data, or to an absolute path outside the workspace.
     File {
         #[serde(default = "default_true")]
         enabled: bool,
@@ -687,7 +684,7 @@ pub struct Config {
 /// Load config: `~/.kaizen/projects/<slug>/config.toml` then `~/.kaizen/config.toml`.
 /// User config wins on overlap. Missing files → defaults, not error.
 pub fn load(workspace: &Path) -> Result<Config> {
-    let project_cfg = crate::core::paths::project_data_dir(workspace)
+    let project_cfg = crate::core::paths::project_data_path(workspace)
         .ok()
         .map(|d| d.join("config.toml"));
     let user_path = crate::core::paths::kaizen_dir()

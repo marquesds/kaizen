@@ -1,5 +1,22 @@
 use super::rows::*;
 use super::*;
+mod view_row;
+use view_row::tool_span_view_row;
+
+const SESSION_SPAN_TREE_SQL: &str =
+    "SELECT span_id, tool, status, lead_time_ms, tokens_in, tokens_out,
+            reasoning_tokens, cost_usd_e6, paths_json,
+            parent_span_id, depth, subtree_cost_usd_e6, subtree_token_count
+     FROM tool_spans
+     WHERE session_id = ?1
+     ORDER BY depth ASC, started_at_ms ASC, span_id ASC
+     LIMIT ?2";
+
+const SESSION_TOOL_SPANS_SQL: &str =
+    "SELECT span_id, session_id, tool, tool_call_id, status, started_at_ms, ended_at_ms, lead_time_ms,
+            tokens_in, tokens_out, reasoning_tokens, cost_usd_e6, paths_json
+     FROM tool_spans WHERE session_id = ?1 ORDER BY started_at_ms ASC, span_id ASC
+     LIMIT ?2";
 
 impl Store {
     pub fn tool_rank_rows_in_window(
@@ -52,26 +69,10 @@ impl Store {
              )
              ORDER BY sort_ms DESC",
         )?;
-        let rows = stmt.query_map(params![workspace, start_ms as i64, end_ms as i64], |row| {
-            let paths_json: String = row.get(8)?;
-            Ok(ToolSpanView {
-                span_id: row.get::<_, Option<String>>(0)?.unwrap_or_default(),
-                tool: row
-                    .get::<_, Option<String>>(1)?
-                    .unwrap_or_else(|| "unknown".into()),
-                status: row.get(2)?,
-                lead_time_ms: row.get::<_, Option<i64>>(3)?.map(|v| v as u64),
-                tokens_in: row.get::<_, Option<i64>>(4)?.map(|v| v as u32),
-                tokens_out: row.get::<_, Option<i64>>(5)?.map(|v| v as u32),
-                reasoning_tokens: row.get::<_, Option<i64>>(6)?.map(|v| v as u32),
-                cost_usd_e6: row.get(7)?,
-                paths: serde_json::from_str(&paths_json).unwrap_or_default(),
-                parent_span_id: row.get(9)?,
-                depth: row.get::<_, Option<i64>>(10)?.unwrap_or(0) as u32,
-                subtree_cost_usd_e6: row.get(11)?,
-                subtree_token_count: row.get::<_, Option<i64>>(12)?.map(|v| v as u32),
-            })
-        })?;
+        let rows = stmt.query_map(
+            params![workspace, start_ms as i64, end_ms as i64],
+            tool_span_view_row,
+        )?;
         Ok(rows.filter_map(|row| row.ok()).collect())
     }
 
@@ -80,74 +81,117 @@ impl Store {
         session_id: &str,
     ) -> Result<Vec<crate::store::span_tree::SpanNode>> {
         let last_event_seq = self.last_event_seq_for_session(session_id)?;
-        if let Some(entry) = self.span_tree_cache.borrow().as_ref()
-            && entry.session_id == session_id
-            && entry.last_event_seq == last_event_seq
-        {
-            return Ok(entry.nodes.clone());
+        if let Some(nodes) = cached_span_tree(self, session_id, last_event_seq) {
+            return Ok(nodes);
         }
-        let mut stmt = self.conn.prepare(
-            "SELECT span_id, tool, status, lead_time_ms, tokens_in, tokens_out,
-                    reasoning_tokens, cost_usd_e6, paths_json,
-                    parent_span_id, depth, subtree_cost_usd_e6, subtree_token_count
-             FROM tool_spans
-             WHERE session_id = ?1
-             ORDER BY depth ASC, started_at_ms ASC",
-        )?;
-        let rows = stmt.query_map(params![session_id], |row| {
-            let paths_json: String = row.get(8)?;
-            Ok(crate::metrics::types::ToolSpanView {
-                span_id: row.get::<_, Option<String>>(0)?.unwrap_or_default(),
-                tool: row
-                    .get::<_, Option<String>>(1)?
-                    .unwrap_or_else(|| "unknown".into()),
-                status: row.get(2)?,
-                lead_time_ms: row.get::<_, Option<i64>>(3)?.map(|v| v as u64),
-                tokens_in: row.get::<_, Option<i64>>(4)?.map(|v| v as u32),
-                tokens_out: row.get::<_, Option<i64>>(5)?.map(|v| v as u32),
-                reasoning_tokens: row.get::<_, Option<i64>>(6)?.map(|v| v as u32),
-                cost_usd_e6: row.get(7)?,
-                paths: serde_json::from_str(&paths_json).unwrap_or_default(),
-                parent_span_id: row.get(9)?,
-                depth: row.get::<_, Option<i64>>(10)?.unwrap_or(0) as u32,
-                subtree_cost_usd_e6: row.get(11)?,
-                subtree_token_count: row.get::<_, Option<i64>>(12)?.map(|v| v as u32),
-            })
-        })?;
-        let spans: Vec<_> = rows.filter_map(|r| r.ok()).collect();
-        let nodes = crate::store::span_tree::build_tree(spans);
-        *self.span_tree_cache.borrow_mut() = Some(SpanTreeCacheEntry {
-            session_id: session_id.to_string(),
-            last_event_seq,
-            nodes: nodes.clone(),
-        });
+        let nodes = query_session_span_tree(self, session_id, usize::MAX)?;
+        cache_span_tree(self, session_id, last_event_seq, &nodes);
         Ok(nodes)
     }
 
-    pub fn tool_spans_for_session(&self, session_id: &str) -> Result<Vec<ToolSpanSyncRow>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT span_id, session_id, tool, tool_call_id, status, started_at_ms, ended_at_ms, lead_time_ms,
-                    tokens_in, tokens_out, reasoning_tokens, cost_usd_e6, paths_json
-             FROM tool_spans WHERE session_id = ?1 ORDER BY started_at_ms ASC, span_id ASC",
-        )?;
-        let rows = stmt.query_map(params![session_id], |row| {
-            let paths_json: String = row.get(12)?;
-            Ok(ToolSpanSyncRow {
-                span_id: row.get(0)?,
-                session_id: row.get(1)?,
-                tool: row.get(2)?,
-                tool_call_id: row.get(3)?,
-                status: row.get(4)?,
-                started_at_ms: row.get::<_, Option<i64>>(5)?.map(|v| v as u64),
-                ended_at_ms: row.get::<_, Option<i64>>(6)?.map(|v| v as u64),
-                lead_time_ms: row.get::<_, Option<i64>>(7)?.map(|v| v as u64),
-                tokens_in: row.get::<_, Option<i64>>(8)?.map(|v| v as u32),
-                tokens_out: row.get::<_, Option<i64>>(9)?.map(|v| v as u32),
-                reasoning_tokens: row.get::<_, Option<i64>>(10)?.map(|v| v as u32),
-                cost_usd_e6: row.get(11)?,
-                paths: serde_json::from_str(&paths_json).unwrap_or_default(),
-            })
-        })?;
-        Ok(rows.filter_map(|row| row.ok()).collect())
+    pub(crate) fn limited_session_span_tree(
+        &self,
+        session_id: &str,
+        limit: usize,
+    ) -> Result<Vec<crate::store::span_tree::SpanNode>> {
+        query_session_span_tree(self, session_id, limit)
     }
+
+    pub fn tool_spans_for_session(&self, session_id: &str) -> Result<Vec<ToolSpanSyncRow>> {
+        query_tool_spans_for_session(self, session_id, usize::MAX)
+    }
+
+    pub(crate) fn tool_spans_for_session_limited(
+        &self,
+        session_id: &str,
+        limit: usize,
+    ) -> Result<Vec<ToolSpanSyncRow>> {
+        query_tool_spans_for_session(self, session_id, limit)
+    }
+}
+
+fn query_tool_spans_for_session(
+    store: &Store,
+    session_id: &str,
+    limit: usize,
+) -> Result<Vec<ToolSpanSyncRow>> {
+    let mut stmt = store.conn.prepare(SESSION_TOOL_SPANS_SQL)?;
+    let rows = stmt.query_map(params![session_id, sql_limit(limit)], tool_span_sync_row)?;
+    rows.map(|row| row.map_err(Into::into)).collect()
+}
+
+fn tool_span_sync_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ToolSpanSyncRow> {
+    Ok(ToolSpanSyncRow {
+        span_id: row.get(0)?,
+        session_id: row.get(1)?,
+        tool: row.get(2)?,
+        tool_call_id: row.get(3)?,
+        status: row.get(4)?,
+        paths: sync_paths(row)?,
+        started_at_ms: sync_u64(row, 5)?,
+        ended_at_ms: sync_u64(row, 6)?,
+        lead_time_ms: sync_u64(row, 7)?,
+        tokens_in: sync_u32(row, 8)?,
+        tokens_out: sync_u32(row, 9)?,
+        reasoning_tokens: sync_u32(row, 10)?,
+        cost_usd_e6: row.get(11)?,
+    })
+}
+
+fn sync_paths(row: &rusqlite::Row<'_>) -> rusqlite::Result<Vec<String>> {
+    let paths_json: String = row.get(12)?;
+    Ok(serde_json::from_str(&paths_json).unwrap_or_default())
+}
+
+fn sync_u64(row: &rusqlite::Row<'_>, index: usize) -> rusqlite::Result<Option<u64>> {
+    row.get::<_, Option<i64>>(index)
+        .map(|value| value.map(|value| value as u64))
+}
+
+fn sync_u32(row: &rusqlite::Row<'_>, index: usize) -> rusqlite::Result<Option<u32>> {
+    row.get::<_, Option<i64>>(index)
+        .map(|value| value.map(|value| value as u32))
+}
+
+fn query_session_span_tree(
+    store: &Store,
+    session_id: &str,
+    limit: usize,
+) -> Result<Vec<crate::store::span_tree::SpanNode>> {
+    let mut stmt = store.conn.prepare(SESSION_SPAN_TREE_SQL)?;
+    let rows = stmt.query_map(params![session_id, sql_limit(limit)], tool_span_view_row)?;
+    let spans = rows
+        .map(|row| row.map_err(anyhow::Error::from))
+        .collect::<Result<Vec<_>>>()?;
+    Ok(crate::store::span_tree::build_tree(spans))
+}
+
+fn cached_span_tree(
+    store: &Store,
+    session_id: &str,
+    last_event_seq: Option<u64>,
+) -> Option<Vec<crate::store::span_tree::SpanNode>> {
+    store
+        .span_tree_cache
+        .borrow()
+        .as_ref()
+        .filter(|entry| entry.session_id == session_id && entry.last_event_seq == last_event_seq)
+        .map(|entry| entry.nodes.clone())
+}
+
+fn cache_span_tree(
+    store: &Store,
+    session_id: &str,
+    last_event_seq: Option<u64>,
+    nodes: &[crate::store::span_tree::SpanNode],
+) {
+    *store.span_tree_cache.borrow_mut() = Some(SpanTreeCacheEntry {
+        session_id: session_id.to_string(),
+        last_event_seq,
+        nodes: nodes.to_vec(),
+    });
+}
+
+fn sql_limit(limit: usize) -> i64 {
+    limit.min(i64::MAX as usize) as i64
 }

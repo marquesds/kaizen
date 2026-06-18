@@ -3,7 +3,7 @@
 
 use crate::retro::types::{Bet, BetCategory, Confidence, Report};
 use anyhow::{Context, Result};
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, File};
 use std::io::Write;
 use std::path::Path;
 
@@ -159,16 +159,14 @@ fn category_label(bet: &Bet) -> &'static str {
 
 /// Write bytes to `path` via temp file + rename.
 pub fn write_atomic(path: &Path, content: &[u8]) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    let tmp = path.with_extension(format!("tmp.{}", std::process::id()));
-    let mut f = File::create(&tmp).with_context(|| format!("create {}", tmp.display()))?;
-    f.write_all(content)?;
-    f.sync_all().ok();
-    drop(f);
-    fs::rename(&tmp, path)
-        .with_context(|| format!("rename {} -> {}", tmp.display(), path.display()))?;
+    let parent = path
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("report path has no parent"))?;
+    fs::create_dir_all(parent)?;
+    let mut tmp = tempfile::NamedTempFile::new_in(parent)?;
+    tmp.write_all(content)?;
+    tmp.as_file().sync_all().ok();
+    tmp.persist(path).map_err(|error| error.error)?;
     Ok(())
 }
 
@@ -179,12 +177,7 @@ impl ReportsDirLock {
     pub fn acquire(reports_dir: &Path) -> Result<Self> {
         fs::create_dir_all(reports_dir)?;
         let p = reports_dir.join(".retro.lock");
-        let f = OpenOptions::new()
-            .create(true)
-            .read(true)
-            .write(true)
-            .truncate(false)
-            .open(&p)
+        let f = crate::core::safe_fs::read_write(&p)
             .with_context(|| format!("lock {}", p.display()))?;
         fs4::FileExt::lock(&f).with_context(|| format!("lock {}", p.display()))?;
         Ok(Self(f))

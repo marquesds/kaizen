@@ -63,18 +63,6 @@ pub(super) fn gc(
     kaizen::shell::gc::cmd_gc(ws.as_deref(), days, vacuum)
 }
 
-pub(super) fn migrate(cmd: MigrateCommand) -> anyhow::Result<()> {
-    match cmd {
-        MigrateCommand::V2 {
-            workspace,
-            allow_skew,
-        } => kaizen::shell::migrate::cmd_migrate_v2(workspace.as_deref(), allow_skew),
-        MigrateCommand::V1 { workspace } => {
-            kaizen::shell::migrate::cmd_migrate_v1(workspace.as_deref())
-        }
-    }
-}
-
 pub(super) fn completions(shell: CompletionShell) -> anyhow::Result<()> {
     let sh = match shell {
         CompletionShell::Bash => clap_complete::Shell::Bash,

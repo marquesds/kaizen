@@ -36,7 +36,7 @@ jobs:
     name: fmt
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
@@ -46,7 +46,7 @@ jobs:
     name: linux (clippy)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -60,10 +60,10 @@ jobs:
     name: doc
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
-          node-version: "20"
+          node-version: "24"
       - uses: actions/cache@v5
         with:
           path: ~/.quint
@@ -84,16 +84,11 @@ jobs:
     name: quint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
-          node-version: "20"
-      - uses: actions/cache@v5
-        with:
-          path: ~/.quint
-          key: quint-evaluator-${{ runner.os }}-v0.6.0
+          node-version: "24"
       - run: npm install -g @informalsystems/quint@0.32.0
-      - run: scripts/install-quint-evaluator.sh
       - run: scripts/check-quint-specs.sh
 
   test:
@@ -110,10 +105,10 @@ jobs:
     env:
       CARGO_BUILD_JOBS: 2
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
-          node-version: "20"
+          node-version: "24"
       - uses: actions/cache@v5
         with:
           path: ~/.quint
@@ -130,38 +125,17 @@ jobs:
         with:
           key: ${{ matrix.os }}-${{ matrix.rust }}
           cache-bin: "false"
-      - run: cargo nextest run -j 4 --all --locked --no-default-features --features dev-fast
+      - name: Run parallel test suite
+        run: cargo nextest run -j 4 --all --locked --no-default-features --features dev-fast -E 'not binary(perf_projector_phase2)'
+      - name: Run projector performance regressions without contention
+        run: cargo test --locked --no-default-features --features dev-fast --test perf_projector_phase2 -- --test-threads=1
       - run: cargo test --doc --all --locked --no-default-features --features dev-fast
-
-  analytics_duckdb:
-    name: analytics-duckdb
-    runs-on: ubuntu-latest
-    env:
-      CARGO_BUILD_JOBS: 2
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-      - uses: actions/cache@v5
-        with:
-          path: ~/.quint
-          key: quint-evaluator-${{ runner.os }}-v0.6.0
-      - run: npm install -g @informalsystems/quint@0.32.0
-      - run: scripts/install-quint-evaluator.sh
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: analytics-duckdb
-          cache-bin: "false"
-      - run: cargo check --locked --features full --lib --bin kaizen
-      - run: cargo test --locked --features full --test query_duckdb
 
   audit:
     name: audit + deny
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: taiki-e/install-action@v2
         with:
@@ -171,7 +145,7 @@ jobs:
 
   ci:
     name: CI
-    needs: [fmt, linux_clippy_test, doc, quint, test, analytics_duckdb, audit]
+    needs: [fmt, linux_clippy_test, doc, quint, test, audit]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -182,7 +156,6 @@ jobs:
           test "${{ needs.doc.result }}" = "success"
           test "${{ needs.quint.result }}" = "success"
           test "${{ needs.test.result }}" = "success"
-          test "${{ needs.analytics_duckdb.result }}" = "success"
           test "${{ needs.audit.result }}" = "success"
 
   push_release_tag:
@@ -195,7 +168,7 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           token: ${{ secrets.RELEASE_PUSH_TOKEN != '' && secrets.RELEASE_PUSH_TOKEN || github.token }}

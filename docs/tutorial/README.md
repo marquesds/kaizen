@@ -21,7 +21,7 @@ flowchart LR
 
 Transcripts and hooks **capture**; `summary`, `insights`, `guidance`, and `metrics` **summarise**; `retro`, `eval`, and `exp` **propose and measure** change. The deep data story is in [telemetry-journey.md](../telemetry-journey.md).
 
-After you have sessions in the store you can run **`kaizen eval run`** to call an LLM judge (requires `[eval].enabled = true` and `ANTHROPIC_API_KEY`). Low-scoring sessions appear as the **H15** bet in `kaizen retro`. See [usage.md#kaizen-eval](../usage.md#kaizen-eval) and [config.md#eval](../config.md#eval) for setup.
+After you have sessions in the store you can run **`kaizen eval run`** to call an LLM judge (requires `[eval].enabled = true` and `ANTHROPIC_API_KEY`). Low-scoring sessions appear as the **H15** bet in `kaizen retro`. See [evaluation usage](../usage-improve.md#kaizen-eval) and [config.md#eval](../config.md#eval) for setup.
 
 Optional: enable **[collect.outcomes]** and **[collect.system_sampler]** in config to attach post-stop test rows and per-PID CPU/RSS samples (local-only); see [outcomes.md](../outcomes.md) and [system-telemetry.md](../system-telemetry.md).
 
@@ -45,7 +45,7 @@ Optional: enable **[collect.outcomes]** and **[collect.system_sampler]** in conf
 ## Parts
 
 1. [Setup: install, init, doctor](01-setup.md)
-2. [Observe: sessions, summary, TUI](02-observe.md)
+2. [Observe: Web, sessions, summary, TUI](02-observe.md)
 3. [Interpret: insights and guidance](03-insights-guidance.md)
 4. [Repo intelligence: metrics and refresh](04-metrics.md)
 5. [Improve: retro](05-retro.md)

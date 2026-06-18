@@ -9,8 +9,8 @@ pub(super) fn token_totals<'a>(events: impl Iterator<Item = &'a Event>) -> Token
 }
 
 pub(super) fn counts<'a>(values: impl Iterator<Item = &'a str>) -> Vec<(String, u64)> {
-    let mut map = BTreeMap::<String, u64>::new();
-    values.for_each(|v| *map.entry(v.to_string()).or_default() += 1);
+    let mut map = BTreeMap::<&str, u64>::new();
+    values.for_each(|value| *map.entry(value).or_default() += 1);
     sorted_counts(map)
 }
 
@@ -65,8 +65,11 @@ fn add_tokens(mut out: TokenTotals, event: &Event) -> TokenTotals {
     out
 }
 
-fn sorted_counts(map: BTreeMap<String, u64>) -> Vec<(String, u64)> {
-    let mut out: Vec<_> = map.into_iter().collect();
+pub(super) fn sorted_counts<K: AsRef<str> + Ord>(map: BTreeMap<K, u64>) -> Vec<(String, u64)> {
+    let mut out: Vec<_> = map
+        .into_iter()
+        .map(|(name, count)| (name.as_ref().to_owned(), count))
+        .collect();
     out.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
     out
 }

@@ -1,9 +1,37 @@
 use kaizen::core::event::{Event, EventKind, EventSource, SessionRecord, SessionStatus};
 use kaizen::store::Store;
+use kaizen::store::projector::{Projector, ProjectorEvent};
 use serde_json::json;
 use std::time::{Duration, Instant};
 
 const SPANS: usize = 250;
+const REGRESSION_SPANS: usize = 1_500;
+const NESTED_SPANS: usize = 1_000;
+const REGRESSION_BUDGET: Duration = Duration::from_millis(500);
+
+#[test]
+fn flat_span_projection_stays_within_interactive_budget() {
+    let mut projector = Projector::default();
+    let events = paired_events("regression", REGRESSION_SPANS);
+    let start = Instant::now();
+    let closed = events
+        .iter()
+        .flat_map(|event| projector.apply(event))
+        .filter(|event| matches!(event, ProjectorEvent::SpanClosed(..)))
+        .count();
+    assert_eq!(closed, REGRESSION_SPANS);
+    assert!(start.elapsed() < REGRESSION_BUDGET);
+}
+
+#[test]
+fn nested_span_projection_stays_within_interactive_budget() {
+    let mut projector = Projector::default();
+    let events = nested_events("nested", NESTED_SPANS);
+    let start = Instant::now();
+    let closed = count_closed(&mut projector, &events);
+    assert_eq!(closed, NESTED_SPANS);
+    assert!(start.elapsed() < REGRESSION_BUDGET);
+}
 
 #[test]
 #[ignore = "perf harness prints append p99 and sustained ingest"]
@@ -68,6 +96,27 @@ fn paired_events(session_id: &str, pairs: usize) -> Vec<Event> {
         ));
     }
     out
+}
+
+fn nested_events(session_id: &str, pairs: usize) -> Vec<Event> {
+    let calls = (0..pairs).map(|id| event(session_id, id as u64, EventKind::ToolCall, id));
+    let results = (0..pairs).rev().enumerate().map(|(offset, id)| {
+        event(
+            session_id,
+            (pairs + offset) as u64,
+            EventKind::ToolResult,
+            id,
+        )
+    });
+    calls.chain(results).collect()
+}
+
+fn count_closed(projector: &mut Projector, events: &[Event]) -> usize {
+    events
+        .iter()
+        .flat_map(|event| projector.apply(event))
+        .filter(|event| matches!(event, ProjectorEvent::SpanClosed(..)))
+        .count()
 }
 
 fn event(session_id: &str, seq: u64, kind: EventKind, id: usize) -> Event {

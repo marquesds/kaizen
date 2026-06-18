@@ -35,9 +35,10 @@ fn open_applies_phase0_pragmas() {
         .query_row("PRAGMA wal_autocheckpoint", [], |r| r.get(0))
         .unwrap();
     assert_eq!(synchronous, 1);
-    assert_eq!(cache_size, -65_536);
+    assert_eq!(cache_size, -8_192);
     assert_eq!(temp_store, 2);
     assert_eq!(wal_autocheckpoint, 1_000);
+    assert_eq!(mmap_size_bytes_from_mb(None), 33_554_432);
     assert_eq!(mmap_size_bytes_from_mb(Some("64")), 67_108_864);
 }
 
@@ -63,6 +64,14 @@ fn read_only_open_sets_query_only() {
         .query_row("PRAGMA query_only", [], |r| r.get(0))
         .unwrap();
     assert_eq!(query_only, 1);
+}
+
+#[test]
+fn read_only_open_does_not_create_missing_parent() {
+    let dir = TempDir::new().unwrap();
+    let db = dir.path().join("missing").join("kaizen.db");
+    assert!(Store::open_read_only(&db).is_err());
+    assert!(!db.parent().unwrap().exists());
 }
 
 #[test]

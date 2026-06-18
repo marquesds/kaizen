@@ -1,12 +1,13 @@
 # Install
 
-Prefer Homebrew or GitHub release binaries for normal installs. Those binaries
-already include DuckDB, so users do not compile native dependencies locally. The
-registry package is **[`kaizen-cli`](https://crates.io/crates/kaizen-cli)**; use
-`cargo install kaizen-cli --locked` when you explicitly want a source build. Use a
-**git clone** when you need `main` or are contributing. Long-form user docs live
-in the [GitHub `docs/`](https://github.com/marquesds/kaizen/tree/main/docs) tree,
-not in the registry package tarball.
+Prefer Homebrew or GitHub release binaries for normal installs. They avoid a
+local Rust build. The registry package is
+**[`kaizen-cli`](https://crates.io/crates/kaizen-cli)**; use
+`cargo install kaizen-cli --locked` when you explicitly want a source build.
+Use a **git clone** when you need `main` or are contributing. Long-form user
+docs live in the
+[GitHub `docs/`](https://github.com/marquesds/kaizen/tree/main/docs) tree, not
+in the registry package tarball.
 
 ## Requirements
 
@@ -24,9 +25,8 @@ matching `.sha256` asset, and place `kaizen` on your `PATH`.
 ## From crates.io
 
 Installs a released version into Cargo’s bin directory (`~/.cargo/bin/kaizen`,
-or `$CARGO_HOME/bin/kaizen`). This is a source build and can compile native
-dependencies such as DuckDB. Prefer Homebrew or GitHub release binaries when you
-want the fastest install.
+or `$CARGO_HOME/bin/kaizen`). This compiles Kaizen locally. Prefer Homebrew or
+GitHub release binaries when you want the fastest install.
 
 ```bash
 cargo install kaizen-cli --locked
@@ -39,8 +39,8 @@ The unrelated [`kaizen`](https://crates.io/crates/kaizen) crate on crates.io is 
 
 ## From Homebrew (third-party tap)
 
-**Recommended for end users** — installs a prebuilt release binary with DuckDB
-already bundled. There is no [homebrew-core](https://github.com/Homebrew/homebrew-core) formula in this repository
+**Recommended for end users** — installs a prebuilt release binary. There is
+no [homebrew-core](https://github.com/Homebrew/homebrew-core) formula in this repository
 yet. Install from a **tap** that hosts the formula (for example your own
 [`homebrew-tap`](https://github.com/marquesds/homebrew-tap) after you copy
 [`packaging/homebrew/kaizen-cli.rb`](https://github.com/marquesds/kaizen/blob/main/packaging/homebrew/kaizen-cli.rb)
@@ -64,7 +64,7 @@ cd kaizen
 
 **2. Build and install the binary into Cargo’s bin directory**
 
-This is a source build and may compile DuckDB.
+This is a source build and compiles the project locally.
 
 Pick one:
 
@@ -135,11 +135,12 @@ cargo install kaizen-cli --locked --force
 ```bash
 cd your-repo
 kaizen init
+kaizen open
 ```
 
-`kaizen init` is idempotent. Creates `~/.kaizen/projects/<slug>/config.toml`, patches
-agent hooks for Cursor / Claude Code, and installs the retro skill.
-Safe to rerun.
+`kaizen init` is idempotent. It creates project data under `~/.kaizen`, patches
+user-level Cursor / Claude Code hooks, and installs the retro skill. It never
+changes the target repository. `kaizen open` launches the local dashboard.
 
 ## Uninstall
 
@@ -148,8 +149,8 @@ cargo uninstall kaizen-cli
 rm -rf ~/.kaizen
 ```
 
-Remove hook edits from `.cursor/hooks.json` and
-`.claude/settings.json` if you want a full revert. `kaizen init`
+Remove hook edits from `~/.cursor/hooks.json` and
+`~/.claude/settings.json` if you want a full revert. `kaizen init`
 backs up originals under `~/.kaizen/projects/<slug>/backup/`.
 
 ## Verify
@@ -168,7 +169,7 @@ kaizen sessions list
 kaizen completions zsh
 ```
 
-Redirect or eval per [docs/usage.md](usage.md) (`kaizen completions` section).
+Redirect or eval per [completion usage](usage-operate.md#kaizen-completions).
 
 ## Troubleshooting
 

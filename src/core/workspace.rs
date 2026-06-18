@@ -7,18 +7,45 @@ use std::path::{Path, PathBuf};
 pub use crate::core::paths::{canonical, kaizen_dir, project_data_dir};
 
 pub fn resolve(path: Option<&Path>) -> Result<PathBuf> {
+    let canonical = resolve_read(path)?;
+    register_workspace(&canonical);
+    Ok(canonical)
+}
+
+/// Resolve an existing workspace without creating registry or project state.
+pub fn resolve_read(path: Option<&Path>) -> Result<PathBuf> {
     let root = path
         .map(Path::to_path_buf)
         .map(Ok)
         .unwrap_or_else(std::env::current_dir)?;
-    let canonical = canonical(&root);
-    let _ = crate::core::machine_registry::upsert_from_resolve(&canonical);
-    if let Ok(data_dir) = project_data_dir(&canonical)
-        && let Err(e) = crate::core::migrate_home::migrate_legacy_in_repo(&canonical, &data_dir)
-    {
-        tracing::warn!("legacy migration failed: {e}");
-    }
+    canonical_directory(&root)
+}
+
+fn canonical_directory(path: &Path) -> Result<PathBuf> {
+    let canonical = std::fs::canonicalize(path).map_err(|error| canonicalize_error(path, error))?;
+    anyhow::ensure!(
+        canonical.is_dir(),
+        "workspace is not a directory: {}",
+        path.display()
+    );
     Ok(canonical)
+}
+
+fn canonicalize_error(path: &Path, error: std::io::Error) -> anyhow::Error {
+    if error.kind() == std::io::ErrorKind::NotFound {
+        return anyhow::anyhow!("workspace does not exist: {}", path.display());
+    }
+    anyhow::Error::new(error).context(format!("canonicalize workspace: {}", path.display()))
+}
+
+fn register_workspace(workspace: &Path) {
+    let Ok(data_dir) = project_data_dir(workspace) else {
+        return;
+    };
+    let _ = crate::core::machine_registry::upsert_from_resolve(workspace);
+    if let Err(e) = crate::core::legacy_import::import_legacy(workspace, &data_dir) {
+        tracing::warn!("legacy import failed: {e}");
+    }
 }
 
 pub fn machine_workspaces(seed: Option<&Path>) -> Result<Vec<PathBuf>> {
@@ -44,7 +71,13 @@ pub fn machine_workspaces(seed: Option<&Path>) -> Result<Vec<PathBuf>> {
 }
 
 pub fn db_path(workspace: &Path) -> Result<PathBuf> {
-    Ok(project_data_dir(workspace)?.join("kaizen.db"))
+    let path = crate::core::paths::project_data_child(workspace, Path::new("kaizen.db"))?;
+    ["kaizen.db-journal", "kaizen.db-wal", "kaizen.db-shm"]
+        .into_iter()
+        .try_for_each(|name| {
+            crate::core::paths::project_data_child(workspace, Path::new(name)).map(drop)
+        })?;
+    Ok(path)
 }
 
 fn registry_entries() -> Result<Vec<PathBuf>> {
@@ -101,7 +134,7 @@ pub fn resolve_project_name(name: &str) -> Result<PathBuf> {
     match segs.len() {
         1 => Ok(segs.into_iter().next().unwrap()),
         0 => anyhow::bail!(
-            "unknown project '{name}'. run 'kaizen projects list' to see registered projects."
+            "unknown project '{name}'. run 'kaizen projects' to see registered projects."
         ),
         _ => Err(ambiguous_error(name, &segs)),
     }
@@ -111,28 +144,58 @@ pub fn resolve_project_name(name: &str) -> Result<PathBuf> {
 mod tests {
     use super::*;
     use crate::core::paths::test_lock;
+    use std::path::Path;
     use tempfile::TempDir;
+
+    fn with_home<T>(test: impl FnOnce(&Path) -> T) -> T {
+        let _guard = test_lock::global().lock().unwrap();
+        let home = TempDir::new().unwrap();
+        unsafe { std::env::set_var("KAIZEN_HOME", home.path().join(".kaizen")) };
+        let result = test(home.path());
+        unsafe { std::env::remove_var("KAIZEN_HOME") };
+        result
+    }
 
     #[test]
     fn registry_round_trip() {
-        let _guard = test_lock::global().lock().unwrap();
-        let home = TempDir::new().unwrap();
-        let ws = home.path().join("repo");
-        std::fs::create_dir_all(&ws).unwrap();
-        unsafe { std::env::set_var("KAIZEN_HOME", home.path().join(".kaizen")) };
-        let first = resolve(Some(&ws)).unwrap();
-        let rows = machine_workspaces(Some(&first)).unwrap();
-        assert_eq!(rows, vec![first]);
-        unsafe { std::env::remove_var("KAIZEN_HOME") };
+        with_home(|home| {
+            let ws = home.join("repo");
+            std::fs::create_dir_all(&ws).unwrap();
+            let first = resolve(Some(&ws)).unwrap();
+            assert_eq!(first, std::fs::canonicalize(ws).unwrap());
+            assert!(crate::core::machine_registry::is_registered(&first));
+        });
+    }
+
+    #[test]
+    fn resolve_rejects_non_directory_without_state() {
+        with_home(|home| {
+            let file = home.join("workspace-file");
+            std::fs::write(&file, "not a directory").unwrap();
+            let error = resolve(Some(&file)).unwrap_err().to_string();
+            assert!(error.contains("workspace is not a directory"), "{error}");
+            assert!(!home.join(".kaizen").exists());
+        });
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn resolve_preserves_non_missing_canonicalize_error() {
+        with_home(|home| {
+            let loop_path = home.join("loop");
+            std::os::unix::fs::symlink(&loop_path, &loop_path).unwrap();
+            let error = resolve(Some(&loop_path)).unwrap_err().to_string();
+            assert!(error.contains("canonicalize workspace"), "{error}");
+            assert!(!error.contains("does not exist"), "{error}");
+            assert!(!home.join(".kaizen").exists());
+        });
     }
 
     #[test]
     fn resolve_project_name_no_match() {
-        let _guard = test_lock::global().lock().unwrap();
-        let home = TempDir::new().unwrap();
-        unsafe { std::env::set_var("KAIZEN_HOME", home.path().join(".kaizen")) };
-        let err = resolve_project_name("nonexistent").unwrap_err();
-        assert!(err.to_string().contains("unknown project"));
-        unsafe { std::env::remove_var("KAIZEN_HOME") };
+        with_home(|_| {
+            let err = resolve_project_name("nonexistent").unwrap_err();
+            assert!(err.to_string().contains("unknown project"));
+        });
     }
 }

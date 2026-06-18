@@ -44,9 +44,9 @@ make test
 cargo deny --manifest-path Cargo.toml check --config .cargo/deny.toml
 ```
 
-`make check` and `make test` use the fast contributor feature set, which skips
-DuckDB. Run `make test-full` when you touch cold analytics, release packaging,
-or feature wiring.
+`make check` and `make test` use the contributor feature set. Run
+`make test-full` when you change default features, release packaging, or
+feature wiring.
 
 After changing `specs/*.qnt`, run (same checks CI runs once Quint is installed):
 

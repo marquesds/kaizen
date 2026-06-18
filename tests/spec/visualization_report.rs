@@ -2,7 +2,7 @@
 
 use kaizen::core::event::{Event, EventKind, EventSource, SessionRecord, SessionStatus};
 use kaizen::store::Store;
-use kaizen::visualization::{DerivedStatus, VisualizationQuery, build_report};
+use kaizen::visualization::{DerivedStatus, VisualizationLimits, VisualizationQuery, build_report};
 use serde_json::json;
 
 #[test]
@@ -35,12 +35,61 @@ fn empty_workspace_returns_empty_report() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[test]
+fn report_skips_activity_when_disabled() -> anyhow::Result<()> {
+    let tmp = tempfile::tempdir()?;
+    let store = Store::open(&tmp.path().join("k.db"))?;
+    let mut query = query(None);
+    query.include_activity = false;
+    let report = build_report(&store, query)?;
+    assert!(report.activity.day_bins.is_empty());
+    assert!(report.activity.week_bins.is_empty());
+    Ok(())
+}
+
+#[test]
+fn activity_bins_preserve_time_boundaries() -> anyhow::Result<()> {
+    let tmp = tempfile::tempdir()?;
+    let store = Store::open(&tmp.path().join("k.db"))?;
+    store.upsert_session(&session("s1", SessionStatus::Done))?;
+    for (seq, ts) in [0, 299_999, 300_000, 86_399_999, 86_400_000]
+        .into_iter()
+        .enumerate()
+    {
+        store.append_event(&event_at("s1", seq as u64, ts))?;
+    }
+    let mut query = query(None);
+    query.now_ms = 86_400_000;
+    let report = build_report(&store, query)?;
+    assert_eq!(report.activity.day_bins.len(), 288);
+    assert_eq!(report.activity.day_bins[0].event_count, 2);
+    assert_eq!(report.activity.day_bins[1].event_count, 1);
+    assert_eq!(report.activity.day_bins[287].event_count, 1);
+    assert_eq!(
+        report
+            .activity
+            .day_bins
+            .iter()
+            .map(|b| b.event_count)
+            .sum::<u64>(),
+        4
+    );
+    Ok(())
+}
+
 fn query(selected: Option<&str>) -> VisualizationQuery {
     VisualizationQuery {
         workspace: "/ws".into(),
         selected_session_id: selected.map(str::to_string),
         now_ms: 10_000,
-        day_start_hour: 7,
+        include_activity: true,
+        select_latest: false,
+        limits: VisualizationLimits {
+            sessions: 100,
+            selected_events: 100,
+            selected_spans: 100,
+            selected_files: 100,
+        },
     }
 }
 
@@ -71,12 +120,18 @@ fn session(id: &str, status: SessionStatus) -> SessionRecord {
 }
 
 fn event(session_id: &str, seq: u64, kind: EventKind) -> Event {
+    let mut event = event_at(session_id, seq, 2_000 + seq);
+    event.kind = kind;
+    event
+}
+
+fn event_at(session_id: &str, seq: u64, ts_ms: u64) -> Event {
     Event {
         session_id: session_id.into(),
         seq,
-        ts_ms: 2_000 + seq,
+        ts_ms,
         ts_exact: true,
-        kind,
+        kind: EventKind::ToolCall,
         source: EventSource::Tail,
         tool: Some("read_file".into()),
         tool_call_id: Some(format!("call-{seq}")),

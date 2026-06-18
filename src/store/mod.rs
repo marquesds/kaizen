@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pub mod cold_parquet;
 pub mod event_index;
-pub mod hot_log;
 pub mod outbox_redb;
 pub mod projector;
+pub(crate) mod projector_hierarchy;
 pub mod query;
 pub mod remote_cache;
 pub mod span_tree;

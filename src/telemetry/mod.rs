@@ -89,7 +89,7 @@ impl ExporterRegistry {
 }
 
 /// Build exporters from TOML + environment. Missing creds for a sink log a warning and skip it.
-/// `workspace` resolves relative `file` paths (see [`resolve_file_exporter_path`]).
+/// `workspace` selects the project-data directory for relative `file` paths.
 pub fn load_exporters(cfg: &TelemetryConfig, workspace: &Path) -> ExporterRegistry {
     let mut v: Vec<Arc<dyn TelemetryExporter>> = Vec::new();
     for entry in &cfg.exporters {
@@ -107,7 +107,9 @@ fn build_exporter(c: &ExporterConfig, workspace: &Path) -> Option<Arc<dyn Teleme
     match c {
         ExporterConfig::None => None,
         ExporterConfig::File { path, .. } => {
-            let p = file::resolve_file_exporter_path(path.as_deref(), workspace);
+            let p = file::resolve_file_exporter_path(path.as_deref(), workspace)
+                .map_err(|error| tracing::warn!(?error, "skip telemetry file exporter"))
+                .ok()?;
             Some(Arc::new(file::FileExporter::new(p)) as _)
         }
         ExporterConfig::Dev { .. } => {

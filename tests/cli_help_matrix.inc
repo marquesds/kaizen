@@ -1,4 +1,5 @@
 &[
+    &["open"],
     &[],
     &["ingest"],
     &["ingest", "hook"],
@@ -13,6 +14,8 @@
     &["sessions", "search"],
     &["search"],
     &["search", "reindex"],
+    &["projects"],
+    &["projects", "list"],
     &["query"],
     &["summary"],
     &["tui"],
@@ -22,6 +25,7 @@
     &["insights"],
     &["guidance"],
     &["metrics"],
+    &["metrics", "report"],
     &["metrics", "index"],
     &["metrics", "quality"],
     &["observe"],

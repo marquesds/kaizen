@@ -7,14 +7,18 @@ Config is TOML. **Paths:**
 | `~/.kaizen/projects/<slug>/config.toml` | Per-project (slug = canonical path with `/` replaced by `-`); never checked into VCS |
 | `~/.kaizen/config.toml` | Per-user; use for secrets and machine-wide defaults |
 
-`KAIZEN_HOME` overrides `~/.kaizen`. The old `<workspace>/.kaizen/` layout is auto-migrated to the project data dir on first use; a `MIGRATED.txt` marker is left behind.
+`KAIZEN_HOME` overrides `~/.kaizen`. On first use, Kaizen copies an old
+`<workspace>/.kaizen/` directory into project data and writes
+`LEGACY_IMPORTED.txt` there. It never moves, deletes, or marks the source.
+Legacy import rejects symlinks and special files before copying anything.
+`KAIZEN_HOME` must resolve outside the target repository. Kaizen also rejects
+traversal, symlink, and hard-link aliases for its write targets.
 
 **Load order:** the workspace and user files are both read; `src/core/config.rs` merges them as follows.
 
 - **`[sync]`, `[proxy]`, `[telemetry]`:** field-by-field merge. Workspace is applied first, then the user file overwrites (non-empty strings, set numbers, and so on). Nested **`[telemetry.query]`** and **`[telemetry.query.identity_allowlist]`** merge the same way (per-key; see below).
 - **`[scan]`:** `roots` — if the user file sets a non-default `roots` list, that wins; otherwise the workspace’s `[scan].roots` is used. `min_rescan_seconds` merges the same way (user non-default wins, else workspace).
-- **`[retention]`:** field-by-field merge: for each of `hot_days` and `warm_days`, if the user file value differs from the schema default, the user value wins; otherwise the workspace value is kept.
-- **`[storage]`:** field-by-field merge for tiered storage boundaries. The legacy `[retention]` values remain accepted during the migration window.
+- **`[retention]`:** field-by-field merge. If the user file sets a non-default `hot_days`, that value wins; otherwise the project value is kept.
 - **`[sources]`:** `cursor` and `tail.*` merge like `[retention]`: for each key, if the user file’s value still equals the type default, the workspace value is kept; otherwise the user value wins. Use the user file for machine-wide toggles; workspace file for repo-specific overrides.
 - **`[collect.outcomes]`, `[collect.system_sampler]`:** same pattern as `[retention]` (user non-default wins per key; otherwise workspace).
 
@@ -53,18 +57,10 @@ When you pass **`--all-workspaces`** (or MCP `all_workspaces: true`), Kaizen loa
 | Key | Default | Purpose |
 |-----|---------|--------|
 | `hot_days` | `30` | Local SQLite keeps sessions started within the last **hot_days** days. Older sessions and dependent rows are removed when auto-prune runs (after a rescan, at most once per 24h) or when you run `kaizen gc`. **`0`** disables automatic pruning. |
-| `warm_days` | `90` | Reserved for future tiered retention; not used for local purge today. |
 
-## `[storage]`
-
-Tiered storage keeps recent rows in a hot append log, analytical history in Parquet, and SQLite for transactional metadata.
-
-| Key | Default | Meaning |
-|---|---:|---|
-| `hot_max_bytes` | `"1GB"` | Target size for the hot log before compaction. |
-| `cold_after_days` | `7` | Events older than this move to cold Parquet partitions. |
-| `retention_days` | `90` | Cold partitions older than this can be removed with file deletion. |
-| `flush_hour_utc` | `0` | UTC hour for daemon cold-flush scheduling. |
+Older config files may still contain `[storage]` or
+`[retention].warm_days`. The parser accepts those keys for compatibility, but
+the SQLite-only runtime ignores them. Remove them when cleaning up config.
 
 ## `[sources]`
 
@@ -105,7 +101,7 @@ provider selection, and `context_policy` examples: [llm-proxy.md](llm-proxy.md).
 
 ## `[telemetry]`
 
-Optional fan-out to local and third-party sinks: **`file`** (append-only NDJSON under the workspace), PostHog, Datadog, OTLP, or `dev` tracing, with the same redaction as Kaizen sync. The default Cargo build now ships PostHog, Datadog, and OTLP support so `kaizen telemetry configure` works out of the box; the `dev` tracing sink stays opt-in behind `--features telemetry-dev`. See [Cargo features](../Cargo.toml) and [usage](usage.md#kaizen-telemetry).
+Optional fan-out to local and third-party sinks: **`file`** (append-only NDJSON in the project data directory), PostHog, Datadog, OTLP, or `dev` tracing, with the same redaction as Kaizen sync. The default Cargo build now ships PostHog, Datadog, and OTLP support so `kaizen telemetry configure` works out of the box; the `dev` tracing sink stays opt-in behind `--features telemetry-dev`. See [Cargo features](../Cargo.toml) and [telemetry usage](usage-telemetry.md).
 
 | Key | Default | Purpose |
 |-----|---------|--------|
@@ -126,7 +122,7 @@ Remote read-back (provider pull) and cache policy. OTLP is **export only**; it i
 
 When `true`, the corresponding field may be emitted in **cleartext** on outbound / canonical telemetry for that key; when `false` (default), omit or hash. Keys: `team`, `runner_label`, `actor_kind`, `actor_label`, `agent`, `model`, `env`, `job`, `branch`. `workspace_label` is reserved for exporter-derived `project_name`, which is always sent as repo identity rather than actor identity.
 
-**Exporters** are `[[telemetry.exporters]]` tables with `type = "file" | "posthog" | "datadog" | "otlp" | "dev" | "none"`. For `file`, optional `path` (relative paths resolve against the workspace root) defaults to **`~/.kaizen/projects/<slug>/telemetry.ndjson`**. The `kaizen telemetry configure` command appends a template block to `~/.kaizen/config.toml`.
+**Exporters** are `[[telemetry.exporters]]` tables with `type = "file" | "posthog" | "datadog" | "otlp" | "dev" | "none"`. For `file`, optional relative `path` values resolve under **`~/.kaizen/projects/<slug>/`**; the default is `telemetry.ndjson`. Absolute paths are allowed except inside the target repository. The `kaizen telemetry configure` command appends a template block to `~/.kaizen/config.toml`.
 
 **Credential resolution (per exporter):** standard env vars are preferred, with `KAIZEN_`-prefixed fallbacks in some cases, for example:
 
@@ -195,5 +191,5 @@ redact   = true
 ```
 
 Proposal calls receive scorecard evidence and redacted rejected-candidate memory
-for one selected artifact, not raw session transcripts. Direct mutation still
-requires `--apply`.
+for one selected artifact, not raw session transcripts. Proposals are
+review-only; Kaizen never applies them to the target repository.

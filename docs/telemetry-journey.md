@@ -19,8 +19,8 @@ For day-to-day use with the supported first-party agents, **transcript + hooks**
 1. A **Session** is one agent run; it has metadata (agent, model, workspace, times, status).
 2. Ingestion appends to **`events`**: turns, tool calls, hooks, cost hints, and proxy completions. Order is by `event_seq` within a session.
 3. On append, the store maintains **derived views**: `tool_spans`, and fields such as files touched and skills used.
-4. **Metrics** (when you run indexing or commands that need it) walks git and the tree, builds **repo snapshots** and **file facts**, and fills the **code graph** sidecar (`file_facts`, `repo_edges`) used by the TUI, reports, and retro.
-5. **CLI / TUI / retro** read that material; **sync** and optional **telemetry exporters** send only **redacted** batches off machine if you configure them.
+4. **Metrics** (when you run indexing or commands that need it) walks git and the tree, builds **repo snapshots** and **file facts**, and fills the **code graph** sidecar (`file_facts`, `repo_edges`) used by reports and retro.
+5. **CLI / TUI / Web / retro** read bounded views of that material; **sync** and optional **telemetry exporters** send only **redacted** batches off machine if you configure them.
 
 Nothing leaves your disk until you opt in. See [concepts.md](concepts.md#redact) for redaction and [ingest-contract.md](ingest-contract.md) for the sync contract.
 
@@ -35,7 +35,7 @@ flowchart TD
   derived[DerivedToolSpansAndHints]
   metricsPass[MetricsIndex]
   facts[file_factsAndRepoEdges]
-  surfaces[CliTuiRetro]
+  surfaces[CliTuiWebRetro]
 
   tier1 --> eventsTbl
   tier2 --> eventsTbl
@@ -81,13 +81,18 @@ From a repository where you use an agent (so transcripts exist) or where you are
    kaizen sessions show "<session-id>"
    ```
 
-   You should see the event stream, tool-related detail, and cost where available. Cursor’s token counts are heuristic when the transcript does not carry native usage; Claude Code and proxy-backed calls can be more exact.
+   You should see session metadata such as agent, model, times, status, and trace path. Use `kaizen sessions tree "<session-id>"`, the TUI, or the Web dashboard for tool and event detail. Cursor's token counts are heuristic when the transcript does not carry native usage; Claude Code and proxy-backed calls can be more exact.
 
-5. **Optional: live browser.**
+5. **Optional: live interfaces.**
 
    ```bash
+   kaizen open
    kaizen tui
    ```
+
+   `kaizen open` starts the authenticated local Web dashboard. `kaizen tui`
+   opens the keyboard-driven terminal view. Both use bounded SQLite reads; see
+   [web.md](web.md) and [tui.md](tui.md).
 
 If these steps work, the full pipeline is alive in your environment: **collection → store → your commands**.
 
@@ -126,7 +131,7 @@ kaizen telemetry pull --days 1   # Datadog Logs Search v2; requires DD_APP_KEY t
 
 - [architecture.md](architecture.md) — module names and boundary list.
 - [config.md](config.md) — `~/.kaizen` vs workspace, tail sources, sync, proxy, telemetry exporters.
-- [usage.md#kaizen-telemetry](usage.md#kaizen-telemetry) — full CLI reference for the telemetry subcommands.
+- [usage-telemetry.md](usage-telemetry.md) — full CLI reference for the telemetry subcommands.
 - [../AGENTS.md](../AGENTS.md) — note on Cursor cost telemetry limitations.
 
 Long-form documentation is maintained in the **GitHub** tree under `docs/`. The [docs.rs](https://docs.rs/kaizen-cli) page documents the Rust library API for the published crate, not the full markdown book.

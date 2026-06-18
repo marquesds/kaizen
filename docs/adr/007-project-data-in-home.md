@@ -1,7 +1,7 @@
 # ADR 007: Project Data in Home Directory
 
 ## Status
-Accepted
+Superseded by [ADR 011](011-target-repositories-read-only.md)
 
 ## Context
 

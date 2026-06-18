@@ -9,7 +9,7 @@ use crate::ipc::{
     read_frame, write_frame,
 };
 use anyhow::{Context, Result, anyhow};
-use std::fs::{File, OpenOptions};
+use std::fs::File;
 use std::io::{Seek, SeekFrom, Write};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -36,7 +36,7 @@ pub async fn run_server() -> Result<()> {
     let listener = UnixListener::bind(&paths.sock)
         .with_context(|| format!("bind daemon socket: {}", paths.sock.display()))?;
     set_socket_private(&paths.sock)?;
-    let (web, _web_task) = crate::web::start().await?;
+    let (web, _web_task) = crate::web::start(&paths.token).await?;
     let (tx, rx) = mpsc::channel(128);
     let state = ServerState {
         started: Instant::now(),
@@ -59,12 +59,7 @@ pub async fn run_server() -> Result<()> {
 }
 
 fn lock_pid(paths: &RuntimePaths) -> Result<File> {
-    let mut file = OpenOptions::new()
-        .create(true)
-        .truncate(false)
-        .read(true)
-        .write(true)
-        .open(&paths.pid)
+    let mut file = crate::core::safe_fs::read_write(&paths.pid)
         .with_context(|| format!("open pid file: {}", paths.pid.display()))?;
     file.try_lock()
         .map_err(|_| anyhow!("daemon already running: {}", paths.pid.display()))?;

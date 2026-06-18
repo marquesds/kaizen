@@ -8,7 +8,8 @@ Retro turns recent telemetry into **ranked bets**: what to change to save tokens
 kaizen retro --days 7
 ```
 
-By default this writes **Markdown** under `.kaizen/reports/<iso-week>.md`.
+By default this writes **Markdown** under
+`~/.kaizen/projects/<slug>/reports/<iso-week>.md`.
 
 Useful flags:
 
@@ -29,7 +30,7 @@ Look for **high impact / reasonable effort** bets first. Each bet ties back to o
 ## Exercise
 
 1. Run `kaizen retro --dry-run --days 7` and skim the Markdown.
-2. Open `.kaizen/reports/` after a normal run; compare to `--json` output for the same window.
+2. Open the project-data `reports/` directory after a normal run; compare it to `--json`.
 3. Pick one bet and map it to a concrete repo change (rule, skill, or CI guard).
 
 **Next:** [Part 6 — Experiments](06-experiments.md)

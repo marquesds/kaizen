@@ -8,7 +8,6 @@ pub mod score;
 mod score_inputs;
 mod score_math;
 pub mod types;
-pub mod validation;
 
 pub use types::{
     Artifact, ArtifactKind, ArtifactRef, ArtifactState, CandidateAction, CandidateStatus,

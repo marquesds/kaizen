@@ -164,16 +164,18 @@ fn handle_request(store: &Store, req: StoreRequest) -> StoreResponse {
 
 fn load_detail(store: &Store, session_id: &str) -> anyhow::Result<DetailData> {
     let mut tool_lead_by_call = HashMap::new();
-    for row in store.tool_spans_for_session(session_id)? {
+    for row in store.tool_spans_for_session_limited(session_id, DETAIL_SPAN_LIMIT)? {
         if let (Some(id), Some(lead)) = (row.tool_call_id, row.lead_time_ms) {
             tool_lead_by_call.insert(id, lead);
         }
     }
     Ok(DetailData {
         tool_lead_by_call,
-        span_nodes: store.session_span_tree(session_id).unwrap_or_default(),
+        span_nodes: store.limited_session_span_tree(session_id, DETAIL_SPAN_LIMIT)?,
     })
 }
+
+const DETAIL_SPAN_LIMIT: usize = 200;
 
 fn load_feedback(store: &Store, ids: &[String]) -> anyhow::Result<HashMap<String, u8>> {
     Ok(store
@@ -182,3 +184,6 @@ fn load_feedback(store: &Store, ids: &[String]) -> anyhow::Result<HashMap<String
         .filter_map(|(sid, row)| row.score.map(|score| (sid, score.0)))
         .collect())
 }
+
+#[cfg(test)]
+mod tests;

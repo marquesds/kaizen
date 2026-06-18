@@ -1,7 +1,7 @@
 # ADR 009: Optional LLM Guidance Proposals
 
 ## Status
-Accepted
+Superseded by [ADR 011](011-target-repositories-read-only.md)
 
 ## Context
 Kaizen guidance now scores skills and Cursor rules from stored session outcomes.
