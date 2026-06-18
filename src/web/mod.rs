@@ -3,6 +3,7 @@
 
 mod assets;
 pub mod features;
+mod live;
 mod server;
 mod snapshot;
 mod token;

@@ -22,7 +22,108 @@ pub mod opencode;
 pub mod pi;
 pub mod vibe;
 
-use std::path::Path;
+pub(crate) const MAX_RECENT_TRANSCRIPTS: usize = 32;
+
+#[cfg(test)]
+mod budget_tests;
+
+use std::cmp::Reverse;
+use std::fs::File;
+use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
+use std::path::{Path, PathBuf};
+
+pub(crate) const MAX_TRANSCRIPT_READ_BYTES: u64 = 256 * 1024;
+
+pub(crate) fn newest_paths(paths: Vec<PathBuf>) -> Vec<PathBuf> {
+    newest_by_path(paths, PathBuf::as_path)
+}
+
+pub(crate) fn newest_paths_since(paths: Vec<PathBuf>, since_ms: u64) -> Vec<PathBuf> {
+    newest_by_path_since(paths, PathBuf::as_path, since_ms)
+}
+
+pub(crate) fn newest_by_path<T>(mut values: Vec<T>, path: impl Fn(&T) -> &Path) -> Vec<T> {
+    values.sort_by_key(|value| Reverse(modified_ms(path(value))));
+    values.truncate(MAX_RECENT_TRANSCRIPTS);
+    values
+}
+
+pub(crate) fn newest_by_path_since<T, F>(values: Vec<T>, path: F, since_ms: u64) -> Vec<T>
+where
+    F: Fn(&T) -> &Path + Copy,
+{
+    let recent = values
+        .into_iter()
+        .filter(|value| modified_ms(path(value)) >= u128::from(since_ms))
+        .collect();
+    newest_by_path(recent, path)
+}
+
+fn modified_ms(path: &Path) -> u128 {
+    path.metadata()
+        .and_then(|metadata| metadata.modified())
+        .ok()
+        .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+        .map_or(0, |duration| duration.as_millis())
+}
+
+pub(crate) fn file_mtime_ms(path: &Path) -> u64 {
+    u64::try_from(modified_ms(path)).unwrap_or(u64::MAX)
+}
+
+pub(crate) fn file_stem(path: &Path) -> String {
+    path.file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or_default()
+        .to_string()
+}
+
+pub(crate) fn read_first_jsonl_line(path: &Path) -> std::io::Result<String> {
+    let mut line = String::new();
+    BufReader::new(File::open(path)?).read_line(&mut line)?;
+    Ok(line)
+}
+
+pub(crate) fn read_recent_jsonl(path: &Path) -> std::io::Result<(u64, String)> {
+    let file = File::open(path)?;
+    let start = file
+        .metadata()?
+        .len()
+        .saturating_sub(MAX_TRANSCRIPT_READ_BYTES);
+    let mut reader = BufReader::new(file);
+    let mut first_seq = count_newlines(&mut reader, start)?;
+    reader.seek(SeekFrom::Start(start))?;
+    first_seq += discard_partial_line(&mut reader, start)?;
+    let mut content = String::new();
+    reader.read_to_string(&mut content)?;
+    Ok((first_seq, content))
+}
+
+fn count_newlines(reader: &mut BufReader<File>, end: u64) -> std::io::Result<u64> {
+    reader.seek(SeekFrom::Start(0))?;
+    let mut remaining = end;
+    let mut count = 0;
+    let mut buffer = [0_u8; 64 * 1024];
+    while remaining > 0 {
+        let limit = usize::try_from(remaining.min(buffer.len() as u64)).unwrap_or(buffer.len());
+        let read = reader.read(&mut buffer[..limit])?;
+        if read == 0 {
+            break;
+        }
+        count += memchr::memchr_iter(b'\n', &buffer[..read]).count() as u64;
+        remaining -= read as u64;
+    }
+    Ok(count)
+}
+
+fn discard_partial_line(reader: &mut BufReader<File>, start: u64) -> std::io::Result<u64> {
+    if start == 0 {
+        return Ok(0);
+    }
+    let mut ignored = Vec::new();
+    reader.read_until(b'\n', &mut ignored)?;
+    Ok(1)
+}
 
 /// Earliest mtime (ms) of `.jsonl` files in `dir`. Returns 0 on failure.
 pub fn dir_mtime_ms(dir: &Path) -> u64 {

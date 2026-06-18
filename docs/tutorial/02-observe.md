@@ -22,7 +22,7 @@ kaizen sessions list --json
 kaizen sessions list --refresh
 ```
 
-**`--json`** is for scripts and MCP-shaped tooling. **`--refresh`** forces a full transcript rescan (subject to min interval).
+**`--json`** is for scripts and MCP-shaped tooling. **`--refresh`** ingests bounded, recently changed transcript tails (subject to the minimum interval).
 
 ## Show one session
 
@@ -43,7 +43,7 @@ The JSON shape includes rollups by agent and model, total cost, and when availab
 
 ## Data source: local, provider, or mixed
 
-Most of this tutorial assumes the default **`--source local`**: numbers come from the workspace’s local SQLite store (and the usual transcript rescan rules with `--refresh`).
+Most of this tutorial assumes the default **`--source local`**: numbers come from the workspace’s local SQLite store (and the bounded changed-tail rules used by `--refresh`).
 
 When you have **[sync]** identity in config (`team_id`, `team_salt_hex`, …) *and* a **[telemetry.query](https://github.com/marquesds/kaizen/blob/main/docs/config.md#telemetryquery) provider** (PostHog or Datadog) configured, you can ask read commands to fold in **provider-pulled events** cached under `remote_events` in the same DB:
 

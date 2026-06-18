@@ -1,6 +1,8 @@
 use super::events::*;
 use super::*;
 
+const PROJECTOR_HYDRATE_EVENTS: usize = 512;
+
 impl Store {
     pub(super) fn sync_projector_session(
         &self,
@@ -10,7 +12,15 @@ impl Store {
         if self.projector.borrow().last_seq(session_id) == last_seq {
             return Ok(());
         }
-        self.replay_projector_session(session_id)
+        self.hydrate_projector_session(session_id)
+    }
+
+    fn hydrate_projector_session(&self, session_id: &str) -> Result<()> {
+        self.projector.borrow_mut().reset_session(session_id);
+        for event in self.list_latest_events_for_session(session_id, PROJECTOR_HYDRATE_EVENTS)? {
+            self.projector.borrow_mut().apply(&event);
+        }
+        Ok(())
     }
 
     pub fn flush_projector_session(&self, session_id: &str, now_ms: u64) -> Result<()> {
@@ -60,7 +70,8 @@ impl Store {
         for delta in deltas {
             match delta {
                 ProjectorEvent::SpanClosed(span, sample) => {
-                    upsert_tool_span_record(&self.conn, span)?;
+                    let persisted = upsert_tool_span_record(&self.conn, span)?;
+                    crate::extensions::diffs::upsert_tool_span(self, &persisted)?;
                     tracing::debug!(
                         session_id = %sample.session_id,
                         span_id = %sample.span_id,

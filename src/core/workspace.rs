@@ -54,20 +54,19 @@ pub fn machine_workspaces(seed: Option<&Path>) -> Result<Vec<PathBuf>> {
     if let Some(path) = seed.as_ref() {
         push_unique(&mut roots, path.clone());
     }
-    roots.retain(|p| {
-        if seed.as_ref() == Some(p) {
-            return true;
-        }
-        p.exists()
-            && (db_path(p).ok().is_some_and(|d| d.exists())
-                || crate::core::machine_registry::is_registered(p))
-    });
+    roots.retain(|path| seed.as_ref() == Some(path) || usable_registered_workspace(path));
     if roots.is_empty()
         && let Some(path) = seed
     {
         roots.push(path);
     }
     Ok(roots)
+}
+
+fn usable_registered_workspace(path: &Path) -> bool {
+    path.exists()
+        && db_path(path)
+            .is_ok_and(|db| db.exists() || crate::core::machine_registry::is_registered(path))
 }
 
 pub fn db_path(workspace: &Path) -> Result<PathBuf> {

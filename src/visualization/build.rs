@@ -56,7 +56,8 @@ pub(crate) fn build_report_observed(
     query: VisualizationQuery,
 ) -> Result<BuiltReport> {
     validate(&query.limits)?;
-    let (totals, quality) = store.visualization_totals(&query.workspace)?;
+    let active_since_ms = query.now_ms.saturating_sub(ACTIVE_TTL_MS);
+    let (totals, quality) = store.visualization_totals(&query.workspace, active_since_ms)?;
     let sessions =
         store.visualization_sessions(&query.workspace, query.limits.sessions, query.now_ms)?;
     let selected = selected_detail(store, &query, sessions.first())?;

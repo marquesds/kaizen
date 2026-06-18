@@ -1869,6 +1869,7 @@ dependencies = [
  "indicatif",
  "itf",
  "libc",
+ "memchr",
  "notify",
  "proptest",
  "quint-connect",

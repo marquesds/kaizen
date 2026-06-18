@@ -19,6 +19,23 @@ impl Store {
 
     /// Append event; when `ctx` is set and sync is configured, enqueue one redacted outbox row.
     pub fn append_event_with_sync(&self, e: &Event, ctx: Option<&SyncIngestContext>) -> Result<()> {
+        self.append_event_inner(e, ctx, true)
+    }
+
+    pub(super) fn append_event_deferred(
+        &self,
+        e: &Event,
+        ctx: Option<&SyncIngestContext>,
+    ) -> Result<()> {
+        self.append_event_inner(e, ctx, false)
+    }
+
+    fn append_event_inner(
+        &self,
+        e: &Event,
+        ctx: Option<&SyncIngestContext>,
+        refresh_session: bool,
+    ) -> Result<()> {
         let last_before = if projector_legacy_mode() {
             None
         } else {
@@ -39,27 +56,7 @@ impl Store {
                 ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13,
                 ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22
              )
-             ON CONFLICT(session_id, seq) DO UPDATE SET
-                ts_ms = excluded.ts_ms,
-                ts_exact = excluded.ts_exact,
-                kind = excluded.kind,
-                source = excluded.source,
-                tool = excluded.tool,
-                tool_call_id = excluded.tool_call_id,
-                tokens_in = excluded.tokens_in,
-                tokens_out = excluded.tokens_out,
-                reasoning_tokens = excluded.reasoning_tokens,
-                cost_usd_e6 = excluded.cost_usd_e6,
-                payload = excluded.payload,
-                stop_reason = excluded.stop_reason,
-                latency_ms = excluded.latency_ms,
-                ttft_ms = excluded.ttft_ms,
-                retry_count = excluded.retry_count,
-                context_used_tokens = excluded.context_used_tokens,
-                context_max_tokens = excluded.context_max_tokens,
-                cache_creation_tokens = excluded.cache_creation_tokens,
-                cache_read_tokens = excluded.cache_read_tokens,
-                system_prompt_tokens = excluded.system_prompt_tokens",
+             ON CONFLICT(session_id, seq) DO NOTHING",
             params![
                 e.session_id,
                 e.seq as i64,
@@ -112,7 +109,10 @@ impl Store {
             self.invalidate_span_tree_cache();
         }
         self.append_search_event(e);
-        self.refresh_extension_rows(e)?;
+        self.index_extension_event(e)?;
+        if refresh_session {
+            self.apply_live_extension_event(e)?;
+        }
         let Some(ctx) = ctx else {
             return Ok(());
         };
@@ -141,15 +141,6 @@ impl Store {
         let row = serde_json::to_string(&outbound)?;
         self.append_outbox_row(&e.session_id, "events", &row)?;
         enqueue_tool_spans_for_session(self, &e.session_id, ctx)?;
-        Ok(())
-    }
-
-    fn refresh_extension_rows(&self, e: &Event) -> Result<()> {
-        crate::extensions::hash_chain::store_event_hash(self, e)?;
-        crate::extensions::aggregates::upsert_session(self, &e.session_id)?;
-        if let Err(err) = crate::extensions::diffs::refresh_session(self, &e.session_id, false) {
-            tracing::warn!(session_id = %e.session_id, "step diff attribution skipped: {err:#}");
-        }
         Ok(())
     }
 

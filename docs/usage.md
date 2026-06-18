@@ -12,8 +12,8 @@ Use `--no-daemon` or `KAIZEN_DAEMON=0` for direct SQLite mode. Both modes use
 the same project database. See [daemon.md](daemon.md).
 
 Cache-first reads use the local SQLite database without rescanning agent
-transcripts. Pass `--refresh` when a command should ingest new transcript data
-before rendering.
+transcripts. Pass `--refresh` to ingest recently changed transcript tails before
+rendering. Refresh work is bounded; it does not replay all historical files.
 
 ## Reference
 

@@ -48,6 +48,44 @@ pub struct Event {
     pub payload: serde_json::Value,
 }
 
+impl Event {
+    pub fn normalize_legacy_hook(mut self) -> Self {
+        if !self.is_legacy_hook() {
+            return self;
+        }
+        self.kind = legacy_hook_kind(&self.payload).unwrap_or(EventKind::Hook);
+        self.tool = self.tool.or_else(|| legacy_hook_tool(&self.payload));
+        self
+    }
+
+    fn is_legacy_hook(&self) -> bool {
+        self.source == EventSource::Hook && self.kind == EventKind::Hook
+    }
+}
+
+fn legacy_hook_kind(payload: &serde_json::Value) -> Option<EventKind> {
+    match hook_name(payload)? {
+        "PreToolUse" | "pre_tool_use" => Some(EventKind::ToolCall),
+        "PostToolUse" | "post_tool_use" => Some(EventKind::ToolResult),
+        "SessionStart" | "session_start" | "Stop" | "stop" => Some(EventKind::Lifecycle),
+        _ => None,
+    }
+}
+
+fn legacy_hook_tool(payload: &serde_json::Value) -> Option<String> {
+    ["tool_name", "tool"]
+        .iter()
+        .find_map(|key| payload.get(key).and_then(|value| value.as_str()))
+        .map(ToOwned::to_owned)
+}
+
+fn hook_name(payload: &serde_json::Value) -> Option<&str> {
+    payload
+        .get("hook_event_name")
+        .or_else(|| payload.get("event"))
+        .and_then(|value| value.as_str())
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SessionStatus {
     Running,

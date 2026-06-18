@@ -40,12 +40,42 @@ export function showManual(path = "") {
 
 export function renderReport(report) {
   renderTotals(report?.totals || {});
+  renderInsights(report);
   renderSessions(
     report?.sessions || [],
     report?.selected?.session?.id,
     report?.totals?.session_count,
   );
   renderDetail(report);
+}
+
+function renderInsights(report) {
+  const sessions = report?.sessions || [];
+  const [tool, calls] = topTool(sessions);
+  const attention = sessions.filter(row => ["errored", "orphaned"].includes(row.status)).length;
+  const quality = report?.quality || {};
+  setInsight("tools", tool ? `${label(tool)} leads` : "No tool calls yet", tool ? `${count(calls)} calls in visible sessions` : "Live tool use appears here.");
+  setInsight("attention", attention ? `${count(attention)} need attention` : "No recent warnings", `${count(sessions.length)} visible sessions checked`);
+  setInsight("coverage", `${percent(quality.token_coverage_pct)} token coverage`, `${percent(quality.cost_coverage_pct)} cost coverage`);
+}
+
+function topTool(sessions) {
+  const counts = sessions.flatMap(row => row.top_tools || []).reduce(addTool, new Map());
+  return [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0] || ["", 0];
+}
+
+function addTool(counts, [tool, calls]) {
+  counts.set(tool, (counts.get(tool) || 0) + calls);
+  return counts;
+}
+
+function setInsight(id, title, note) {
+  $(`#insight-${id}`).textContent = title;
+  $(`#insight-${id}-note`).textContent = note;
+}
+
+function percent(value) {
+  return `${Math.round(Number(value) || 0)}%`;
 }
 
 function renderTotals(totals) {

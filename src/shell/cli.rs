@@ -3,9 +3,9 @@
 
 use crate::collect::tail::antigravity::scan_antigravity_workspace;
 use crate::collect::tail::claude::scan_claude_session_dir;
-use crate::collect::tail::claude_code::scan_claude_project_dir;
+use crate::collect::tail::claude_code::scan_claude_project_dir_since;
 use crate::collect::tail::codex::scan_codex_session_dir;
-use crate::collect::tail::codex_desktop::scan_codex_sessions_root;
+use crate::collect::tail::codex_desktop::scan_codex_sessions_root_since;
 use crate::collect::tail::copilot_cli::scan_copilot_cli_workspace;
 use crate::collect::tail::copilot_vscode::scan_copilot_vscode_workspace;
 use crate::collect::tail::cursor::scan_session_dir_all;
@@ -70,7 +70,6 @@ impl AgentScanStats {
         self.sessions_found += 1;
         self.sessions_upserted += 1;
         self.events_found += event_count as u64;
-        self.events_upserted += event_count as u64;
         self.agents.insert(record.agent.clone());
     }
 
@@ -129,6 +128,8 @@ fn now_ms_u64() -> u64 {
 
 /// Minimum interval between automatic local DB prunes after a successful rescan (24h).
 const AUTO_PRUNE_INTERVAL_MS: u64 = 86_400_000;
+const INITIAL_SCAN_LOOKBACK_MS: u64 = 30 * 86_400_000;
+const SCAN_OVERLAP_MS: u64 = 60_000;
 
 pub(crate) fn maybe_auto_prune_after_scan(store: &Store, cfg: &config::Config) -> Result<()> {
     if cfg.retention.hot_days == 0 {
@@ -146,7 +147,7 @@ pub(crate) fn maybe_auto_prune_after_scan(store: &Store, cfg: &config::Config) -
     Ok(())
 }
 
-/// Full transcript rescan unless throttled by `[scan].min_rescan_seconds` or `refresh` is true.
+/// Import recently changed transcripts unless throttled by the scan interval.
 pub(crate) fn maybe_scan_all_agents(
     ws: &Path,
     cfg: &config::Config,
@@ -163,9 +164,18 @@ pub(crate) fn maybe_scan_all_agents(
     {
         return Ok(());
     }
-    scan_all_agents(ws, cfg, ws_str, store)?;
-    store.sync_state_set_u64(SYNC_STATE_LAST_AGENT_SCAN_MS, now_ms_u64())?;
+    let since_ms = scan_since_ms(store, now)?;
+    scan_all_agents_since(ws, cfg, ws_str, store, since_ms)?;
+    store.sync_state_set_u64(SYNC_STATE_LAST_AGENT_SCAN_MS, now)?;
     Ok(())
+}
+
+fn scan_since_ms(store: &Store, now_ms: u64) -> Result<u64> {
+    Ok(store
+        .sync_state_get_u64(SYNC_STATE_LAST_AGENT_SCAN_MS)?
+        .map_or(now_ms.saturating_sub(INITIAL_SCAN_LOOKBACK_MS), |last| {
+            last.saturating_sub(SCAN_OVERLAP_MS)
+        }))
 }
 
 pub(crate) fn maybe_refresh_store(workspace: &Path, store: &Store, refresh: bool) -> Result<()> {
@@ -738,13 +748,14 @@ pub fn cmd_summary(
     Ok(())
 }
 
-pub(crate) fn scan_all_agents(
+fn scan_all_agents_since(
     ws: &Path,
     cfg: &config::Config,
     ws_str: &str,
     store: &Store,
+    since_ms: u64,
 ) -> Result<()> {
-    scan_all_agents_with_stats(ws, cfg, ws_str, store).map(|_| ())
+    scan_all_agents_with_stats_since(ws, cfg, ws_str, store, since_ms, false).map(|_| ())
 }
 
 pub(crate) fn scan_all_agents_with_stats(
@@ -753,18 +764,30 @@ pub(crate) fn scan_all_agents_with_stats(
     ws_str: &str,
     store: &Store,
 ) -> Result<AgentScanStats> {
+    scan_all_agents_with_stats_since(ws, cfg, ws_str, store, 0, true)
+}
+
+fn scan_all_agents_with_stats_since(
+    ws: &Path,
+    cfg: &config::Config,
+    ws_str: &str,
+    store: &Store,
+    since_ms: u64,
+    enrich_repo: bool,
+) -> Result<AgentScanStats> {
     let _spin = ScanSpinner::start("Scanning agent sessions…");
     let sync_ctx = crate::sync::ingest_ctx(cfg, ws.to_path_buf());
-    let sessions = collect_all_agent_sessions(ws, cfg, ws_str)?;
-    let stats = persist_session_batch(store, sessions, sync_ctx.as_ref())?;
+    let sessions = collect_all_agent_sessions_since(ws, cfg, ws_str, since_ms)?;
+    let stats = persist_session_batch_mode(store, sessions, sync_ctx.as_ref(), enrich_repo)?;
     maybe_auto_prune_after_scan(store, cfg)?;
     Ok(stats)
 }
 
-pub(crate) fn collect_all_agent_sessions(
+fn collect_all_agent_sessions_since(
     ws: &Path,
     cfg: &config::Config,
     ws_str: &str,
+    since_ms: u64,
 ) -> Result<Vec<(SessionRecord, Vec<Event>)>> {
     let mut out = Vec::new();
     let slug = workspace_slug(ws_str);
@@ -794,7 +817,11 @@ pub(crate) fn collect_all_agent_sessions(
     let claude_project = PathBuf::from(&home)
         .join(".claude/projects")
         .join(&claude_slug);
-    out.extend(scan_claude_project_dir(&claude_project, ws)?);
+    out.extend(scan_claude_project_dir_since(
+        &claude_project,
+        ws,
+        since_ms,
+    )?);
     let claude_dir = claude_project.join("sessions");
     out.extend(collect_agent_dirs(&claude_dir, |p| {
         scan_claude_session_dir(p).map(|(mut r, evs)| {
@@ -810,9 +837,10 @@ pub(crate) fn collect_all_agent_sessions(
             vec![(r, evs)]
         })
     })?);
-    out.extend(scan_codex_sessions_root(
+    out.extend(scan_codex_sessions_root_since(
         &PathBuf::from(&home).join(".codex/sessions"),
         ws,
+        since_ms,
     )?);
 
     let tail = &cfg.sources.tail;
@@ -862,37 +890,74 @@ fn bind_workspace(
         .collect()
 }
 
+#[cfg(test)]
 pub(crate) fn persist_session_batch(
     store: &Store,
     sessions: Vec<(SessionRecord, Vec<Event>)>,
     sync_ctx: Option<&crate::sync::SyncIngestContext>,
 ) -> Result<AgentScanStats> {
+    persist_session_batch_mode(store, sessions, sync_ctx, true)
+}
+
+fn persist_session_batch_mode(
+    store: &Store,
+    sessions: Vec<(SessionRecord, Vec<Event>)>,
+    sync_ctx: Option<&crate::sync::SyncIngestContext>,
+    enrich_repo: bool,
+) -> Result<AgentScanStats> {
     let mut stats = AgentScanStats::default();
     for (mut record, events) in sessions {
         stats.record(&record, events.len());
-        if record.start_commit.is_none() && !record.workspace.is_empty() {
-            let binding = crate::core::repo::binding_for_session(
-                Path::new(&record.workspace),
-                record.started_at_ms,
-                record.ended_at_ms,
-            );
-            record.start_commit = binding.start_commit;
-            record.end_commit = binding.end_commit;
-            record.branch = binding.branch;
-            record.dirty_start = binding.dirty_start;
-            record.dirty_end = binding.dirty_end;
-            record.repo_binding_source = binding.source;
-        }
+        let existing = store.get_session(&record.id)?;
+        inherit_repo_binding(&mut record, existing.as_ref());
+        enrich_repo_binding(&mut record, enrich_repo);
         store.upsert_session(&record)?;
+        let last_seq = store.last_event_seq_for_session(&record.id)?;
         let flush_ms = record.ended_at_ms.unwrap_or(record.started_at_ms);
-        for ev in events {
-            store.append_event_with_sync(&ev, sync_ctx)?;
-        }
-        if record.status == crate::core::event::SessionStatus::Done {
-            store.flush_projector_session(&record.id, flush_ms)?;
-        }
+        let unseen = events
+            .into_iter()
+            .filter(|event| last_seq.is_none_or(|seq| event.seq > seq))
+            .collect::<Vec<_>>();
+        let flush = (record.status == crate::core::event::SessionStatus::Done).then_some(flush_ms);
+        stats.events_upserted += store.append_scanned_event_batch(&unseen, sync_ctx, flush)? as u64;
     }
     Ok(stats)
+}
+
+fn inherit_repo_binding(record: &mut SessionRecord, existing: Option<&SessionRecord>) {
+    let Some(existing) = existing else { return };
+    record.start_commit = record
+        .start_commit
+        .take()
+        .or_else(|| existing.start_commit.clone());
+    record.end_commit = record
+        .end_commit
+        .take()
+        .or_else(|| existing.end_commit.clone());
+    record.branch = record.branch.take().or_else(|| existing.branch.clone());
+    record.dirty_start = record.dirty_start.or(existing.dirty_start);
+    record.dirty_end = record.dirty_end.or(existing.dirty_end);
+    record.repo_binding_source = record
+        .repo_binding_source
+        .take()
+        .or_else(|| existing.repo_binding_source.clone());
+}
+
+fn enrich_repo_binding(record: &mut SessionRecord, enabled: bool) {
+    if !enabled || record.start_commit.is_some() || record.workspace.is_empty() {
+        return;
+    }
+    let binding = crate::core::repo::binding_for_session(
+        Path::new(&record.workspace),
+        record.started_at_ms,
+        record.ended_at_ms,
+    );
+    record.start_commit = binding.start_commit;
+    record.end_commit = binding.end_commit;
+    record.branch = binding.branch;
+    record.dirty_start = binding.dirty_start;
+    record.dirty_end = binding.dirty_end;
+    record.repo_binding_source = binding.source;
 }
 
 pub(crate) fn collect_agent_dirs<F>(
@@ -905,14 +970,16 @@ where
     if !dir.exists() {
         return Ok(Vec::new());
     }
+    let paths = std::fs::read_dir(dir)?
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_dir()))
+        .map(|entry| entry.path())
+        .collect();
     let mut out = Vec::new();
-    for entry in std::fs::read_dir(dir)?.filter_map(|e| e.ok()) {
-        if !entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
-            continue;
-        }
-        match scanner(&entry.path()) {
+    for path in crate::collect::tail::newest_paths(paths) {
+        match scanner(&path) {
             Ok(sessions) => out.extend(sessions),
-            Err(e) => tracing::warn!("scan {:?}: {e}", entry.path()),
+            Err(e) => tracing::warn!("scan {path:?}: {e}"),
         }
     }
     Ok(out)

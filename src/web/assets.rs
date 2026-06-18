@@ -118,6 +118,10 @@ mod tests {
             "id=\"detail-spans\"",
             "id=\"detail-files\"",
             "id=\"detail-tools\"",
+            "id=\"project-insights\"",
+            "id=\"insight-tools\"",
+            "id=\"insight-attention\"",
+            "id=\"insight-coverage\"",
             "id=\"developer-raw\"",
             "/assets/kaizen-tokens.css",
         ] {
@@ -127,12 +131,15 @@ mod tests {
             "kaizen_sessions_list",
             "all_workspaces",
             "visibilitychange",
-            "AUTO_REFRESH_MS",
+            "type: \"subscribe\"",
+            "message.type === \"changed\"",
+            "message.id !== state.snapshotPending",
             "Authorization required",
         ] {
             assert!(JS.contains(needle), "js missing {needle}");
         }
         assert!(!JS.contains("setInterval("));
+        assert!(RENDER_JS.contains("renderInsights"));
     }
 
     #[test]

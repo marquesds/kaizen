@@ -7,12 +7,13 @@ use anyhow::{Context, Result};
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
+use tantivy::indexer::IndexWriterOptions;
 use tantivy::schema::Term;
 use tantivy::{Index, IndexWriter, TantivyDocument, doc};
 
 const HEAP_BYTES: usize = 50_000_000;
-const BATCH_DOCS: usize = 1000;
-const BATCH_SECS: u64 = 1;
+const BATCH_DOCS: usize = 256;
+const BATCH_SECS: u64 = 60;
 
 pub struct PendingWriter {
     writer: IndexWriter<TantivyDocument>,
@@ -29,7 +30,7 @@ impl PendingWriter {
         let lock = lock_file(&dir)?;
         let (schema, fields) = build_schema();
         let index = open_or_create(&dir, schema)?;
-        let writer = index.writer(HEAP_BYTES)?;
+        let writer = index.writer_with_options(writer_options())?;
         Ok(Self {
             writer,
             fields,
@@ -40,6 +41,9 @@ impl PendingWriter {
     }
 
     pub fn add(&mut self, doc: &SearchDoc) -> Result<()> {
+        if self.pending == 0 {
+            self.last_commit = Instant::now();
+        }
         self.writer.delete_term(Term::from_field_text(
             self.fields.event_key,
             &event_key(&doc.session_id, doc.seq),
@@ -87,6 +91,14 @@ impl PendingWriter {
     }
 }
 
+fn writer_options() -> IndexWriterOptions {
+    IndexWriterOptions::builder()
+        .memory_budget_per_thread(HEAP_BYTES)
+        .num_worker_threads(1)
+        .num_merge_threads(1)
+        .build()
+}
+
 pub fn delete_sessions(root: &Path, ids: &[String]) -> Result<()> {
     if ids.is_empty() {
         return Ok(());
@@ -129,3 +141,7 @@ fn reject_tree_symlinks(root: &Path) -> Result<()> {
 fn open_or_create(dir: &Path, schema: tantivy::schema::Schema) -> Result<Index> {
     Ok(Index::open_in_dir(dir).or_else(|_| Index::create_in_dir(dir, schema))?)
 }
+
+#[cfg(test)]
+#[path = "writer_tests.rs"]
+mod tests;

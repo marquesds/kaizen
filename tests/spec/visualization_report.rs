@@ -48,6 +48,38 @@ fn report_skips_activity_when_disabled() -> anyhow::Result<()> {
 }
 
 #[test]
+fn active_now_excludes_stale_open_sessions() -> anyhow::Result<()> {
+    let tmp = tempfile::tempdir()?;
+    let store = Store::open(&tmp.path().join("k.db"))?;
+    store.upsert_session(&session("active", SessionStatus::Running))?;
+    store.upsert_session(&session("stale", SessionStatus::Running))?;
+    store.append_event(&event_at("active", 0, 999_500))?;
+    store.append_event(&event_at("stale", 0, 1))?;
+    let mut query = query(None);
+    query.now_ms = 1_000_000;
+
+    let report = build_report(&store, query)?;
+
+    assert_eq!(report.totals.running_count, 1);
+    Ok(())
+}
+
+#[test]
+fn legacy_hook_spans_feed_tool_insights() -> anyhow::Result<()> {
+    let tmp = tempfile::tempdir()?;
+    let store = Store::open(&tmp.path().join("k.db"))?;
+    store.upsert_session(&session("legacy", SessionStatus::Done))?;
+    store.append_event(&legacy_hook("legacy", 0, "PreToolUse"))?;
+    store.append_event(&legacy_hook("legacy", 1, "PostToolUse"))?;
+
+    let report = build_report(&store, query(None))?;
+
+    assert_eq!(report.totals.tool_call_count, 1);
+    assert_eq!(report.sessions[0].top_tools, vec![("Read".into(), 1)]);
+    Ok(())
+}
+
+#[test]
 fn activity_bins_preserve_time_boundaries() -> anyhow::Result<()> {
     let tmp = tempfile::tempdir()?;
     let store = Store::open(&tmp.path().join("k.db"))?;
@@ -150,4 +182,14 @@ fn event_at(session_id: &str, seq: u64, ts_ms: u64) -> Event {
         system_prompt_tokens: None,
         payload: json!({"input": {"path": "src/lib.rs"}}),
     }
+}
+
+fn legacy_hook(session_id: &str, seq: u64, name: &str) -> Event {
+    let mut event = event_at(session_id, seq, 2_000 + seq);
+    event.kind = EventKind::Hook;
+    event.source = EventSource::Hook;
+    event.tool = None;
+    event.tool_call_id = Some("legacy-call".into());
+    event.payload = json!({"hook_event_name":name,"tool_name":"Read"});
+    event
 }

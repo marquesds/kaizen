@@ -19,7 +19,7 @@ Every command resolves a workspace through one of three mechanisms:
 opens each registered project database separately and merges results. See
 [machine-local registry](config.md#machine-local-registry).
 
-After a full transcript rescan, Kaizen may delete sessions older than
+After a transcript refresh, Kaizen may delete sessions older than
 `[retention].hot_days`, at most once per 24 hours. Set `hot_days = 0` to disable
 automatic pruning; use `kaizen gc` for explicit pruning.
 
@@ -93,8 +93,11 @@ kaizen sessions load --json
 ```
 
 Use `load` after installing or upgrading when existing sessions should appear
-in reports. Use `sessions list --refresh` when one read command should rescan
-before rendering.
+in reports. Claude, Codex, and Cursor imports consider at most 32 recent
+transcripts per source. Claude and Codex decode at most the latest 256 KiB of a
+growing JSONL file. `load` also enriches imported sessions with Git binding
+metadata. Use `sessions list --refresh` to ingest recently changed tails before
+one read.
 
 ## `kaizen outcomes`
 
