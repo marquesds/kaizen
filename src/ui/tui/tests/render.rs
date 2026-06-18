@@ -59,6 +59,13 @@ fn help_keeps_keyboard_parity() {
 }
 
 #[test]
+fn filter_prompt_names_prefix_matching() {
+    let mut app = App::test();
+    app.filter_mode = true;
+    assert!(screen(&app).contains("type agent prefix"));
+}
+
+#[test]
 fn event_details_use_plain_labels() {
     let mut event = event("session-1", 7);
     event.tokens_in = Some(3);

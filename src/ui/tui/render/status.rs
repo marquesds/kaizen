@@ -19,7 +19,7 @@ fn status_text(app: &App) -> String {
     }
     if app.filter_mode {
         return format!(
-            "FILTER  type agent substring  |  Enter apply  |  Esc cancel  |  buffer: {}",
+            "FILTER  type agent prefix  |  Enter apply  |  Esc cancel  |  buffer: {}",
             app.filter_buf
         );
     }
