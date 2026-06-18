@@ -17,6 +17,8 @@ glossary. For a **guided tour** with exercises, start at [tutorial/README.md](tu
 | [telemetry-journey.md](telemetry-journey.md) | How agent sessions map to data (ingest → events → facts) |
 | [tutorial/README.md](tutorial/README.md) | Hands-on tutorial (all major features + exercises) |
 | [usage.md](usage.md) | CLI reference index |
+| [web.md](web.md) | Read-only local dashboard, auth, limits, troubleshooting |
+| [tui.md](tui.md) | Terminal UI controls, bounded loading, troubleshooting |
 | [mcp.md](mcp.md) | MCP stdio server (agent hosts; most commands as tools) |
 | [daemon.md](daemon.md) | Local daemon lifecycle and direct-mode fallback |
 | [llm-proxy.md](llm-proxy.md) | Local HTTP forwarder for LLM APIs (Anthropic) |

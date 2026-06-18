@@ -45,7 +45,7 @@ Optional: enable **[collect.outcomes]** and **[collect.system_sampler]** in conf
 ## Parts
 
 1. [Setup: install, init, doctor](01-setup.md)
-2. [Observe: sessions, summary, TUI](02-observe.md)
+2. [Observe: Web, sessions, summary, TUI](02-observe.md)
 3. [Interpret: insights and guidance](03-insights-guidance.md)
 4. [Repo intelligence: metrics and refresh](04-metrics.md)
 5. [Improve: retro](05-retro.md)

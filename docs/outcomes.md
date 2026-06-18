@@ -1,4 +1,4 @@
-# Session outcomes (Tier C)
+# Session outcomes
 
 Opt-in **post-stop** snapshots: after a `Stop` hook, kaizen can spawn a detached `kaizen outcomes measure` that runs your test (and optional lint) command in the session workspace and stores one row in `session_outcomes`.
 
@@ -21,7 +21,9 @@ Merge rules: [config.md](config.md) (`[collect.outcomes]`).
 
 1. Ingest appends the `Stop` event and returns quickly.
 2. A child process runs `outcomes measure --workspace <path> --session <id>`.
-3. The child opens `.kaizen/kaizen.db`, loads the session, runs commands under `session.workspace`, then `upsert_session_outcome`.
+3. The child opens the workspace database under
+   `$KAIZEN_HOME/projects/<slug>/kaizen.db`, loads the session, runs commands
+   under `session.workspace`, then stores the outcome.
 
 Invariants are modeled in [`specs/session-outcome.qnt`](../specs/session-outcome.qnt) (measurement only after the session is stopped; terminal state).
 

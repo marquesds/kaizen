@@ -109,6 +109,8 @@ Kaizen is a local feedback loop with a dashboard, TUI, and CLI:
 | [docs/install.md](docs/install.md) | Install, build from source, uninstall |
 | [docs/tutorial/README.md](docs/tutorial/README.md) | Hands-on tutorial |
 | [docs/usage.md](docs/usage.md) | CLI reference index |
+| [docs/web.md](docs/web.md) | Local Web dashboard |
+| [docs/tui.md](docs/tui.md) | Terminal UI controls |
 | [docs/concepts.md](docs/concepts.md) | Sessions, events, retro, experiments |
 | [docs/retro.md](docs/retro.md) | Heuristic retro engine |
 | [docs/experiments.md](docs/experiments.md) | A/B experiment workflow |

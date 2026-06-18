@@ -1,4 +1,4 @@
-# Part 2 — Observe: sessions, summary, TUI
+# Part 2 — Observe: Web, sessions, summary, TUI
 
 ## Cache-first reads
 
@@ -64,7 +64,19 @@ kaizen summary --source provider --refresh
 
 Details and limitations (what merges vs stays local) follow the same story as [Part 3](03-insights-guidance.md), [Part 4](04-metrics.md), and [Part 7](07-proxy-sync-telemetry.md).
 
-## Live session browser
+## Live interfaces
+
+For a browser view, run:
+
+```bash
+kaizen open
+```
+
+The read-only dashboard shows project totals, recent sessions, and bounded
+detail for the selected session. See [Web dashboard](../web.md) for its data
+limits, local token authentication, and troubleshooting.
+
+For a keyboard-driven terminal view, run:
 
 ```bash
 kaizen tui
@@ -75,6 +87,7 @@ This is the richest **interactive** way to explore turns and tools. It is **not*
 The TUI loads only the visible session and event rows, then fetches more as you
 scroll. Agent filtering uses a case-insensitive prefix and runs in SQLite, so
 large workspaces stay responsive instead of loading every session into memory.
+Press `?` for the complete key map, or see [Terminal UI](../tui.md).
 
 ## Machine-wide aggregation (optional)
 
@@ -91,7 +104,8 @@ Kaizen merges databases for workspaces listed in the machine registry (`~/.kaize
 
 1. With an empty store, run `sessions list` — expect no rows or only old data until you have ingested sessions.
 2. After one agent run in the wired repo, run `sessions list` again (add `--refresh` if you know the transcript just rotated).
-3. Open `kaizen tui`, pick a session, and watch how detail differs from `sessions show`.
-4. If you later enable sync + a query provider, try `summary --source mixed` once and compare to plain `summary`.
+3. Open `kaizen open`, pick a session, and inspect its bounded event and span detail.
+4. Open `kaizen tui`, press `?`, and compare its keyboard workflow with the Web dashboard.
+5. If you later enable sync + a query provider, try `summary --source mixed` once and compare to plain `summary`.
 
 **Next:** [Part 3 — Insights and guidance](03-insights-guidance.md)

@@ -133,12 +133,14 @@ The index command rebuilds the repository snapshot and GraphQLite sidecar.
 ## `kaizen tui`
 
 Starts the Ratatui live session browser with list, detail, tree, and live-tail
-views.
+views. See [tui.md](tui.md) for controls, loading behavior, and troubleshooting.
 
 ## `kaizen open`
 
 Starts the local daemon when needed and opens the read-only Web dashboard.
 Use `--no-browser` when another process will open the printed URL.
+See [web.md](web.md) for dashboard contents, limits, local authentication, and
+troubleshooting.
 
 ## `kaizen retro`
 

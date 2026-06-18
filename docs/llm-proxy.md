@@ -25,7 +25,9 @@ around the same daemon proxy endpoints. It injects `KAIZEN_SESSION_KEY`,
 
 ## Manual proxy
 
-1. Start the proxy in a workspace (creates/uses `.kaizen/kaizen.db` there):
+1. Start the proxy in a workspace. It uses that workspace's database under
+   `$KAIZEN_HOME/projects/<slug>/kaizen.db` (normally
+   `~/.kaizen/projects/<slug>/kaizen.db`):
 
    ```bash
    kaizen proxy run
