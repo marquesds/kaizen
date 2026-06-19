@@ -22,8 +22,20 @@ const CONFIG_TOML: &str = r#"[kaizen]
 const KAIZEN_RETRO_SKILL: &str = include_str!("../../assets/kaizen-retro-SKILL.md");
 const KAIZEN_EVAL_SKILL: &str = include_str!("../../assets/kaizen-eval-SKILL.md");
 
-const CURSOR_HOOK_EVENTS: &[&str] = &["SessionStart", "PreToolUse", "PostToolUse", "Stop"];
-const CLAUDE_HOOK_EVENTS: &[&str] = &["SessionStart", "PreToolUse", "PostToolUse", "Stop"];
+const CURSOR_HOOK_EVENTS: &[&str] = &[
+    "SessionStart",
+    "UserPromptSubmit",
+    "PreToolUse",
+    "PostToolUse",
+    "Stop",
+];
+const CLAUDE_HOOK_EVENTS: &[&str] = &[
+    "SessionStart",
+    "UserPromptSubmit",
+    "PreToolUse",
+    "PostToolUse",
+    "Stop",
+];
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct InitOptions {

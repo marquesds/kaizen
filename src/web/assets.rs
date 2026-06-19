@@ -61,7 +61,7 @@ fn content(kind: &'static str, body: &'static str) -> impl IntoResponse {
 
 #[cfg(test)]
 mod tests {
-    use super::{CSS, INDEX, JS, RAW_JS, RENDER_JS, TOKENS};
+    use super::{CSS, DETAIL_JS, FORMAT_JS, INDEX, JS, RAW_JS, RENDER_JS, TOKENS};
 
     #[test]
     fn web_assets_do_not_seed_fixture_values() {
@@ -118,6 +118,7 @@ mod tests {
             "id=\"detail-spans\"",
             "id=\"detail-files\"",
             "id=\"detail-tools\"",
+            "id=\"detail-prompt\"",
             "id=\"project-insights\"",
             "id=\"insight-tools\"",
             "id=\"insight-attention\"",
@@ -139,7 +140,13 @@ mod tests {
             assert!(JS.contains(needle), "js missing {needle}");
         }
         assert!(!JS.contains("setInterval("));
+        assert!(!INDEX.contains("See what your coding agents are doing."));
+        assert!(!INDEX.contains("page-heading"));
         assert!(RENDER_JS.contains("renderInsights"));
+        assert!(RENDER_JS.contains("topCommands(report?.selected?.events"));
+        assert!(RENDER_JS.contains("top commands in selected session"));
+        assert!(FORMAT_JS.contains("No completion event received"));
+        assert!(DETAIL_JS.contains("event.payload?.summary"));
     }
 
     #[test]

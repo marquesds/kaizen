@@ -1,4 +1,4 @@
-import { clock, count, dateTime, duration, label, money, shortId } from "./kaizen-format.js";
+import { clock, count, dateTime, duration, label, money, shortId, statusExplanation, statusLabel } from "./kaizen-format.js";
 
 const $ = selector => document.querySelector(selector);
 const MAX_ITEMS = 40;
@@ -9,6 +9,7 @@ export function renderDetail(report) {
   if (!detail) return renderEmpty();
   $("#selected-session").textContent = shortId(detail.session.id);
   $("#detail-facts").replaceChildren(...facts(detail.session, summary));
+  renderPrompt(detail.prompt);
   renderEvents(detail.events || []);
   renderSpans(detail.spans || []);
   renderSimple("#detail-files", detail.files || [], "No files recorded.");
@@ -18,6 +19,7 @@ export function renderDetail(report) {
 function renderEmpty() {
   $("#selected-session").textContent = "No session selected";
   $("#detail-facts").replaceChildren(...fact("Status", "Waiting for data"));
+  renderPrompt(null);
   renderSimple("#detail-events", [], "No events available.");
   renderSimple("#detail-spans", [], "No spans available.");
   renderSimple("#detail-files", [], "No files recorded.");
@@ -25,15 +27,21 @@ function renderEmpty() {
 }
 
 function facts(session, summary) {
+  const status = summary?.status || String(session.status).toLowerCase();
   return [
     ...fact("Agent", label(session.agent)),
     ...fact("Model", session.model || "Unknown"),
     ...fact("Started", dateTime(session.started_at_ms)),
     ...fact("Duration", duration(session.started_at_ms, session.ended_at_ms)),
-    ...fact("Status", label(summary?.status || session.status)),
+    ...fact("Status", statusLabel(status)),
+    ...(statusExplanation(status) ? fact("Status note", statusExplanation(status)) : []),
     ...fact("Cost", money(summary?.cost_usd_e6)),
     ...fact("Errors", count(summary?.error_count)),
   ];
+}
+
+function renderPrompt(prompt) {
+  $("#detail-prompt").textContent = prompt || "Prompt unavailable for this session.";
 }
 
 function fact(name, value) {
@@ -49,6 +57,7 @@ function eventRow(event) {
   const row = node("li");
   row.append(node("time", clock(event.ts_ms)), node("strong", label(event.kind)));
   row.append(node("span", event.tool || label(event.source)));
+  if (event.payload?.summary) row.append(node("code", event.payload.summary));
   return row;
 }
 
@@ -63,7 +72,8 @@ function spanRow(entry) {
   row.className = "span-row";
   row.style.setProperty("--depth", entry.depth);
   row.append(node("strong", span.tool || "Unknown tool"));
-  row.append(node("span", `${label(span.status)} | ${span.lead_time_ms || 0} ms`));
+  const status = String(span.status || "").toLowerCase() === "orphaned" ? "No result event" : label(span.status);
+  row.append(node("span", `${status} | ${span.lead_time_ms || 0} ms`));
   return row;
 }
 

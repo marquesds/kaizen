@@ -8,6 +8,7 @@ use anyhow::Result;
 use serde_json::Value;
 use std::path::PathBuf;
 
+mod identity;
 mod prompt_change;
 mod sidecars;
 #[cfg(test)]
@@ -94,6 +95,7 @@ pub(crate) fn ingest_hook_with_store(
     };
     let mut event = event;
     event.ts_ms = ts;
+    let identity = identity::from_payload(source, &event.payload);
     let seq = store.next_event_seq(&event.session_id)?;
     let ev = collect::hooks::normalize::hook_to_event(&event, seq);
     if let Some(status) = collect::hooks::normalize::hook_to_status(&event.kind) {
@@ -107,13 +109,13 @@ pub(crate) fn ingest_hook_with_store(
             let env = session_env_fields(&event.payload);
             let record = SessionRecord {
                 id: event.session_id.clone(),
-                agent: source.agent().to_string(),
-                model,
+                agent: identity.agent.clone(),
+                model: identity.model.clone().or(model),
                 workspace: ws.to_string_lossy().to_string(),
                 started_at_ms: event.ts_ms,
                 ended_at_ms: None,
                 status: status.clone(),
-                trace_path: String::new(),
+                trace_path: identity.trace_path.clone().unwrap_or_default(),
                 start_commit: None,
                 end_commit: None,
                 branch: None,
@@ -132,7 +134,7 @@ pub(crate) fn ingest_hook_with_store(
         } else {
             store.ensure_session_stub(
                 &event.session_id,
-                source.agent(),
+                &identity.agent,
                 &ws.to_string_lossy(),
                 event.ts_ms,
             )?;
@@ -151,11 +153,17 @@ pub(crate) fn ingest_hook_with_store(
     } else {
         store.ensure_session_stub(
             &event.session_id,
-            source.agent(),
+            &identity.agent,
             &ws.to_string_lossy(),
             event.ts_ms,
         )?;
     }
+    store.enrich_session_identity(
+        &event.session_id,
+        identity.agent_update.as_deref(),
+        identity.model.as_deref(),
+        identity.trace_path.as_deref(),
+    )?;
     store.append_event_with_sync(&ev, sync_ctx.as_ref())?;
     if matches!(event.kind, collect::hooks::EventKind::Stop) {
         store.flush_search()?;

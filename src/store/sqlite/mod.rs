@@ -76,6 +76,7 @@ mod reports;
 mod rows;
 mod samples;
 mod schema;
+mod session_identity;
 mod session_read;
 mod session_window;
 mod sessions;
@@ -134,6 +135,7 @@ impl Store {
                 conn.execute_batch(sql)?;
             }
             schema::ensure_schema_columns(&conn)?;
+            session_identity::backfill(&conn)?;
             outbox_migration::migrate(&conn, path.parent().unwrap_or_else(|| Path::new(".")))?;
         }
         let root = path

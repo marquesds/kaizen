@@ -36,8 +36,8 @@ Idempotent workspace setup:
 | Artifact | Action |
 |---|---|
 | `~/.kaizen/projects/<slug>/config.toml` | Created if missing. |
-| `~/.cursor/hooks.json` | Patched for Cursor lifecycle hooks. |
-| `~/.claude/settings.json` | Patched for Claude Code lifecycle hooks. |
+| `~/.cursor/hooks.json` | Patched for Cursor lifecycle, prompt, and tool hooks. |
+| `~/.claude/settings.json` | Patched for Claude Code lifecycle, prompt, and tool hooks. |
 | `~/.openclaw/hooks/kaizen-events/handler.ts` | Written for OpenClaw events. |
 | `~/.cursor/skills/kaizen-retro/SKILL.md` | Written unless already replaced. |
 | `~/.cursor/skills/kaizen-eval/SKILL.md` | Written unless already replaced. |

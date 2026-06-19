@@ -26,16 +26,21 @@ The dashboard provides:
 - automatic selection of the most recently active valid project, plus a manual
   local-path fallback;
 - session, active-session, error, and cost totals;
-- project-level tool, attention, and telemetry-coverage insights;
+- project-level tool, attention, and telemetry-coverage insights; Tool Pattern
+  lists the selected session's three most frequent recent shell commands;
 - the latest 30 sessions for the selected project;
-- selected-session facts, recent events, nested tool spans, touched files, and
-  top tools;
+- selected-session prompt, facts, recent events with bounded command details,
+  nested tool spans, touched files, and top tools;
 - the exact bounded report under **Developer details**.
 
 Selected-session detail is capped at 40 events, 40 spans, and 40 files. Those
 limits keep refresh latency and memory use predictable. The server watches the
 selected project's SQLite database and WAL; a committed change requests a new
 snapshot within one second. **Refresh now** remains available for manual checks.
+
+`No completion` means Kaizen received activity but no final session event for
+at least 30 minutes. It does not mean the work failed. Models and prompts remain
+`Unknown` or unavailable when no captured source provides them.
 
 Web is an Observe-only surface. It cannot mutate experiments, guidance, sync,
 configuration, or local data. Use the CLI or MCP for those workflows.
@@ -45,6 +50,10 @@ configuration, or local data. Use the CLI or MCP for those workflows.
 The server binds to loopback. Data calls use an authenticated WebSocket, and the
 token is included in the URL printed by Kaizen. Treat that URL as a local secret:
 do not paste it into issues, chat, or logs.
+
+Prompts and command summaries can contain source code or secrets. They stay in
+the authenticated loopback response and are never added to static assets. Raw
+event payloads remain omitted.
 
 Kaizen stores the restart-stable token in
 `$KAIZEN_HOME/web_token.hex` (normally `~/.kaizen/web_token.hex`) with mode

@@ -101,6 +101,7 @@ fn selected_detail(
     let id = session.id.clone();
     Ok(Some(TraceDetail {
         session,
+        prompt: None,
         events: store.list_latest_events_for_session(&id, query.limits.selected_events)?,
         spans: store.limited_session_span_tree(&id, query.limits.selected_spans)?,
         files: store.limited_files_for_session(&id, query.limits.selected_files)?,

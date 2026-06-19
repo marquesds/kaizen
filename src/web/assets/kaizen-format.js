@@ -47,3 +47,43 @@ export function statusTone(status) {
   if (status === "active" || status === "done") return "ready";
   return "neutral";
 }
+
+export function statusLabel(status) {
+  return status === "orphaned" ? "No completion" : label(status);
+}
+
+export function statusExplanation(status) {
+  if (status === "orphaned") return "No completion event received for 30+ minutes.";
+  return "";
+}
+
+const SHELL_TOOLS = new Set(["bash", "shell", "exec_command", "run_terminal_cmd", "terminal"]);
+const SHELL_WRAPPERS = new Set(["command", "env", "exec", "nohup", "sudo", "time"]);
+const SHELL_NOISE = new Set(["cd", "export", "set", "source"]);
+const QUOTED_ARGUMENT = /'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"/g;
+
+export function topCommands(events) {
+  const counts = (events || []).filter(shellCall).flatMap(commandNames).reduce(addCommand, new Map());
+  return [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 3);
+}
+
+function shellCall(event) {
+  return SHELL_TOOLS.has(String(event.tool || "").toLowerCase()) && event.payload?.summary;
+}
+
+function commandNames(event) {
+  const shell = event.payload.summary.replace(QUOTED_ARGUMENT, "");
+  return shell.split(/&&|\|\||[;|\n]/).map(commandName).filter(Boolean);
+}
+
+function commandName(segment) {
+  const words = segment.trim().split(/\s+/);
+  const word = words.find(item => item && !item.includes("=") && !item.startsWith("-") && !SHELL_WRAPPERS.has(item));
+  const command = word?.replace(/^['"]|['"]$/g, "").split("/").pop() || "";
+  return SHELL_NOISE.has(command) ? "" : command;
+}
+
+function addCommand(counts, command) {
+  counts.set(command, (counts.get(command) || 0) + 1);
+  return counts;
+}

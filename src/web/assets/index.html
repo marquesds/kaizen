@@ -23,11 +23,7 @@
   </header>
 
   <main id="observe-screen" aria-busy="true">
-    <section class="page-heading" aria-labelledby="page-title">
-      <p class="kicker">Local agent field notes</p>
-      <h1 id="page-title">See what your coding agents are doing.</h1>
-      <p>Review recent work, cost, errors, tools, and touched files without reading raw traces.</p>
-    </section>
+    <h1 class="visually-hidden">Kaizen Observe</h1>
 
     <section class="project-controls" aria-labelledby="project-title">
       <div class="control-field">
@@ -141,6 +137,10 @@
           <span id="selected-session">Waiting for a session</span>
         </header>
         <dl id="detail-facts" class="detail-facts"></dl>
+        <section class="detail-block" aria-labelledby="prompt-title">
+          <h3 id="prompt-title">Prompt</h3>
+          <p id="detail-prompt" class="prompt-text">No prompt captured.</p>
+        </section>
         <section class="detail-block" aria-labelledby="events-title">
           <h3 id="events-title">Recent events</h3>
           <ol id="detail-events" class="detail-list"></ol>

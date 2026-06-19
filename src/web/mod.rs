@@ -2,8 +2,10 @@
 //! Local daemon web app: embedded UI plus WebSocket tool calls.
 
 mod assets;
+mod event_display;
 pub mod features;
 mod live;
+mod prompt_cache;
 mod server;
 mod snapshot;
 mod token;

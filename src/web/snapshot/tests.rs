@@ -21,6 +21,27 @@ fn compact_report_strips_web_payload() {
 }
 
 #[test]
+fn compact_report_keeps_prompt_and_command_summary() {
+    let mut report = report();
+    let detail = report.selected.as_mut().unwrap();
+    detail.events[0].kind = EventKind::Lifecycle;
+    detail.events[0].payload = json!({"type":"user_prompt_submit","prompt":"Fix the parser"});
+    detail.events[1].kind = EventKind::ToolCall;
+    detail.events[1].tool = Some("Bash".into());
+    detail.events[1].payload = json!({"tool_input":{"command":"rg parser src"}});
+    compact_report(&mut report);
+    let value = serde_json::to_value(report).unwrap();
+    assert_eq!(
+        value.pointer("/selected/prompt"),
+        Some(&json!("Fix the parser"))
+    );
+    assert_eq!(
+        value.pointer("/selected/events/1/payload/summary"),
+        Some(&json!("rg parser src"))
+    );
+}
+
+#[test]
 fn missing_workspace_does_not_create_project_state() {
     let _guard = test_lock::global().lock().unwrap();
     let temp = tempfile::tempdir().unwrap();
@@ -61,6 +82,7 @@ fn report() -> VisualizationReport {
         sessions: (0..31).map(|n| summary(&format!("s{n}"))).collect(),
         selected: Some(TraceDetail {
             session,
+            prompt: None,
             events: (0..41).map(event).collect(),
             spans: Vec::new(),
             files: Vec::new(),
