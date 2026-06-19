@@ -89,6 +89,8 @@ pub struct TraceSummary {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TraceDetail {
     pub session: SessionRecord,
+    #[serde(default)]
+    pub prompt: Option<String>,
     pub events: Vec<Event>,
     pub spans: Vec<SpanNode>,
     pub files: Vec<String>,

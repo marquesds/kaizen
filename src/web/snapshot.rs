@@ -118,10 +118,7 @@ fn compact_report(report: &mut VisualizationReport) {
     let Some(detail) = report.selected.as_mut() else {
         return;
     };
-    detail
-        .events
-        .iter_mut()
-        .for_each(|event| event.payload = serde_json::Value::Null);
+    super::event_display::prepare(detail);
 }
 
 #[cfg(test)]

@@ -70,3 +70,32 @@ fn post_tool_use_without_session_start_auto_provisions_stub() {
     assert_eq!(rows[0].agent, "cursor");
     assert_eq!(rows[0].id, "s-stub");
 }
+
+#[test]
+fn claude_hook_with_codex_evidence_records_codex_identity() {
+    let _guard = test_lock::global().lock().unwrap();
+    let (_home, workspace) = setup_ws();
+    let payload = r#"{"hook_event_name":"SessionStart","session_id":"s-codex","turn_id":"t1","model":"gpt-5.4","transcript_path":"/tmp/.codex/sessions/s.jsonl"}"#;
+    ingest_hook_text(IngestSource::Claude, payload, Some(workspace.path().into())).unwrap();
+    let row = sessions(&workspace).remove(0);
+    unsafe { std::env::remove_var("KAIZEN_HOME") };
+    assert_eq!(row.agent, "codex");
+    assert_eq!(row.model.as_deref(), Some("gpt-5.4"));
+    assert_eq!(row.trace_path, "/tmp/.codex/sessions/s.jsonl");
+}
+
+#[test]
+fn later_hook_enriches_missing_model() {
+    let _guard = test_lock::global().lock().unwrap();
+    let (_home, workspace) = setup_ws();
+    let start = r#"{"hook_event_name":"SessionStart","session_id":"s-model"}"#;
+    ingest_hook_text(IngestSource::Claude, start, Some(workspace.path().into())).unwrap();
+    let call = r#"{"hook_event_name":"PreToolUse","session_id":"s-model","turn_id":"t1","model":"kindle-alpha","tool_name":"Bash"}"#;
+    ingest_hook_text(IngestSource::Claude, call, Some(workspace.path().into())).unwrap();
+    let result = r#"{"hook_event_name":"PostToolUse","session_id":"s-model","tool_name":"Bash"}"#;
+    ingest_hook_text(IngestSource::Claude, result, Some(workspace.path().into())).unwrap();
+    let row = sessions(&workspace).remove(0);
+    unsafe { std::env::remove_var("KAIZEN_HOME") };
+    assert_eq!(row.agent, "codex");
+    assert_eq!(row.model.as_deref(), Some("kindle-alpha"));
+}

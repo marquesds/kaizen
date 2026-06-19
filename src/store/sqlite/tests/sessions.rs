@@ -1,5 +1,6 @@
 use super::super::{SessionFilter, Store};
-use super::{SessionStatus, make_session};
+use super::{SessionStatus, make_event, make_session};
+use serde_json::json;
 use tempfile::TempDir;
 
 #[test]
@@ -118,4 +119,29 @@ fn update_session_status_changes_status() {
         .unwrap();
     let got = store.get_session("s6").unwrap().unwrap();
     assert_eq!(got.status, SessionStatus::Running);
+}
+
+#[test]
+fn reopen_repairs_historical_codex_identity_and_model() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("kaizen.db");
+    let store = Store::open(&path).unwrap();
+    let mut session = make_session("legacy-codex");
+    session.agent = "claude".into();
+    session.model = None;
+    session.trace_path.clear();
+    store.upsert_session(&session).unwrap();
+    let mut event = make_event("legacy-codex", 0);
+    event.payload = json!({"turn_id":"t1","model":"gpt-5.4","transcript_path":"/home/u/.codex/sessions/s.jsonl"});
+    store.append_event(&event).unwrap();
+    drop(store);
+
+    let repaired = Store::open(&path)
+        .unwrap()
+        .get_session("legacy-codex")
+        .unwrap()
+        .unwrap();
+    assert_eq!(repaired.agent, "codex");
+    assert_eq!(repaired.model.as_deref(), Some("gpt-5.4"));
+    assert_eq!(repaired.trace_path, "/home/u/.codex/sessions/s.jsonl");
 }

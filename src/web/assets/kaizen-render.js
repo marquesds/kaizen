@@ -1,5 +1,5 @@
 import { renderDetail } from "./kaizen-detail.js";
-import { count, dateTime, label, money, shortId, statusTone } from "./kaizen-format.js";
+import { count, dateTime, label, money, shortId, statusLabel, statusTone, topCommands } from "./kaizen-format.js";
 
 const $ = selector => document.querySelector(selector);
 const MAX_SESSION_ROWS = 30;
@@ -51,12 +51,20 @@ export function renderReport(report) {
 
 function renderInsights(report) {
   const sessions = report?.sessions || [];
-  const [tool, calls] = topTool(sessions);
   const attention = sessions.filter(row => ["errored", "orphaned"].includes(row.status)).length;
   const quality = report?.quality || {};
-  setInsight("tools", tool ? `${label(tool)} leads` : "No tool calls yet", tool ? `${count(calls)} calls in visible sessions` : "Live tool use appears here.");
-  setInsight("attention", attention ? `${count(attention)} need attention` : "No recent warnings", `${count(sessions.length)} visible sessions checked`);
+  renderToolInsight(report, sessions);
+  setInsight("attention", attention ? `${count(attention)} need attention` : "No recent warnings", `${count(sessions.length)} checked; includes errors and missing completion events`);
   setInsight("coverage", `${percent(quality.token_coverage_pct)} token coverage`, `${percent(quality.cost_coverage_pct)} cost coverage`);
+}
+
+function renderToolInsight(report, sessions) {
+  const [tool, calls] = topTool(sessions);
+  const commands = topCommands(report?.selected?.events || []);
+  const names = commands.map(([name]) => name).join(" · ");
+  const total = commands.reduce((sum, [, value]) => sum + value, 0);
+  const note = names ? `${count(total)} calls across top commands in selected session; ${label(tool)} leads visible tools` : `${count(calls)} calls in visible sessions`;
+  setInsight("tools", names || (tool ? `${label(tool)} leads` : "No tool calls yet"), note);
 }
 
 function topTool(sessions) {
@@ -141,7 +149,7 @@ function identity(session) {
 }
 
 function status(session) {
-  const node = element("span", "status-label", label(session.status));
+  const node = element("span", "status-label", statusLabel(session.status));
   node.dataset.tone = statusTone(session.status);
   node.title = session.status_reason || "";
   return node;

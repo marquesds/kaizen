@@ -92,6 +92,21 @@ impl Store {
         Ok(())
     }
 
+    pub fn enrich_session_identity(
+        &self,
+        id: &str,
+        agent: Option<&str>,
+        model: Option<&str>,
+        trace_path: Option<&str>,
+    ) -> Result<()> {
+        self.conn.execute(
+            "UPDATE sessions SET agent = COALESCE(?2, agent), model = COALESCE(?3, model),
+             trace_path = CASE WHEN COALESCE(?4, '') = '' THEN trace_path ELSE ?4 END WHERE id = ?1",
+            params![id, agent, model, trace_path],
+        )?;
+        Ok(())
+    }
+
     /// Update only status for existing session.
     pub fn update_session_status(&self, id: &str, status: SessionStatus) -> Result<()> {
         self.conn.execute(
