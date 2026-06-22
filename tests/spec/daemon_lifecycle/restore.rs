@@ -111,8 +111,22 @@ fn assert_failure_visible(daemon: &TestDaemon, bad: &std::path::Path) {
     assert!(status.contains(daemon.workspace_str()), "{status}");
     assert!(status.contains(bad.to_str().unwrap()), "{status}");
     assert!(status.contains("errors: transcript-scanner:"), "{status}");
-    let log = std::fs::read_to_string(daemon.home().join(".kaizen/daemon.log")).unwrap();
-    assert!(log.contains("daemon scanner failed"), "{log}");
+    assert_log_eventually_contains(
+        &daemon.home().join(".kaizen/daemon.log"),
+        "daemon scanner failed",
+    );
+}
+
+fn assert_log_eventually_contains(path: &std::path::Path, needle: &str) {
+    let deadline = Instant::now() + Duration::from_secs(2);
+    loop {
+        let log = std::fs::read_to_string(path).unwrap_or_default();
+        if log.contains(needle) {
+            return;
+        }
+        assert!(Instant::now() < deadline, "{log}");
+        thread::sleep(Duration::from_millis(10));
+    }
 }
 
 fn assert_recovered(daemon: &TestDaemon) {
