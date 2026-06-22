@@ -12,6 +12,7 @@ Kaizen can run a local daemon so one process owns store writes.
 | `kaizen daemon start --background` | Spawn daemon, wait until ready, print pid/socket/log/web, exit |
 | `kaizen daemon status` | Print `status: running` plus pid/uptime/queue/error/capture/web, or `status: stopped` plus socket path |
 | `kaizen daemon stop` | Request graceful daemon shutdown |
+| `kaizen daemon restart` | Gracefully stop when running, then start in background and restore registered workspace capture |
 | `--no-daemon` or `KAIZEN_DAEMON=0` | Use direct SQLite mode |
 
 Runtime files live under `$KAIZEN_HOME` or `~/.kaizen`:
@@ -58,3 +59,7 @@ remains compiled and supported for CI, smoke tests, and debugging.
 workspace scanner loop and records capture health for `daemon status`. `kaizen
 init --deep` also asks for provider proxy endpoints; unsupported agent config
 rewrites stay fail-open and are reported as partial deep capture.
+
+Daemon startup restores basic capture for every existing registered workspace.
+Use `kaizen daemon restart` after daemon upgrades; existing SQLite sessions stay
+available while transcript scanning resumes immediately.

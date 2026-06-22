@@ -23,5 +23,6 @@ pub use sqlite::SessionFilter;
 pub use sqlite::SessionOutcomeRow;
 pub use sqlite::SessionPage;
 pub use sqlite::SessionSampleAgg;
+pub(crate) use sqlite::SessionSearchQuery;
 pub use sqlite::Store;
 pub use sqlite::SummaryStats;

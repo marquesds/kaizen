@@ -1,39 +1,12 @@
+use super::session_search::{self, SessionRowsPage, SessionSearchQuery};
 use super::{SessionSummaryRead, TokenRead};
 use crate::store::Store;
-use crate::visualization::{TokenTotals, TraceSummary, derive_status};
+use crate::visualization::{SessionPageMeta, TokenTotals, TraceSummary, derive_status};
 use anyhow::Result;
-use rusqlite::params;
+use rusqlite::params_from_iter;
 use std::collections::HashMap;
 
-const SUMMARIES_SQL: &str = "
-WITH recent AS MATERIALIZED (
- SELECT id, agent, model, workspace, started_at_ms, ended_at_ms,
-  status, trace_path, start_commit, end_commit, branch, dirty_start, dirty_end,
-  repo_binding_source, prompt_fingerprint, parent_session_id, agent_version, os, arch,
-  repo_file_count, repo_total_loc FROM sessions WHERE workspace = ?1
- ORDER BY started_at_ms DESC, id ASC LIMIT ?2
-), rollup AS (
- SELECT e.session_id, MAX(e.ts_ms) last_event_ms, COUNT(*) event_count,
-  SUM(e.kind = 'Error') error_count, SUM(e.kind = 'ToolCall') tool_call_count,
-  COALESCE(SUM(e.cost_usd_e6), 0) cost_usd_e6,
-  COALESCE(SUM(e.tokens_in), 0) tokens_in, COALESCE(SUM(e.tokens_out), 0) tokens_out,
-  COALESCE(SUM(e.reasoning_tokens), 0) reasoning_tokens,
-  COALESCE(SUM(e.cache_read_tokens), 0) cache_read_tokens,
-  COALESCE(SUM(e.cache_creation_tokens), 0) cache_creation_tokens
- FROM events e JOIN recent r ON r.id = e.session_id GROUP BY e.session_id
-)
-SELECT r.*, a.last_event_ms, COALESCE(a.event_count, 0), COALESCE(a.error_count, 0),
- COALESCE(a.tool_call_count, 0), COALESCE(a.cost_usd_e6, 0), COALESCE(a.tokens_in, 0),
- COALESCE(a.tokens_out, 0), COALESCE(a.reasoning_tokens, 0),
- COALESCE(a.cache_read_tokens, 0), COALESCE(a.cache_creation_tokens, 0)
-FROM recent r LEFT JOIN rollup a ON a.session_id = r.id
-ORDER BY r.started_at_ms DESC, r.id ASC";
-
-const TOP_TOOLS_SQL: &str = "
-WITH recent AS MATERIALIZED (SELECT id FROM sessions WHERE workspace = ?1
- ORDER BY started_at_ms DESC, id ASC LIMIT ?2), counts AS (
- SELECT t.session_id, t.tool, COUNT(*) count FROM tool_spans t
- JOIN recent r ON r.id = t.session_id WHERE t.tool <> ''
+const TOP_TOOLS_SUFFIX: &str = ") AND t.tool <> ''
  GROUP BY t.session_id, t.tool
 ), ranked AS (
  SELECT session_id, tool, count, ROW_NUMBER() OVER (
@@ -44,33 +17,61 @@ SELECT session_id, tool, count FROM ranked WHERE rank <= 5 ORDER BY session_id, 
 impl Store {
     pub(crate) fn visualization_sessions(
         &self,
-        workspace: &str,
-        limit: usize,
+        query: &SessionSearchQuery,
         now_ms: u64,
-    ) -> Result<Vec<TraceSummary>> {
-        let mut rows = summary_rows(self, workspace, limit)?;
-        let mut tools = top_tools(self, workspace, limit)?;
-        rows.iter_mut()
-            .for_each(|row| row.top_tools = tools.remove(&row.session.id).unwrap_or_default());
-        Ok(rows.into_iter().map(|row| summary(row, now_ms)).collect())
+    ) -> Result<(Vec<TraceSummary>, SessionPageMeta)> {
+        let mut page = session_search::read(self, query)?;
+        attach_tools(self, &mut page.rows)?;
+        let meta = page_meta(&page);
+        Ok((
+            page.rows
+                .into_iter()
+                .map(|row| summary(row, now_ms))
+                .collect(),
+            meta,
+        ))
     }
 }
 
-fn summary_rows(store: &Store, workspace: &str, limit: usize) -> Result<Vec<SessionSummaryRead>> {
-    let mut statement = store.conn().prepare(SUMMARIES_SQL)?;
-    let rows = statement.query_map(params![workspace, sql_limit(limit)], summary_row)?;
-    rows.map(|row| row.map_err(Into::into)).collect()
+fn attach_tools(store: &Store, rows: &mut [SessionSummaryRead]) -> Result<()> {
+    let ids = rows
+        .iter()
+        .map(|row| row.session.id.as_str())
+        .collect::<Vec<_>>();
+    let mut tools = top_tools(store, &ids)?;
+    rows.iter_mut()
+        .for_each(|row| row.top_tools = tools.remove(&row.session.id).unwrap_or_default());
+    Ok(())
 }
 
-fn top_tools(
-    store: &Store,
-    workspace: &str,
-    limit: usize,
-) -> Result<HashMap<String, Vec<(String, u64)>>> {
-    let mut statement = store.conn().prepare(TOP_TOOLS_SQL)?;
-    let rows = statement.query_map(params![workspace, sql_limit(limit)], tool_row)?;
+fn top_tools(store: &Store, ids: &[&str]) -> Result<HashMap<String, Vec<(String, u64)>>> {
+    if ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let mut statement = store.conn().prepare(&top_tools_sql(ids.len()))?;
+    let rows = statement.query_map(params_from_iter(ids), tool_row)?;
     let rows = rows.collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(rows.into_iter().fold(HashMap::new(), add_tool))
+}
+
+fn top_tools_sql(count: usize) -> String {
+    let slots = (1..=count)
+        .map(|n| format!("?{n}"))
+        .collect::<Vec<_>>()
+        .join(",");
+    format!(
+        "WITH counts AS (SELECT t.session_id, t.tool, COUNT(*) count FROM tool_spans t WHERE t.session_id IN ({slots}{TOP_TOOLS_SUFFIX}"
+    )
+}
+
+fn page_meta(page: &SessionRowsPage) -> SessionPageMeta {
+    let shown = page.offset.saturating_add(page.rows.len());
+    SessionPageMeta {
+        filtered_total: page.filtered_total,
+        offset: page.offset,
+        limit: page.limit,
+        next_offset: (shown < page.filtered_total).then_some(shown),
+    }
 }
 
 fn add_tool(
@@ -85,7 +86,7 @@ fn tool_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<(String, String, u64)> 
     Ok((row.get(0)?, row.get(1)?, row.get::<_, i64>(2)? as u64))
 }
 
-fn summary_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<SessionSummaryRead> {
+pub(super) fn summary_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<SessionSummaryRead> {
     Ok(SessionSummaryRead {
         session: super::super::rows::session_row(row)?,
         last_event_ms: optional(row, 21)?,
@@ -115,10 +116,6 @@ fn optional(row: &rusqlite::Row<'_>, index: usize) -> rusqlite::Result<Option<u6
 
 fn value(row: &rusqlite::Row<'_>, index: usize) -> rusqlite::Result<u64> {
     row.get::<_, i64>(index).map(|value| value as u64)
-}
-
-fn sql_limit(limit: usize) -> i64 {
-    limit.min(i64::MAX as usize) as i64
 }
 
 fn summary(row: SessionSummaryRead, now_ms: u64) -> TraceSummary {

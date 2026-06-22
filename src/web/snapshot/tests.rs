@@ -50,6 +50,8 @@ fn missing_workspace_does_not_create_project_state() {
     let request = SnapshotRequest {
         workspace: temp.path().join("missing").display().to_string(),
         selected_session_id: None,
+        q: String::new(),
+        offset: 0,
     };
     assert!(load(request).is_err());
     assert!(!home.join("projects").exists());
@@ -66,6 +68,8 @@ fn uninitialized_workspace_does_not_create_project_state() {
     let request = SnapshotRequest {
         workspace: workspace.display().to_string(),
         selected_session_id: None,
+        q: String::new(),
+        offset: 0,
     };
     let error = load(request).unwrap_err().to_string();
     assert!(error.contains("no Kaizen data"), "{error}");

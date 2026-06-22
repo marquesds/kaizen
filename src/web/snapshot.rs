@@ -4,7 +4,7 @@
 use crate::core::paths;
 use crate::store::Store;
 use crate::visualization::{
-    BuiltReport, VisualizationLimits, VisualizationQuery, VisualizationReport,
+    BuiltReport, SessionSearchInput, VisualizationLimits, VisualizationQuery, VisualizationReport,
     build_report_observed,
 };
 use anyhow::{Context, Result, ensure};
@@ -15,25 +15,41 @@ const MAX_SESSIONS: usize = 30;
 const MAX_SELECTED_EVENTS: usize = 40;
 const MAX_SELECTED_SPANS: usize = 40;
 const MAX_SELECTED_FILES: usize = 40;
+const MAX_SEARCH_CHARS: usize = 256;
 
 pub struct SnapshotRequest {
     pub workspace: String,
     pub selected_session_id: Option<String>,
+    pub q: String,
+    pub offset: usize,
 }
 
 pub fn load(req: SnapshotRequest) -> Result<VisualizationReport> {
-    ensure!(!req.workspace.trim().is_empty(), "workspace required");
-    let root = workspace_root(&req.workspace)?;
-    let db = paths::project_data_path(&root)?.join("kaizen.db");
+    let (store, key) = open_snapshot(&req.workspace)?;
+    let search = search_input(&req.q, req.offset)?;
+    let built = build_snapshot(&store, key, req.selected_session_id, search, now_ms())?;
+    finish(built)
+}
+
+fn open_snapshot(raw: &str) -> Result<(Store, String)> {
+    ensure!(!raw.trim().is_empty(), "workspace required");
+    let root = workspace_root(raw)?;
+    let store = Store::open_read_only(&database_path(&root)?)?;
+    Ok((store, root.to_string_lossy().into_owned()))
+}
+
+fn database_path(root: &std::path::Path) -> Result<PathBuf> {
+    let db = paths::project_data_path(root)?.join("kaizen.db");
     ensure!(
         db.is_file(),
         "no Kaizen data for {}; run `kaizen init --workspace {}`",
         root.display(),
         root.display()
     );
-    let store = Store::open_read_only(&db)?;
-    let key = root.to_string_lossy().into_owned();
-    let built = build_snapshot(&store, key, req.selected_session_id, now_ms())?;
+    Ok(db)
+}
+
+fn finish(built: BuiltReport) -> Result<VisualizationReport> {
     ensure_bounded(&built)?;
     let mut report = built.report;
     compact_report(&mut report);
@@ -56,9 +72,13 @@ fn build_snapshot(
     store: &Store,
     workspace: String,
     selected_session_id: Option<String>,
+    session_search: SessionSearchInput,
     now_ms: u64,
 ) -> Result<BuiltReport> {
-    build_report_observed(store, query(selected_session_id, workspace, now_ms))
+    build_report_observed(
+        store,
+        query(selected_session_id, workspace, session_search, now_ms),
+    )
 }
 
 fn ensure_bounded(built: &BuiltReport) -> Result<()> {
@@ -89,6 +109,7 @@ fn ensure_bound(actual: usize, limit: usize, kind: &str) -> Result<()> {
 fn query(
     selected_session_id: Option<String>,
     workspace: String,
+    session_search: SessionSearchInput,
     now_ms: u64,
 ) -> VisualizationQuery {
     VisualizationQuery {
@@ -97,13 +118,30 @@ fn query(
         now_ms,
         include_activity: false,
         select_latest: true,
-        limits: VisualizationLimits {
-            sessions: MAX_SESSIONS,
-            selected_events: MAX_SELECTED_EVENTS,
-            selected_spans: MAX_SELECTED_SPANS,
-            selected_files: MAX_SELECTED_FILES,
-        },
+        session_search,
+        limits: limits(),
     }
+}
+
+fn limits() -> VisualizationLimits {
+    VisualizationLimits {
+        sessions: MAX_SESSIONS,
+        selected_events: MAX_SELECTED_EVENTS,
+        selected_spans: MAX_SELECTED_SPANS,
+        selected_files: MAX_SELECTED_FILES,
+    }
+}
+
+fn search_input(raw: &str, offset: usize) -> Result<SessionSearchInput> {
+    let q = raw.trim();
+    ensure!(
+        q.chars().count() <= MAX_SEARCH_CHARS,
+        "search query exceeds 256 characters"
+    );
+    Ok(SessionSearchInput {
+        q: q.into(),
+        offset,
+    })
 }
 
 fn now_ms() -> u64 {

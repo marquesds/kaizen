@@ -5,6 +5,9 @@ use kaizen::store::Store;
 use kaizen::visualization::{DerivedStatus, VisualizationLimits, VisualizationQuery, build_report};
 use serde_json::json;
 
+#[path = "visualization_report/search.rs"]
+mod visualization_search;
+
 #[test]
 fn report_rolls_up_cache_and_selected_trace() -> anyhow::Result<()> {
     let tmp = tempfile::tempdir()?;
@@ -116,6 +119,7 @@ fn query(selected: Option<&str>) -> VisualizationQuery {
         now_ms: 10_000,
         include_activity: true,
         select_latest: false,
+        session_search: Default::default(),
         limits: VisualizationLimits {
             sessions: 100,
             selected_events: 100,

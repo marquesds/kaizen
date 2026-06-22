@@ -68,8 +68,9 @@ pub fn ensure_running_for(workspace: &Path) -> Result<()> {
 }
 
 pub fn try_status() -> Result<DaemonStatus> {
-    let response = tokio::runtime::Runtime::new()?
-        .block_on(super::client::request_async(DaemonRequest::Status))?;
+    let response = tokio::runtime::Runtime::new()?.block_on(
+        super::client::request_lifecycle_async(DaemonRequest::Status),
+    )?;
     match response {
         DaemonResponse::Status(status) => Ok(status),
         DaemonResponse::Error { message, .. } => Err(anyhow!(message)),
@@ -114,7 +115,7 @@ pub fn start_foreground() -> Result<()> {
 
 pub fn stop() -> Result<String> {
     let response = tokio::runtime::Runtime::new()?
-        .block_on(super::client::request_async(DaemonRequest::Stop))?;
+        .block_on(super::client::request_lifecycle_async(DaemonRequest::Stop))?;
     match response {
         DaemonResponse::Ack { message } => Ok(message),
         DaemonResponse::Error { message, .. } => Err(anyhow!(message)),

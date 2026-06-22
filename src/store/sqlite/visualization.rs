@@ -4,7 +4,11 @@ use super::*;
 
 mod activity;
 mod aggregates;
+mod session_search;
+mod session_search_sql;
 mod sessions;
+
+pub(crate) use session_search::SessionSearchQuery;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct TokenRead {

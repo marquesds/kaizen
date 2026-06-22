@@ -11,21 +11,13 @@
   <a class="skip-link" href="#observe-screen">Skip to observations</a>
   <header class="site-header">
     <div class="brand-lockup">
-      <span class="brand-mark" aria-hidden="true">K</span>
+      <img class="brand-mark" src="/assets/kaizen-kanji.png" alt="" aria-hidden="true">
       <div>
         <strong>Kaizen</strong>
         <span>Observe</span>
       </div>
     </div>
-    <p id="connection-state" class="connection-state" role="status" aria-live="polite">
-      Connecting
-    </p>
-  </header>
-
-  <main id="observe-screen" aria-busy="true">
-    <h1 class="visually-hidden">Kaizen Observe</h1>
-
-    <section class="project-controls" aria-labelledby="project-title">
+    <nav class="project-controls" aria-label="Project controls">
       <div class="control-field">
         <label id="project-title" for="project-select">Project</label>
         <select id="project-select" disabled>
@@ -43,7 +35,14 @@
           </div>
         </form>
       </details>
-    </section>
+    </nav>
+    <p id="connection-state" class="connection-state" role="status" aria-live="polite">
+      Connecting
+    </p>
+  </header>
+
+  <main id="observe-screen" aria-busy="true">
+    <h1 class="visually-hidden">Kaizen Observe</h1>
 
     <section id="journey-state" class="journey-state" data-tone="neutral" aria-live="polite" aria-atomic="true">
       <span class="state-pin" aria-hidden="true"></span>
@@ -104,11 +103,20 @@
             <p class="kicker">Recent observations</p>
             <h2 id="sessions-title">Agent sessions</h2>
           </div>
-          <span id="session-count-note">No data yet</span>
+          <span id="session-count-note" aria-live="polite" aria-atomic="true">No data yet</span>
         </header>
+        <div class="session-search">
+          <label for="session-search">Search sessions</label>
+          <input id="session-search" type="search" maxlength="256" autocomplete="off"
+                 aria-describedby="session-search-help"
+                 placeholder="Search prompt or session attributes">
+          <p id="session-search-help">
+            Searches prompt first, then ID, agent, model, status, branch, and tool.
+          </p>
+        </div>
         <div class="table-wrap">
           <table>
-            <caption>Newest sessions for selected project</caption>
+            <caption>Sessions for selected project</caption>
             <thead>
               <tr>
                 <th scope="col">Agent</th>
@@ -126,6 +134,11 @@
         <p id="session-empty" class="empty-note" hidden>
           No captured sessions yet. Run an agent in this project, then refresh.
         </p>
+        <nav class="session-pagination" aria-label="Session result pages">
+          <button id="session-previous" type="button" disabled>Previous</button>
+          <p id="session-page-status">No result pages</p>
+          <button id="session-next" type="button" disabled>Next</button>
+        </nav>
       </article>
 
       <article id="session-detail" class="notebook-panel detail-panel" aria-labelledby="detail-title" aria-live="polite">

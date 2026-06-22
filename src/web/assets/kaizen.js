@@ -1,27 +1,14 @@
 import { chooseProject, decodeOutput, projectPaths } from "./kaizen-state.js";
 import { bindRawReport, setRawReport } from "./kaizen-raw.js";
+import { bindSessionControls } from "./kaizen-session-controls.js";
+import { fallbackOffset, initialState, reportJourney } from "./kaizen-snapshot-state.js";
 import { createTransport } from "./kaizen-transport.js";
-import {
-  renderProjects,
-  renderReport,
-  setBusy,
-  setConnection,
-  setJourney,
-  showManual,
-} from "./kaizen-render.js";
+import { renderProjects, renderReport, setBusy, setConnection, setJourney, showManual } from "./kaizen-render.js";
 const $ = selector => document.querySelector(selector);
 const params = new URLSearchParams(location.search);
 const token = params.get("token") || localStorage.kaizenToken || "";
 const requestedWorkspace = params.get("workspace") || "";
-const state = {
-  seq: 0,
-  pending: new Map(),
-  projects: [],
-  workspace: "",
-  selected: "",
-  snapshotPending: "",
-  refreshQueued: false,
-};
+const state = initialState();
 const transport = createTransport({
   url: socketUrl,
   onOpen: connected,
@@ -41,6 +28,7 @@ function start() {
 }
 function bindControls() {
   bindRawReport();
+  bindSessionControls(navigateSessions);
   $("#refresh-report").addEventListener("click", () => requestSnapshot(true));
   $("#project-select").addEventListener("change", event => activateProject(event.target.value));
   $("#session-rows").addEventListener("click", selectSession);
@@ -108,18 +96,19 @@ function noProjects() {
 }
 function activateProject(workspace) {
   if (!workspace) return;
-  state.workspace = workspace;
-  state.selected = "";
-  state.snapshotPending = "";
-  state.refreshQueued = false;
-  localStorage.kaizenWorkspace = workspace;
-  $("#manual-path").value = workspace;
+  resetProject(workspace);
   renderProjects(state.projects.includes(workspace) ? state.projects : [workspace, ...state.projects], workspace);
   transport.send({ type: "subscribe", workspace });
   requestSnapshot(true);
 }
+function resetProject(workspace) {
+  Object.assign(state, { workspace, selected: "", offset: 0, snapshotPending: "", refreshQueued: false });
+  localStorage.kaizenWorkspace = workspace;
+  $("#manual-path").value = workspace;
+}
 function requestSnapshot(announce) {
-  if (!state.workspace || state.snapshotPending) return;
+  if (!state.workspace) return;
+  if (state.snapshotPending) return queueRefresh();
   if (!transport.isOpen()) return fail("Local connection is not ready.");
   const request = snapshotRequest();
   state.snapshotPending = request.id;
@@ -133,18 +122,30 @@ function snapshotRequest() {
     id: `snapshot-${++state.seq}`,
     workspace: state.workspace,
     selected_session_id: state.selected || null,
+    q: state.query,
+    offset: state.offset,
   };
 }
 function receiveSnapshot(message) {
   if (message.id !== state.snapshotPending) return;
   const report = message.report || {};
   state.snapshotPending = "";
+  if (state.refreshQueued) return refreshQueued();
+  const offset = fallbackOffset(report, state.offset);
+  if (offset !== null) return recoverPage(offset);
+  acceptSnapshot(report);
+}
+function recoverPage(offset) {
+  state.offset = offset;
+  state.selected = "";
+  requestSnapshot(false);
+}
+function acceptSnapshot(report) {
   state.selected = report.selected?.session?.id || report.sessions?.[0]?.id || "";
   setBusy(false);
   setRawReport(report);
-  renderReport(report);
-  report.sessions?.length ? ready(report) : empty(report);
-  if (state.refreshQueued) return refreshQueued();
+  renderReport(report, state.query);
+  setJourney(...reportJourney(report, state.query));
 }
 function receiveError(message) {
   if (String(message.id || "").startsWith("snapshot-") && message.id !== state.snapshotPending) return;
@@ -152,8 +153,11 @@ function receiveError(message) {
 }
 function receiveChanged(message) {
   if (message.workspace !== state.workspace) return;
-  if (document.hidden || state.snapshotPending) state.refreshQueued = true;
+  if (document.hidden || state.snapshotPending) queueRefresh();
   else requestSnapshot(false);
+}
+function queueRefresh() {
+  state.refreshQueued = true;
 }
 
 function refreshQueued() {
@@ -164,16 +168,12 @@ function refreshQueued() {
 function flushQueued() {
   if (!document.hidden && state.refreshQueued && !state.snapshotPending) refreshQueued();
 }
-function ready(report) {
-  const at = new Date(report.generated_at_ms || Date.now()).toLocaleTimeString();
-  const visible = report.sessions?.length || 0;
-  const total = report.totals?.session_count || visible;
-  const scope = visible === total ? `${total}` : `${visible} of ${total}`;
-  setJourney("ready", "Observations current", `Showing ${scope} recent sessions. Updated ${at}.`);
-}
-function empty(report) {
-  const project = report.workspace?.split("/").filter(Boolean).at(-1) || "this project";
-  setJourney("neutral", "No sessions yet", `No captured agent work for ${project}.`);
+function navigateSessions(next) {
+  if (next.query === state.query && next.offset === state.offset) return;
+  state.query = next.query;
+  state.offset = next.offset;
+  state.selected = "";
+  requestSnapshot(true);
 }
 function selectSession(event) {
   const button = event.target.closest("button[data-session-id]");

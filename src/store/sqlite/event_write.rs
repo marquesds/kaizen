@@ -85,6 +85,7 @@ impl Store {
         if self.conn.changes() == 0 {
             return Ok(());
         }
+        super::session_search_projection::project(&self.conn, e)?;
         if projector_legacy_mode() {
             index_event_derived(&self.conn, e)?;
             rebuild_tool_spans_for_session(&self.conn, &e.session_id)?;

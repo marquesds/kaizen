@@ -3,7 +3,6 @@ use crate::visualization::TraceDetail;
 use serde_json::{Value, json};
 
 const MAX_COMMAND_CHARS: usize = 600;
-const MAX_PROMPT_CHARS: usize = 8_000;
 
 pub(super) fn prepare(detail: &mut TraceDetail) {
     detail.prompt = prompt_from_events(&detail.events)
@@ -49,7 +48,7 @@ fn prompt_from_events(events: &[Event]) -> Option<String> {
     events
         .iter()
         .rev()
-        .find_map(|event| prompt_from_value(&event.payload))
+        .find_map(|event| crate::core::prompt_text::from_value(&event.payload))
 }
 
 fn prompt_from_trace(raw: &str) -> Option<String> {
@@ -60,55 +59,8 @@ pub(super) fn prompt_from_line(line: &str) -> Option<String> {
     let value: Value = serde_json::from_str(line).ok()?;
     value
         .get("payload")
-        .and_then(prompt_from_value)
-        .or_else(|| prompt_from_value(&value))
-}
-
-fn prompt_from_value(value: &Value) -> Option<String> {
-    direct_prompt(value)
-        .or_else(|| user_message(value))
-        .map(|value| compact_text(&value, MAX_PROMPT_CHARS))
-}
-
-fn direct_prompt(value: &Value) -> Option<String> {
-    pointer_text(value, &["/prompt", "/user_prompt"])
-        .as_deref()
-        .and_then(clean_prompt)
-}
-
-fn user_message(value: &Value) -> Option<String> {
-    let message = value.get("message").unwrap_or(value);
-    (message.get("role")?.as_str()? == "user")
-        .then(|| content_prompt(message.get("content")?))
-        .flatten()
-}
-
-fn content_prompt(content: &Value) -> Option<String> {
-    content.as_str().and_then(clean_prompt).or_else(|| {
-        content
-            .as_array()?
-            .iter()
-            .rev()
-            .find_map(|part| part.get("text")?.as_str().and_then(clean_prompt))
-    })
-}
-
-fn clean_prompt(raw: &str) -> Option<String> {
-    let value = objective(raw).unwrap_or(raw).trim();
-    (!value.is_empty() && !ignored_context(value)).then(|| value.to_string())
-}
-
-fn objective(raw: &str) -> Option<&str> {
-    tagged(raw, "<objective>", "</objective>")
-        .or_else(|| tagged(raw, "<untrusted_objective>", "</untrusted_objective>"))
-}
-
-fn tagged<'a>(raw: &'a str, open: &str, close: &str) -> Option<&'a str> {
-    raw.split_once(open)?.1.split_once(close).map(|pair| pair.0)
-}
-
-fn ignored_context(value: &str) -> bool {
-    value.starts_with("<environment_context>") || value.starts_with("# AGENTS.md instructions")
+        .and_then(crate::core::prompt_text::from_value)
+        .or_else(|| crate::core::prompt_text::from_value(&value))
 }
 
 fn compact_text(value: &str, limit: usize) -> String {
@@ -155,13 +107,19 @@ mod tests {
     fn objective_wrapper_returns_user_objective() {
         let wrapped =
             "<codex_internal_context><objective>Fix identity</objective></codex_internal_context>";
-        assert_eq!(clean_prompt(wrapped).as_deref(), Some("Fix identity"));
+        assert_eq!(
+            crate::core::prompt_text::from_value(&json!({"prompt": wrapped})).as_deref(),
+            Some("Fix identity")
+        );
     }
 
     #[test]
     fn goal_update_wrapper_returns_user_objective() {
         let wrapped = "<codex_internal_context><untrusted_objective>Show prompt</untrusted_objective>Budget: hidden</codex_internal_context>";
-        assert_eq!(clean_prompt(wrapped).as_deref(), Some("Show prompt"));
+        assert_eq!(
+            crate::core::prompt_text::from_value(&json!({"prompt": wrapped})).as_deref(),
+            Some("Show prompt")
+        );
     }
 
     fn trace_fixture() -> (tempfile::TempDir, PathBuf, HomeGuard) {

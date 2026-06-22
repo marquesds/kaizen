@@ -24,6 +24,11 @@ pub(super) const MIGRATIONS: &[&str] = &[
         cost_usd_e6 INTEGER,
         payload TEXT NOT NULL
     )",
+    "CREATE TABLE IF NOT EXISTS session_search_prompts (
+        session_id TEXT PRIMARY KEY,
+        event_seq INTEGER NOT NULL,
+        prompt TEXT NOT NULL
+    )",
     "CREATE INDEX IF NOT EXISTS events_session_idx ON events(session_id)",
     "CREATE TABLE IF NOT EXISTS files_touched (
         id INTEGER PRIMARY KEY AUTOINCREMENT,

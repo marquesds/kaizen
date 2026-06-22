@@ -9,6 +9,7 @@ pub(super) fn daemon(cmd: DaemonCommand) -> anyhow::Result<()> {
             println!("{}", kaizen::daemon::stop()?);
             Ok(())
         }
+        DaemonCommand::Restart => daemon_restart(),
         DaemonCommand::Status => daemon_status(),
     }
 }
@@ -66,6 +67,14 @@ fn daemon_start(background: bool) -> anyhow::Result<()> {
         return kaizen::daemon::start_foreground();
     }
     let started = kaizen::daemon::start_background()?;
+    for line in background_start_lines(&started) {
+        println!("{line}");
+    }
+    Ok(())
+}
+
+fn daemon_restart() -> anyhow::Result<()> {
+    let started = kaizen::daemon::restart_background()?;
     for line in background_start_lines(&started) {
         println!("{line}");
     }

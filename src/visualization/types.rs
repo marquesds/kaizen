@@ -11,8 +11,24 @@ pub struct VisualizationReport {
     pub totals: VisualizationTotals,
     pub activity: ActivityReport,
     pub sessions: Vec<TraceSummary>,
+    #[serde(default)]
+    pub session_page: SessionPageMeta,
     pub selected: Option<TraceDetail>,
     pub quality: DataQuality,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub struct SessionSearchInput {
+    pub q: String,
+    pub offset: usize,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub struct SessionPageMeta {
+    pub filtered_total: usize,
+    pub offset: usize,
+    pub limit: usize,
+    pub next_offset: Option<usize>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]

@@ -357,7 +357,8 @@ anyhow = "1"
 memchr = "2"
 tempfile = "3"
 tar = "0.4"
-rusqlite = { version = "0.40", features = ["bundled"] }
+rusqlite = { version = "0.40", features = ["bundled", "functions"] }
+caseless = "0.2.2"
 rand = { version = "0.10", features = ["std_rng"] }
 tokio = { version = "1", features = ["full"] }
 notify = "8"

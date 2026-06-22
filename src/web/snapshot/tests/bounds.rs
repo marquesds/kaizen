@@ -10,9 +10,64 @@ fn web_materializes_only_bounded_latest_rows() -> anyhow::Result<()> {
     let temp = tempfile::tempdir()?;
     let store = Store::open(&temp.path().join("kaizen.db"))?;
     seed(&store)?;
-    let built = build_snapshot(&store, WORKSPACE.into(), Some("s00".into()), 100)?;
+    let built = build_snapshot(
+        &store,
+        WORKSPACE.into(),
+        Some("s00".into()),
+        Default::default(),
+        100,
+    )?;
     assert_materialized(&built);
     assert_selected(&built);
+    Ok(())
+}
+
+#[test]
+fn search_input_trims_without_echoing_query() -> anyhow::Result<()> {
+    let input = search_input("  First Prompt  ", 30)?;
+    assert_eq!(input.q, "First Prompt");
+    assert_eq!(input.offset, 30);
+    Ok(())
+}
+
+#[test]
+fn search_input_rejects_more_than_256_characters() {
+    let error = search_input(&"x".repeat(257), 0).unwrap_err().to_string();
+    assert_eq!(error, "search query exceeds 256 characters");
+}
+
+#[test]
+fn web_snapshot_applies_search_offset() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let store = Store::open(&temp.path().join("kaizen.db"))?;
+    seed(&store)?;
+    let search = SessionSearchInput {
+        q: "S".into(),
+        offset: 30,
+    };
+    let built = build_snapshot(&store, WORKSPACE.into(), None, search, 100)?;
+    assert_eq!(built.report.sessions[0].id, "s00");
+    assert_eq!(built.report.session_page.offset, 30);
+    assert_eq!(built.report.session_page.next_offset, None);
+    Ok(())
+}
+
+#[test]
+fn read_only_web_snapshot_has_unicode_search() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let path = temp.path().join("kaizen.db");
+    let store = Store::open(&path)?;
+    let mut record = session_at(1);
+    record.agent = "AÇÃO".into();
+    store.upsert_session(&record)?;
+    drop(store);
+    let store = Store::open_read_only(&path)?;
+    let search = SessionSearchInput {
+        q: "ação".into(),
+        offset: 0,
+    };
+    let built = build_snapshot(&store, WORKSPACE.into(), None, search, 100)?;
+    assert_eq!(built.report.sessions[0].id, "s01");
     Ok(())
 }
 
@@ -63,6 +118,8 @@ fn assert_materialized(built: &BuiltReport) {
     assert_eq!(built.report.totals.session_count, 31);
     assert_eq!(built.report.totals.event_count, 82);
     assert_eq!(built.report.totals.tool_call_count, 41);
+    assert_eq!(built.report.session_page.filtered_total, 31);
+    assert_eq!(built.report.session_page.next_offset, Some(30));
 }
 
 fn assert_selected(built: &BuiltReport) {
