@@ -35,6 +35,8 @@ pub(crate) enum DaemonCommand {
     },
     /// Gracefully stop daemon.
     Stop,
+    /// Gracefully restart daemon in background.
+    Restart,
     /// Show daemon pid, uptime, queue depth, and last error.
     Status,
 }

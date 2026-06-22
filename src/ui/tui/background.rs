@@ -90,6 +90,7 @@ fn visualization_query(workspace: String) -> VisualizationQuery {
         now_ms: now_ms(),
         include_activity: true,
         select_latest: false,
+        session_search: Default::default(),
         limits: TUI_VISUALIZATION_LIMITS,
     }
 }

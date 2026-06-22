@@ -23,20 +23,29 @@ kaizen open --no-browser
 
 The dashboard provides:
 
-- automatic selection of the most recently active valid project, plus a manual
-  local-path fallback;
+- project selection, manual local-path fallback, and refresh controls in the
+  responsive top navigation;
 - session, active-session, error, and cost totals;
 - project-level tool, attention, and telemetry-coverage insights; Tool Pattern
   lists the selected session's three most frequent recent shell commands;
-- the latest 30 sessions for the selected project;
+- 30 sessions per page, with Previous and Next controls;
+- one session search field that ranks prompt matches first, then matches session
+  ID, agent, model, status, branch, and tool;
 - selected-session prompt, facts, recent events with bounded command details,
   nested tool spans, touched files, and top tools;
 - the exact bounded report under **Developer details**.
 
-Selected-session detail is capped at 40 events, 40 spans, and 40 files. Those
+Search accepts up to 256 characters. Search results and page controls use the
+filtered count, while summary cards continue to show project-wide totals.
+Changing the search starts at the first page. Automatic and manual refreshes
+preserve the active search and page; if data changes and removes that page,
+Kaizen returns to the last available page.
+
+Selected-session detail is capped at 40 events, 40 spans, and 40 files. These
 limits keep refresh latency and memory use predictable. The server watches the
 selected project's SQLite database and WAL; a committed change requests a new
-snapshot within one second. **Refresh now** remains available for manual checks.
+snapshot within one second. **Refresh now** remains available in the top
+navigation for manual checks.
 
 `No completion` means Kaizen received activity but no final session event for
 at least 30 minutes. It does not mean the work failed. Models and prompts remain

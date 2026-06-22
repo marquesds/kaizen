@@ -3,8 +3,10 @@
 
 mod activity;
 mod build;
+mod status;
 mod types;
 
-pub(crate) use build::{BuiltReport, build_report_observed, derive_status};
+pub(crate) use build::{BuiltReport, build_report_observed};
 pub use build::{VisualizationLimits, VisualizationQuery, build_report};
+pub(crate) use status::derive_status;
 pub use types::*;

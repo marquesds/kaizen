@@ -48,6 +48,10 @@ enum ClientMessage {
         workspace: String,
         #[serde(default)]
         selected_session_id: Option<String>,
+        #[serde(default)]
+        q: String,
+        #[serde(default)]
+        offset: usize,
     },
 }
 
@@ -55,7 +59,7 @@ pub fn router(token: String) -> Router {
     let state = AppState {
         token: Arc::from(token),
     };
-    Router::new()
+    assets::brand::router()
         .route("/", get(assets::index))
         .route("/assets/kaizen-tokens.css", get(assets::tokens))
         .route("/assets/kaizen.css", get(assets::css))
@@ -65,7 +69,7 @@ pub fn router(token: String) -> Router {
         .route("/assets/kaizen-render.js", get(assets::render_js))
         .route("/assets/kaizen-raw.js", get(assets::raw_js))
         .route("/assets/kaizen-detail.js", get(assets::detail_js))
-        .route("/assets/kaizen-format.js", get(assets::format_js))
+        .merge(assets::session_router())
         .route("/ws", get(ws))
         .with_state(state)
 }
@@ -135,8 +139,10 @@ async fn handle_text(socket: &mut WebSocket, text: &str, subscription: &mut Subs
             id,
             workspace,
             selected_session_id,
+            q,
+            offset,
         }) => {
-            let value = snapshot_msg(id, workspace, selected_session_id).await;
+            let value = snapshot_msg(id, workspace, selected_session_id, q, offset).await;
             send(socket, value).await.is_ok()
         }
         Err(err) => send(socket, json!({"type":"error","error":err.to_string()}))
@@ -152,10 +158,18 @@ async fn call_msg(id: &str, tool: &str, args: Value) -> Value {
     }
 }
 
-async fn snapshot_msg(id: String, workspace: String, selected_session_id: Option<String>) -> Value {
+async fn snapshot_msg(
+    id: String,
+    workspace: String,
+    selected_session_id: Option<String>,
+    q: String,
+    offset: usize,
+) -> Value {
     let req = snapshot::SnapshotRequest {
         workspace,
         selected_session_id,
+        q,
+        offset,
     };
     match tokio::task::spawn_blocking(move || snapshot::load(req)).await {
         Ok(Ok(report)) => json!({"type":"visualization_snapshot","id":id,"report":report}),

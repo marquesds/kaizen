@@ -43,6 +43,10 @@ impl Store {
             params![cutoff_ms],
         )?;
         tx.execute(
+            &format!("DELETE FROM session_search_prompts WHERE session_id IN ({sub_old_sessions})"),
+            params![cutoff_ms],
+        )?;
+        tx.execute(
             &format!("DELETE FROM files_touched WHERE session_id IN ({sub_old_sessions})"),
             params![cutoff_ms],
         )?;

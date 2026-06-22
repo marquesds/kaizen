@@ -78,7 +78,9 @@ async fn websocket_auth_and_tool_calls() -> anyhow::Result<()> {
         json!({
             "type": "visualization_snapshot",
             "id": "viz",
-            "workspace": workspace.to_string_lossy()
+            "workspace": workspace.to_string_lossy(),
+            "q": "  WEB-SESSION  ",
+            "offset": 0
         })
         .to_string()
         .into(),
@@ -88,7 +90,21 @@ async fn websocket_auth_and_tool_calls() -> anyhow::Result<()> {
     assert_eq!(msg["type"], "visualization_snapshot");
     assert_eq!(msg["id"], "viz");
     assert_eq!(msg["report"]["totals"]["session_count"], 1);
+    assert_eq!(msg["report"]["session_page"]["filtered_total"], 1);
+    assert_eq!(msg["report"]["session_page"]["offset"], 0);
+    assert_eq!(msg["report"]["session_page"]["limit"], 30);
+    assert_eq!(msg["report"]["session_page"]["next_offset"], Value::Null);
     assert_eq!(msg["report"]["selected"]["session"]["id"], "web-session");
+    ws.send(Message::Text(
+        json!({
+            "type": "visualization_snapshot", "id": "defaults",
+            "workspace": workspace.to_string_lossy()
+        })
+        .to_string()
+        .into(),
+    ))
+    .await?;
+    assert_eq!(recv_json(&mut ws).await?["id"], "defaults");
 
     ws.send(Message::Text(
         json!({"type":"subscribe","id":"s1"}).to_string().into(),

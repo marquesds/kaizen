@@ -6,12 +6,13 @@ mod capture_status;
 mod client;
 mod lifecycle;
 mod proxy_task;
+mod scanner_health;
 mod scanner_task;
 mod server;
 mod supervisor;
 mod worker;
 
-pub use background::{BackgroundStart, start_background, start_background_for};
+pub use background::{BackgroundStart, restart_background, start_background, start_background_for};
 pub use client::{
     begin_observed_session_blocking, ensure_capture_blocking, ensure_proxy_blocking,
     hello_blocking, request_blocking,

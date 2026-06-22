@@ -1,21 +1,27 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Periodic transcript scanner owned by the daemon runtime.
 
+use super::supervisor::Supervisor;
 use crate::store::Store;
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
-pub(super) async fn scanner_loop(ws: PathBuf) {
+pub(super) async fn scanner_loop(ws: PathBuf, supervisor: Supervisor) {
     loop {
         tokio::time::sleep(scan_interval(&ws)).await;
-        scan_once(ws.clone()).await;
+        let result = scan_once(ws.clone()).await;
+        supervisor.record_scan_result(&ws, result);
     }
 }
 
-async fn scan_once(ws: PathBuf) {
-    if let Err(err) = tokio::task::spawn_blocking(move || scan_workspace(&ws)).await {
-        tracing::warn!(%err, "daemon scanner task join failed");
+pub(super) async fn scan_once(ws: PathBuf) -> Result<()> {
+    match tokio::task::spawn_blocking(move || scan_workspace(&ws)).await {
+        Ok(result) => result,
+        Err(err) => {
+            tracing::warn!(%err, "daemon scanner task join failed");
+            Err(anyhow!("scanner task join failed: {err}"))
+        }
     }
 }
 

@@ -2,13 +2,12 @@
 
 use super::activity::activity;
 use super::types::*;
-use crate::core::event::{SessionRecord, SessionStatus};
-use crate::store::Store;
+use crate::core::event::SessionRecord;
+use crate::store::{SessionSearchQuery, Store};
 use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
 
 const ACTIVE_TTL_MS: u64 = 5 * 60_000;
-const ORPHAN_TTL_MS: u64 = 30 * 60_000;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct VisualizationLimits {
@@ -31,6 +30,8 @@ pub struct VisualizationQuery {
     pub include_activity: bool,
     /// Fall back to latest session when requested selection is absent or invalid.
     pub select_latest: bool,
+    #[serde(default)]
+    pub session_search: SessionSearchInput,
     pub limits: VisualizationLimits,
 }
 
@@ -58,13 +59,27 @@ pub(crate) fn build_report_observed(
     validate(&query.limits)?;
     let active_since_ms = query.now_ms.saturating_sub(ACTIVE_TTL_MS);
     let (totals, quality) = store.visualization_totals(&query.workspace, active_since_ms)?;
-    let sessions =
-        store.visualization_sessions(&query.workspace, query.limits.sessions, query.now_ms)?;
+    let search = SessionSearchQuery::new(
+        &query.workspace,
+        &query.session_search.q,
+        query.session_search.offset,
+        query.limits.sessions,
+        query.now_ms,
+    )?;
+    let (sessions, session_page) = store.visualization_sessions(&search, query.now_ms)?;
     let selected = selected_detail(store, &query, sessions.first())?;
     let activity = activity_report(store, &query)?;
     let materialized = counts(&sessions, &selected);
     Ok(BuiltReport {
-        report: report(query, totals, quality, sessions, selected, activity),
+        report: report(
+            query,
+            totals,
+            quality,
+            sessions,
+            session_page,
+            selected,
+            activity,
+        ),
         materialized,
     })
 }
@@ -157,6 +172,7 @@ fn report(
     totals: VisualizationTotals,
     quality: DataQuality,
     sessions: Vec<TraceSummary>,
+    session_page: SessionPageMeta,
     selected: Option<TraceDetail>,
     activity: ActivityReport,
 ) -> VisualizationReport {
@@ -166,31 +182,8 @@ fn report(
         totals,
         activity,
         sessions,
+        session_page,
         selected,
         quality,
-    }
-}
-
-pub(crate) fn derive_status(
-    session: &SessionRecord,
-    last_event_ms: Option<u64>,
-    error_count: u64,
-    now_ms: u64,
-) -> (DerivedStatus, String) {
-    if error_count > 0 {
-        return (DerivedStatus::Errored, "error event".into());
-    }
-    if session.status == SessionStatus::Done || session.ended_at_ms.is_some() {
-        return (DerivedStatus::Done, "session ended".into());
-    }
-    match last_event_ms {
-        Some(ts) if now_ms.saturating_sub(ts) <= ACTIVE_TTL_MS => {
-            (DerivedStatus::Active, "recent event".into())
-        }
-        Some(ts) if now_ms.saturating_sub(ts) >= ORPHAN_TTL_MS => {
-            (DerivedStatus::Orphaned, "stale open session".into())
-        }
-        Some(_) => (DerivedStatus::Idle, "no recent event".into()),
-        None => (DerivedStatus::Idle, "no events".into()),
     }
 }

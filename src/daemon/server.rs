@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Daemon server loop and single request worker.
 
+mod startup;
+
 use super::supervisor::Supervisor;
 use super::worker::{Job, spawn_worker};
 use super::{RuntimePaths, runtime_paths};
@@ -30,28 +32,16 @@ struct ServerState {
 
 pub async fn run_server() -> Result<()> {
     let paths = runtime_paths()?;
-    std::fs::create_dir_all(&paths.dir)?;
-    let _pid_lock = lock_pid(&paths)?;
-    remove_stale_socket(&paths.sock)?;
-    let listener = UnixListener::bind(&paths.sock)
-        .with_context(|| format!("bind daemon socket: {}", paths.sock.display()))?;
-    set_socket_private(&paths.sock)?;
-    let (web, _web_task) = crate::web::start(&paths.token).await?;
-    let (tx, rx) = mpsc::channel(128);
-    let state = ServerState {
-        started: Instant::now(),
-        queue_depth: Arc::new(AtomicUsize::new(0)),
-        last_error: Arc::new(Mutex::new(None)),
-        supervisor: Supervisor::default(),
-        tx,
-        web,
-    };
-    spawn_worker(rx, state.queue_depth.clone(), state.last_error.clone());
+    let (_pid_lock, listener, state) = startup::start(&paths).await?;
+    serve(listener, state).await
+}
+
+async fn serve(listener: UnixListener, state: ServerState) -> Result<()> {
     loop {
         let (stream, _) = listener.accept().await?;
-        let state = state.clone();
+        let client_state = state.clone();
         tokio::spawn(async move {
-            if let Err(err) = handle_client(stream, state).await {
+            if let Err(err) = handle_client(stream, client_state).await {
                 tracing::warn!(%err, "daemon client failed");
             }
         });

@@ -7,7 +7,10 @@ use crate::ipc::{
 };
 use anyhow::{Context, Result, anyhow};
 use std::path::Path;
+use std::time::Duration;
 use tokio::net::UnixStream;
+
+const LIFECYCLE_TIMEOUT_MS: u64 = 500;
 
 pub fn request_blocking(request: DaemonRequest) -> Result<DaemonResponse> {
     super::ensure_running()?;
@@ -82,4 +85,11 @@ pub(super) async fn request_async(request: DaemonRequest) -> Result<DaemonRespon
         .with_context(|| format!("connect daemon socket: {}", paths.sock.display()))?;
     write_frame(&mut stream, &request).await?;
     read_frame(&mut stream).await
+}
+
+pub(super) async fn request_lifecycle_async(request: DaemonRequest) -> Result<DaemonResponse> {
+    let timeout = Duration::from_millis(LIFECYCLE_TIMEOUT_MS);
+    tokio::time::timeout(timeout, request_async(request))
+        .await
+        .map_err(|_| anyhow!("daemon IPC timed out after {LIFECYCLE_TIMEOUT_MS}ms"))?
 }

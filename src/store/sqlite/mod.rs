@@ -36,6 +36,7 @@ pub use contracts::{
     SummaryStats, SyncStatusSnapshot, ToolSpanSyncRow,
 };
 pub(super) use sql::{PAIN_HOTSPOTS_SQL, SESSION_SELECT, TOOL_RANK_ROWS_SQL};
+pub(crate) use visualization::SessionSearchQuery;
 
 #[derive(Clone)]
 struct SpanTreeCacheEntry {
@@ -53,6 +54,7 @@ pub struct Store {
 }
 
 mod artifact_windows;
+mod connection_functions;
 mod constants;
 mod contracts;
 mod evals;
@@ -78,6 +80,7 @@ mod samples;
 mod schema;
 mod session_identity;
 mod session_read;
+mod session_search_projection;
 mod session_window;
 mod sessions;
 mod sql;
@@ -130,12 +133,14 @@ impl Store {
         }
         .with_context(|| format!("open db: {}", path.display()))?;
         schema::apply_pragmas(&conn, mode)?;
+        connection_functions::register(&conn)?;
         if mode == StoreOpenMode::ReadWrite {
             for sql in schema::MIGRATIONS {
                 conn.execute_batch(sql)?;
             }
             schema::ensure_schema_columns(&conn)?;
             session_identity::backfill(&conn)?;
+            session_search_projection::backfill(&conn)?;
             outbox_migration::migrate(&conn, path.parent().unwrap_or_else(|| Path::new(".")))?;
         }
         let root = path
@@ -152,6 +157,7 @@ impl Store {
 
 fn initialize_empty(conn: &Connection) -> Result<()> {
     schema::apply_pragmas(conn, StoreOpenMode::ReadWrite)?;
+    connection_functions::register(conn)?;
     schema::MIGRATIONS
         .iter()
         .try_for_each(|statement| conn.execute_batch(statement))?;

@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Long-lived daemon capture tasks: transcript scanner loops and LLM proxy tasks.
 
-use super::capture_status::{base_status, component};
+mod scanning;
+
+use super::capture_status::component;
 use super::proxy_task::{normalize_provider, providers_for_agent, start_proxy};
-use super::scanner_task::scanner_loop;
-use crate::ipc::{
-    CaptureComponent, CaptureComponentStatus, CaptureStatus, ObservedSession, ProxyEndpoint,
-};
+use crate::ipc::{CaptureComponentStatus, CaptureStatus, ObservedSession, ProxyEndpoint};
 use anyhow::Result;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -43,17 +42,6 @@ impl Supervisor {
             .lock()
             .map(|st| st.captures.values().cloned().collect())
             .unwrap_or_default()
-    }
-
-    pub(super) async fn ensure_capture(&self, workspace: String, deep: bool) -> CaptureStatus {
-        let ws = workspace_path(&workspace);
-        let mut status = base_status(&ws, deep);
-        status.watchers.push(self.ensure_scanner(ws.clone()));
-        if deep {
-            self.add_deep_capture(&ws, &mut status).await;
-        }
-        self.remember_capture(status.clone());
-        status
     }
 
     pub(super) async fn ensure_proxy(
@@ -108,19 +96,6 @@ impl Supervisor {
             CaptureComponentStatus::Partial,
             Some(format!("manual opt-in still required for {}", ws.display())),
         ));
-    }
-
-    fn ensure_scanner(&self, ws: PathBuf) -> CaptureComponent {
-        let key = ws.to_string_lossy().to_string();
-        if self
-            .inner
-            .lock()
-            .map(|mut st| st.scanners.insert(key))
-            .unwrap_or(false)
-        {
-            tokio::spawn(scanner_loop(ws));
-        }
-        component("transcript-scanner", CaptureComponentStatus::Ready, None)
     }
 
     fn existing_proxy(&self, key: &ProxyKey) -> Option<ProxyEndpoint> {

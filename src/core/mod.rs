@@ -13,6 +13,7 @@ pub mod legacy_import;
 pub mod machine_registry;
 pub mod paths;
 pub mod project_identity;
+pub(crate) mod prompt_text;
 pub mod repo;
 pub mod safe_fs;
 pub mod session;
