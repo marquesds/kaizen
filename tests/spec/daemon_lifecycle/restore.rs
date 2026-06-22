@@ -34,10 +34,19 @@ pub(super) fn scan_failure_status_recovers_without_blocking_other_workspaces() {
     let bad = daemon.create_workspace("bad-repo");
     register_workspaces(&daemon, &bad);
     poison_db(&daemon, &bad);
-    assert_success(&daemon.run(&["daemon", "restart"]));
+    restart_with_warning_logs(&daemon);
     assert_failure_visible(&daemon, &bad);
     recover_workspace(&daemon, &bad);
     assert_recovered(&daemon);
+}
+
+fn restart_with_warning_logs(daemon: &TestDaemon) {
+    let output = daemon
+        .command(&["daemon", "restart"])
+        .env("RUST_LOG", "warn")
+        .output()
+        .unwrap();
+    assert_success(&output);
 }
 
 fn register_workspaces(daemon: &TestDaemon, bad: &std::path::Path) {
