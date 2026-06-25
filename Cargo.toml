@@ -389,7 +389,7 @@ tree-sitter-java = "0.23"
 rmcp = { version = "1", features = ["server", "client", "transport-io", "schemars", "macros"] }
 axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio", "matched-path", "query", "ws"] }
 tower = { version = "0.5", features = ["util"] }
-tower-http = { version = "0.6", features = ["limit", "set-header"] }
+tower-http = { version = "0.7", features = ["limit", "set-header"] }
 sysinfo = { version = "0.39.1", default-features = false, features = ["system"] }
 redb = "4.1"
 tantivy = "0.26.1"
