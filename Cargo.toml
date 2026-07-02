@@ -386,7 +386,7 @@ tree-sitter-typescript = "0.23"
 tree-sitter-python = "0.25"
 tree-sitter-go = "0.25"
 tree-sitter-java = "0.23"
-rmcp = { version = "1", features = ["server", "client", "transport-io", "schemars", "macros"] }
+rmcp = { version = "2", features = ["server", "client", "transport-io", "schemars", "macros"] }
 axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio", "matched-path", "query", "ws"] }
 tower = { version = "0.5", features = ["util"] }
 tower-http = { version = "0.6", features = ["limit", "set-header"] }
@@ -402,7 +402,7 @@ libc = "0.2"
 quint-connect = "0.1"
 itf = "0.4"
 proptest = "1"
-rmcp = { version = "1", features = ["server", "client", "transport-io", "schemars", "macros"] }
+rmcp = { version = "2", features = ["server", "client", "transport-io", "schemars", "macros"] }
 tower = { version = "0.5", features = ["util"] }
 futures-util = "0.3"
 tokio-tungstenite = "0.29"
